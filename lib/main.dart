@@ -1,7 +1,49 @@
 import 'package:flutter/material.dart';
+import 'services/auth_service.dart';
+import 'services/connectivity_service.dart';
+import 'services/hive_offline_database.dart';
+import 'services/database_migration.dart';
+import 'screens/dashboard_screen.dart';
+import 'screens/debug_screen.dart';
+import 'utils/asset_helper.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  
+  // Initialize connectivity service
+  await ConnectivityService().initialize();
+  
+  // Initialize Hive database and handle migration
+  await _initializeDatabase();
+  
   runApp(const MyApp());
+}
+
+Future<void> _initializeDatabase() async {
+  try {
+    // Check if migration is needed
+    final needsMigration = await DatabaseMigration.isMigrationNeeded();
+    
+    if (needsMigration) {
+      print('Migration needed, starting migration process...');
+      final migrationSuccess = await DatabaseMigration.migrateFromSQLiteToHive();
+      
+      if (migrationSuccess) {
+        print('Migration completed successfully');
+        // Optionally clean up old SQLite database
+        // await DatabaseMigration.cleanupSQLiteDatabase();
+      } else {
+        print('Migration failed, continuing with fresh Hive database');
+      }
+    } else {
+      // Initialize Hive database
+      await HiveOfflineDatabase.initialize();
+      print('Hive database initialized');
+    }
+  } catch (e) {
+    print('Error initializing database: $e');
+    // Continue with app initialization even if database fails
+  }
 }
 
 class MyApp extends StatelessWidget {
@@ -10,15 +52,63 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'OBO Mobile',
+      title: 'OBO Inspector Mobile',
       theme: ThemeData(
         primarySwatch: Colors.blue,
         scaffoldBackgroundColor: const Color(0xFFE0E5EC),
         fontFamily: 'Roboto',
       ),
-      home: const WelcomePage(),
+      home: const AuthWrapper(),
       debugShowCheckedModeBanner: false,
     );
+  }
+}
+
+class AuthWrapper extends StatefulWidget {
+  const AuthWrapper({super.key});
+
+  @override
+  State<AuthWrapper> createState() => _AuthWrapperState();
+}
+
+class _AuthWrapperState extends State<AuthWrapper> {
+  bool isLoading = true;
+  bool isLoggedIn = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkAuthStatus();
+  }
+
+  Future<void> _checkAuthStatus() async {
+    try {
+      final loggedIn = await AuthService.isLoggedIn();
+      final validSession = await AuthService.validateSession();
+      
+      setState(() {
+        isLoggedIn = loggedIn && validSession;
+        isLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        isLoggedIn = false;
+        isLoading = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (isLoading) {
+      return const Scaffold(
+        body: Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
+
+    return isLoggedIn ? const DashboardScreen() : const WelcomePage();
   }
 }
 
@@ -67,10 +157,13 @@ class WelcomePage extends StatelessWidget {
                       ),
                     ],
                   ),
-                  child: const Icon(
-                    Icons.business,
-                    size: 60,
-                    color: Color(0xFF4A5568),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(60),
+                    child: AssetHelper.loadOrmocSeal(
+                      width: 60,
+                      height: 60,
+                      fit: BoxFit.contain,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 40),
@@ -95,7 +188,7 @@ class WelcomePage extends StatelessWidget {
                 ),
                 const SizedBox(height: 16),
                 const Text(
-                  'Streamline building permits,\ninspections, and compliance',
+                  'Mobile app for building inspectors\nto manage inspections and compliance',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 16,
@@ -179,11 +272,16 @@ class WelcomePage extends StatelessWidget {
                     child: InkWell(
                       borderRadius: BorderRadius.circular(25),
                       onTap: () {
-                        // Add functionality for Learn More
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const DebugScreen(),
+                          ),
+                        );
                       },
                       child: const Center(
                         child: Text(
-                          'Learn More',
+                          'Debug & Setup',
                           style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w500,
@@ -213,15 +311,65 @@ class LoginPage extends StatefulWidget {
 
 class _LoginPageState extends State<LoginPage> {
   final _formKey = GlobalKey<FormState>();
-  final _emailController = TextEditingController();
+  final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _obscurePassword = true;
+  bool _rememberMe = false;
+  bool _isLoading = false;
 
   @override
   void dispose() {
-    _emailController.dispose();
+    _usernameController.dispose();
     _passwordController.dispose();
     super.dispose();
+  }
+
+  Future<void> _login() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final response = await AuthService.login(
+        _usernameController.text.trim(),
+        _passwordController.text,
+        remember: _rememberMe,
+      );
+
+      if (response.success) {
+        if (mounted) {
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(builder: (context) => const DashboardScreen()),
+          );
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(response.message),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Login failed: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
   }
 
   @override
@@ -295,25 +443,22 @@ class _LoginPageState extends State<LoginPage> {
                   ),
                   const SizedBox(height: 8),
                   const Text(
-                    'Sign in to your OBO account',
+                    'Sign in to access inspector dashboard',
                     style: TextStyle(
                       fontSize: 16,
                       color: Color(0xFF718096),
                     ),
                   ),
                   const SizedBox(height: 50),
-                  // Email field
+                  // Username field
                   _buildNeumorphicTextField(
-                    controller: _emailController,
-                    label: 'Email',
-                    icon: Icons.email_outlined,
-                    keyboardType: TextInputType.emailAddress,
+                    controller: _usernameController,
+                    label: 'Username',
+                    icon: Icons.person_outline,
+                    keyboardType: TextInputType.text,
                     validator: (value) {
                       if (value == null || value.isEmpty) {
-                        return 'Please enter your email';
-                      }
-                      if (!value.contains('@')) {
-                        return 'Please enter a valid email';
+                        return 'Please enter your username';
                       }
                       return null;
                     },
@@ -347,21 +492,39 @@ class _LoginPageState extends State<LoginPage> {
                     },
                   ),
                   const SizedBox(height: 16),
-                  // Forgot password
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: TextButton(
-                      onPressed: () {
-                        // Add forgot password functionality
-                      },
-                      child: const Text(
-                        'Forgot Password?',
+                  // Remember me checkbox
+                  Row(
+                    children: [
+                      Checkbox(
+                        value: _rememberMe,
+                        onChanged: (value) {
+                          setState(() {
+                            _rememberMe = value ?? false;
+                          });
+                        },
+                        activeColor: const Color(0xFF4A5568),
+                      ),
+                      const Text(
+                        'Remember me',
                         style: TextStyle(
                           color: Color(0xFF4A5568),
                           fontWeight: FontWeight.w500,
                         ),
                       ),
-                    ),
+                      const Spacer(),
+                      TextButton(
+                        onPressed: () {
+                          // Add forgot password functionality
+                        },
+                        child: const Text(
+                          'Forgot Password?',
+                          style: TextStyle(
+                            color: Color(0xFF4A5568),
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 40),
                   // Login button
@@ -390,55 +553,30 @@ class _LoginPageState extends State<LoginPage> {
                       color: Colors.transparent,
                       child: InkWell(
                         borderRadius: BorderRadius.circular(30),
-                        onTap: () {
-                          if (_formKey.currentState!.validate()) {
-                            // Add login functionality
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Login successful!'),
-                                backgroundColor: Color(0xFF48BB78),
-                              ),
-                            );
-                          }
-                        },
-                        child: const Center(
-                          child: Text(
-                            'Sign In',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w600,
-                              color: Color(0xFF2D3748),
-                            ),
-                          ),
+                        onTap: _isLoading ? null : _login,
+                        child: Center(
+                          child: _isLoading
+                              ? const SizedBox(
+                                  width: 24,
+                                  height: 24,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF2D3748)),
+                                  ),
+                                )
+                              : const Text(
+                                  'Sign In',
+                                  style: TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w600,
+                                    color: Color(0xFF2D3748),
+                                  ),
+                                ),
                         ),
                       ),
                     ),
                   ),
                   const Spacer(),
-                  // Sign up link
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Text(
-                        "Don't have an account? ",
-                        style: TextStyle(
-                          color: Color(0xFF718096),
-                        ),
-                      ),
-                      TextButton(
-                        onPressed: () {
-                          // Add sign up functionality
-                        },
-                        child: const Text(
-                          'Sign Up',
-                          style: TextStyle(
-                            color: Color(0xFF4A5568),
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
                   const SizedBox(height: 20),
                 ],
               ),
