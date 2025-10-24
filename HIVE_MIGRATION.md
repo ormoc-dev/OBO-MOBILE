@@ -159,3 +159,5 @@ If you encounter any issues with the migration:
 2. Verify all dependencies are properly installed
 3. Ensure build runner has generated the necessary files
 4. Test with a fresh app installation to verify the new database works
+
+

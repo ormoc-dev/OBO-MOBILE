@@ -1,20 +1,25 @@
+import 'package:shared_preferences/shared_preferences.dart';
+
 class AppConfig {
   // API Configuration
   // IMPORTANT: Update this URL to match your XAMPP server setup
   
-  // For local development, you have several options:
+  // Default base URL (fallback)
+  static const String _defaultBaseUrl = 'http://172.31.208.1/OBO-LGU/api';
   
-  // Option 1: If testing on Android emulator, use 10.0.2.2 (maps to host machine's localhost)
-  // static const String baseUrl = 'http://10.0.2.2/OBO-LGU/api';
+  // Get the current base URL (checks for custom IP first)
+  static Future<String> get baseUrl async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final customBaseUrl = prefs.getString('custom_base_url');
+      return customBaseUrl ?? _defaultBaseUrl;
+    } catch (e) {
+      return _defaultBaseUrl;
+    }
+  }
   
-  // Option 2: For physical device, use your computer's IP address (192.168.0.152)
-  // static const String baseUrl = 'http://192.168.0.152/OBO-LGU/api';
-  
-  // For Chrome/Edge testing, use localhost with port 80
-  // static const String baseUrl = 'http://localhost/OBO-LGU/api';
-  
-  // For APK builds, use your computer's IP address
-  static const String baseUrl = 'http://192.168.0.152/OBO-LGU/api';
+  // Get the default base URL (for display purposes)
+  static String get defaultBaseUrl => _defaultBaseUrl;
   
   // Option 2: If testing on physical device, use your computer's IP address
   // Find your IP address by running 'ipconfig' in Command Prompt (Windows) or 'ifconfig' in Terminal (Mac/Linux)

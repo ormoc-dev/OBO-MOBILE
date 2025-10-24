@@ -111,3 +111,5 @@ App Launch → Login Screen → Enter Username → Access Assignments
 - Uses Hive for offline storage
 - SharedPreferences for credentials
 - Automatic cleanup on logout
+
+

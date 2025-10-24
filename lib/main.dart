@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'services/auth_service.dart';
 import 'services/connectivity_service.dart';
 import 'services/hive_offline_database.dart';
-import 'services/database_migration.dart';
 import 'screens/dashboard_screen.dart';
 import 'screens/debug_screen.dart';
 import 'utils/asset_helper.dart';
@@ -21,25 +20,9 @@ void main() async {
 
 Future<void> _initializeDatabase() async {
   try {
-    // Check if migration is needed
-    final needsMigration = await DatabaseMigration.isMigrationNeeded();
-    
-    if (needsMigration) {
-      print('Migration needed, starting migration process...');
-      final migrationSuccess = await DatabaseMigration.migrateFromSQLiteToHive();
-      
-      if (migrationSuccess) {
-        print('Migration completed successfully');
-        // Optionally clean up old SQLite database
-        // await DatabaseMigration.cleanupSQLiteDatabase();
-      } else {
-        print('Migration failed, continuing with fresh Hive database');
-      }
-    } else {
-      // Initialize Hive database
-      await HiveOfflineDatabase.initialize();
-      print('Hive database initialized');
-    }
+    // Initialize Hive database directly
+    await HiveOfflineDatabase.initialize();
+    print('Hive database initialized successfully');
   } catch (e) {
     print('Error initializing database: $e');
     // Continue with app initialization even if database fails
@@ -54,9 +37,54 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'OBO Inspector Mobile',
       theme: ThemeData(
-        primarySwatch: Colors.blue,
-        scaffoldBackgroundColor: const Color(0xFFE0E5EC),
+        primarySwatch: MaterialColor(0xFF086FDE, <int, Color>{
+          50: const Color.fromRGBO(8, 111, 222, 0.1),
+          100: const Color.fromRGBO(8, 111, 222, 0.2),
+          200: const Color.fromRGBO(8, 111, 222, 0.3),
+          300: const Color.fromRGBO(8, 111, 222, 0.4),
+          400: const Color.fromRGBO(8, 111, 222, 0.5),
+          500: const Color.fromRGBO(8, 111, 222, 0.6),
+          600: const Color.fromRGBO(8, 111, 222, 0.7),
+          700: const Color.fromRGBO(8, 111, 222, 0.8),
+          800: const Color.fromRGBO(8, 111, 222, 0.9),
+          900: const Color.fromRGBO(8, 111, 222, 1.0),
+        }),
+        primaryColor: const Color.fromRGBO(8, 111, 222, 0.977), // Requested blue
+        scaffoldBackgroundColor: const Color(0xFFF8FAFC), // Clean white background
+        cardColor: Colors.white,
         fontFamily: 'Roboto',
+        colorScheme: const ColorScheme.light(
+          primary: Color.fromRGBO(8, 111, 222, 0.977),
+          secondary: Color.fromRGBO(8, 111, 222, 0.977),
+          surface: Colors.white,
+          background: Color(0xFFF8FAFC),
+          onPrimary: Colors.white,
+          onSecondary: Colors.white,
+          onSurface: Color(0xFF1F2937), // Dark gray text
+          onBackground: Color(0xFF1F2937),
+        ),
+        appBarTheme: const AppBarTheme(
+          backgroundColor: Color.fromRGBO(8, 111, 222, 0.977),
+          foregroundColor: Colors.white,
+          elevation: 0,
+        ),
+        elevatedButtonTheme: ElevatedButtonThemeData(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: const Color.fromRGBO(8, 111, 222, 0.977),
+            foregroundColor: Colors.white,
+            elevation: 2,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+          ),
+        ),
+        cardTheme: CardThemeData(
+          color: Colors.white,
+          elevation: 2,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
       ),
       home: const AuthWrapper(),
       debugShowCheckedModeBanner: false,
@@ -117,185 +145,609 @@ class WelcomePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final screenSize = MediaQuery.of(context).size;
+    final screenWidth = screenSize.width;
+    final screenHeight = screenSize.height;
+    final orientation = MediaQuery.of(context).orientation;
+    
+    // Enhanced responsive breakpoints
+    final isTablet = screenWidth > 600;
+    final isLargeTablet = screenWidth > 900;
+    final isSmallScreen = screenHeight < 600;
+    final isVerySmallScreen = screenHeight < 500;
+    final isLandscape = orientation == Orientation.landscape;
+    
+    // Dynamic scaling based on screen size and orientation
+    final double baseHeight = isLandscape ? 600.0 : 800.0;
+    final double scale = (screenHeight / baseHeight).clamp(0.6, 1.3);
+    
+    // Additional scaling for very small screens
+    final double smallScreenScale = isVerySmallScreen ? 0.8 : 1.0;
+    final double finalScale = scale * smallScreenScale;
+    
+    // Enhanced responsive dimensions with better breakpoints
+    final logoSize = (isLargeTablet ? 120.0 : (isTablet ? 100.0 : (isVerySmallScreen ? 50.0 : (isSmallScreen ? 60.0 : 80.0)))) * finalScale;
+    final logoFontSize = (isLargeTablet ? 120.0 : (isTablet ? 100.0 : (isVerySmallScreen ? 50.0 : (isSmallScreen ? 60.0 : 80.0)))) * finalScale;
+    final titleFontSize = (isLargeTablet ? 28.0 : (isTablet ? 24.0 : (isVerySmallScreen ? 14.0 : (isSmallScreen ? 16.0 : 20.0)))) * finalScale;
+    final descriptionFontSize = (isLargeTablet ? 22.0 : (isTablet ? 19.0 : (isVerySmallScreen ? 13.0 : (isSmallScreen ? 15.0 : 17.0)))) * finalScale;
+    final buttonHeight = (isLargeTablet ? 80.0 : (isTablet ? 70.0 : (isVerySmallScreen ? 45.0 : (isSmallScreen ? 50.0 : 65.0)))) * finalScale;
+    final secondaryButtonHeight = (isLargeTablet ? 70.0 : (isTablet ? 60.0 : (isVerySmallScreen ? 40.0 : (isSmallScreen ? 45.0 : 55.0)))) * finalScale;
+    final horizontalPadding = (isLargeTablet ? 80.0 : (isTablet ? 60.0 : (isVerySmallScreen ? 16.0 : (isSmallScreen ? 20.0 : 32.0)))) * finalScale;
+    final verticalSpacing = (isVerySmallScreen ? 15.0 : (isSmallScreen ? 20.0 : 30.0)) * finalScale;
+    
+    // Landscape-specific adjustments
+    final landscapePadding = isLandscape ? (screenWidth * 0.1) : horizontalPadding;
+    final landscapeVerticalSpacing = isLandscape ? (verticalSpacing * 0.7) : verticalSpacing;
+    
     return Scaffold(
       body: Container(
+        width: double.infinity,
+        height: double.infinity,
         decoration: const BoxDecoration(
           gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
             colors: [
-              Color(0xFFE0E5EC),
-              Color(0xFFF0F4F8),
+              Color(0xFFF8FAFC), // Clean white
+              Color(0xFFF1F5F9), // Light gray
+              Color(0xFFE2E8F0), // Slightly darker gray
             ],
+            stops: [0.0, 0.5, 1.0],
           ),
         ),
         child: SafeArea(
           child: Padding(
-            padding: const EdgeInsets.all(24.0),
-            child: Column(
-              children: [
-                const Spacer(flex: 2),
-                // Logo/Icon with neumorphism
-                Container(
-                  width: 120,
-                  height: 120,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFE0E5EC),
-                    borderRadius: BorderRadius.circular(60),
-                    boxShadow: const [
-                      BoxShadow(
-                        color: Color(0xFFA3B1C6),
-                        offset: Offset(8, 8),
-                        blurRadius: 16,
-                        spreadRadius: 0,
+            padding: EdgeInsets.symmetric(
+              horizontal: isLandscape ? landscapePadding : horizontalPadding, 
+              vertical: isLandscape ? 8.0 * finalScale : 12.0 * finalScale
+            ),
+            child: isLandscape ? _buildLandscapeLayout(
+              context, screenWidth, screenHeight, finalScale, 
+              logoSize, logoFontSize, titleFontSize, descriptionFontSize,
+              buttonHeight, secondaryButtonHeight, landscapeVerticalSpacing
+            ) : FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.topCenter,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  minWidth: screenWidth - (isLandscape ? landscapePadding : horizontalPadding) * 2,
+                  maxWidth: screenWidth - (isLandscape ? landscapePadding : horizontalPadding) * 2,
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                  SizedBox(height: isSmallScreen ? 10 : 20),
+                  // Version number at the top right with neumorphism
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: Container(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: isTablet ? 16 : 12, 
+                        vertical: isTablet ? 8 : 6
                       ),
-                      BoxShadow(
+                      decoration: BoxDecoration(
                         color: Colors.white,
-                        offset: Offset(-8, -8),
-                        blurRadius: 16,
-                        spreadRadius: 0,
+                        borderRadius: BorderRadius.circular(15),
+                        border: Border.all(color: const Color.fromRGBO(8, 111, 222, 0.977), width: 1),
+                        boxShadow: const [
+                          BoxShadow(
+                            color: Color(0xFFE2E8F0),
+                            offset: Offset(0, 2),
+                            blurRadius: 4,
+                            spreadRadius: 0,
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(60),
-                    child: AssetHelper.loadOrmocSeal(
-                      width: 60,
-                      height: 60,
-                      fit: BoxFit.contain,
+                      child: Text(
+                        'v0.2.1',
+                        style: TextStyle(
+                          fontSize: isTablet ? 16 : 14,
+                          color: const Color.fromRGBO(8, 111, 222, 0.977),
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(height: 40),
-                // Title
-                const Text(
-                  'OBO',
-                  style: TextStyle(
-                    fontSize: 48,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF2D3748),
-                    letterSpacing: 2,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                const Text(
-                  'Office of Building Official',
-                  style: TextStyle(
-                    fontSize: 18,
-                    color: Color(0xFF4A5568),
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                const Text(
-                  'Mobile app for building inspectors\nto manage inspections and compliance',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 16,
-                    color: Color(0xFF718096),
-                    height: 1.5,
-                  ),
-                ),
-                const Spacer(flex: 3),
-                // Get Started Button with neumorphism
-                Container(
-                  width: double.infinity,
-                  height: 60,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFE0E5EC),
-                    borderRadius: BorderRadius.circular(30),
-                    boxShadow: const [
-                      BoxShadow(
-                        color: Color(0xFFA3B1C6),
-                        offset: Offset(6, 6),
-                        blurRadius: 12,
-                        spreadRadius: 0,
+                  SizedBox(height: isSmallScreen ? 20 : 40),
+                  // Logo + BO text combined
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      // Logo as the "O"
+                      Container(
+                        width: logoSize,
+                        height: logoSize,
+                        decoration: BoxDecoration(
+                          color: const Color.fromRGBO(8, 111, 222, 0.977),
+                          borderRadius: BorderRadius.circular(logoSize / 2),
+                          boxShadow: const [
+                            BoxShadow(
+                              color: Color(0xFFE2E8F0),
+                              offset: Offset(0, 4),
+                              blurRadius: 8,
+                              spreadRadius: 0,
+                            ),
+                          ],
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(logoSize / 2),
+                          child: AssetHelper.loadOrmocSeal(
+                            width: logoSize * 0.620, // 5/8 of container size
+                            height: logoSize * 0.620,
+                            fit: BoxFit.contain,
+                          ),
+                        ),
                       ),
-                      BoxShadow(
-                        color: Colors.white,
-                        offset: Offset(-6, -6),
-                        blurRadius: 12,
-                        spreadRadius: 0,
+                      SizedBox(width: isTablet ? 12 : 8),
+                      // BO text
+                      Text(
+                        'BO',
+                        style: TextStyle(
+                          fontSize: logoFontSize,
+                          fontWeight: FontWeight.w900,
+                          color: const Color.fromRGBO(8, 111, 222, 0.977),
+                          letterSpacing: 2,
+                          height: 1.1,
+                        ),
                       ),
                     ],
                   ),
-                  child: Material(
-                    color: Colors.transparent,
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(30),
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const LoginPage(),
-                          ),
-                        );
-                      },
-                      child: const Center(
-                        child: Text(
-                          'Get Started',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w600,
-                            color: Color(0xFF2D3748),
+                  SizedBox(height: verticalSpacing),
+                  // Simple subtitle without neumorphism
+                  Text(
+                    'Office of Building Official',
+                    style: TextStyle(
+                      fontSize: titleFontSize,
+                      color: const Color(0xFF1F2937),
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  SizedBox(height: verticalSpacing),
+                  // Description + Key features checklist
+                  Padding(
+                    padding: EdgeInsets.symmetric(horizontal: isTablet ? 40 : 20),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Mobile application for building inspectors to efficiently manage inspections, track compliance, and streamline official processes across the field and office. Designed for speed, accuracy, and reliability—even when offline.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: descriptionFontSize,
+                            color: const Color(0xFF6B7280),
+                        height: 1.6,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                        const SizedBox(height: 16),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Icon(
+                                  Icons.check_circle_rounded,
+                                  color: const Color.fromRGBO(8, 111, 222, 0.977),
+                                  size: isTablet ? 20 : 18,
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Text(
+                                    'Assign, track, and complete inspections with clear status updates',
+                                    style: TextStyle(
+                                      fontSize: isTablet ? 18 : (isSmallScreen ? 14 : 16),
+                                      color: const Color(0xFF1F2937),
+                                      height: 1.5,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 10),
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Icon(
+                                  Icons.check_circle_rounded,
+                                  color: const Color.fromRGBO(8, 111, 222, 0.977),
+                                  size: isTablet ? 20 : 18,
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Text(
+                                    'QR code scanning for fast record lookup and verification',
+                                    style: TextStyle(
+                                      fontSize: isTablet ? 18 : (isSmallScreen ? 14 : 16),
+                                      color: const Color(0xFF1F2937),
+                                      height: 1.5,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 10),
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Icon(
+                                  Icons.check_circle_rounded,
+                                  color: const Color.fromRGBO(8, 111, 222, 0.977),
+                                  size: isTablet ? 20 : 18,
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Text(
+                                    'Offline-first design with secure local storage and one-tap sync',
+                                    style: TextStyle(
+                                      fontSize: isTablet ? 18 : (isSmallScreen ? 14 : 16),
+                                      color: const Color(0xFF1F2937),
+                                      height: 1.5,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 10),
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Icon(
+                                  Icons.check_circle_rounded,
+                                  color: const Color.fromRGBO(8, 111, 222, 0.977),
+                                  size: isTablet ? 20 : 18,
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Text(
+                                    'Modern, clean UI built for tablets and small screens',
+                                    style: TextStyle(
+                                      fontSize: isTablet ? 18 : (isSmallScreen ? 14 : 16),
+                                      color: const Color(0xFF1F2937),
+                                      height: 1.5,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  SizedBox(height: (isSmallScreen ? 24 : 40) * scale),
+                  // Enhanced Get Started Button
+                  Container(
+                    width: double.infinity,
+                    height: buttonHeight,
+                    decoration: BoxDecoration(
+                      color: const Color.fromRGBO(8, 111, 222, 0.977),
+                      borderRadius: BorderRadius.circular(buttonHeight / 2),
+                      boxShadow: const [
+                        BoxShadow(
+                          color: Color(0xFFE2E8F0),
+                          offset: Offset(0, 4),
+                          blurRadius: 8,
+                          spreadRadius: 0,
+                        ),
+                      ],
+                    ),
+                    child: Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(buttonHeight / 2),
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const LoginPage(),
+                            ),
+                          );
+                        },
+                        child: Center(
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                'Get Started',
+                                style: TextStyle(
+                                  fontSize: isTablet ? 22 : (isSmallScreen ? 16 : 20),
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.white,
+                                  letterSpacing: 1,
+                                ),
+                              ),
+                              SizedBox(width: isTablet ? 16 : 12),
+                              Icon(
+                                Icons.arrow_forward_rounded,
+                                color: Colors.white,
+                                size: isTablet ? 28 : 24,
+                              ),
+                            ],
                           ),
                         ),
                       ),
                     ),
                   ),
-                ),
-                const SizedBox(height: 24),
-                // Secondary button
-                Container(
-                  width: double.infinity,
-                  height: 50,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFE0E5EC),
-                    borderRadius: BorderRadius.circular(25),
-                    boxShadow: const [
-                      BoxShadow(
-                        color: Color(0xFFA3B1C6),
-                        offset: Offset(4, 4),
-                        blurRadius: 8,
-                        spreadRadius: 0,
-                      ),
-                      BoxShadow(
-                        color: Colors.white,
-                        offset: Offset(-4, -4),
-                        blurRadius: 8,
-                        spreadRadius: 0,
-                      ),
-                    ],
-                  ),
-                  child: Material(
-                    color: Colors.transparent,
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(25),
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const DebugScreen(),
-                          ),
-                        );
-                      },
-                      child: const Center(
-                        child: Text(
-                          'Debug & Setup',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w500,
-                            color: Color(0xFF718096),
+                  SizedBox(height: (isSmallScreen ? 12 : 16) * scale),
+                  // Enhanced Secondary button
+                  Container(
+                    width: double.infinity,
+                    height: secondaryButtonHeight,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(secondaryButtonHeight / 2),
+                      border: Border.all(color: const Color.fromRGBO(8, 111, 222, 0.977), width: 2),
+                      boxShadow: const [
+                        BoxShadow(
+                          color: Color(0xFFE2E8F0),
+                          offset: Offset(0, 2),
+                          blurRadius: 4,
+                          spreadRadius: 0,
+                        ),
+                      ],
+                    ),
+                    child: Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(secondaryButtonHeight / 2),
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const DebugScreen(),
+                            ),
+                          );
+                        },
+                        child: Center(
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                Icons.settings_outlined,
+                                color: const Color.fromRGBO(8, 111, 222, 0.977),
+                                size: isTablet ? 24 : 20,
+                              ),
+                              SizedBox(width: isTablet ? 12 : 8),
+                              Text(
+                                'Debug & Setup',
+                                style: TextStyle(
+                                  fontSize: isTablet ? 19 : (isSmallScreen ? 15 : 17),
+                                  fontWeight: FontWeight.w600,
+                                  color: const Color.fromRGBO(8, 111, 222, 0.977),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ),
                     ),
                   ),
-                ),
-                const Spacer(),
-              ],
+                  SizedBox(height: (isSmallScreen ? 16 : 28) * finalScale),
+                ],
+              ),
+            ),
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLandscapeLayout(
+    BuildContext context,
+    double screenWidth,
+    double screenHeight,
+    double scale,
+    double logoSize,
+    double logoFontSize,
+    double titleFontSize,
+    double descriptionFontSize,
+    double buttonHeight,
+    double secondaryButtonHeight,
+    double verticalSpacing,
+  ) {
+    return SingleChildScrollView(
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          minHeight: screenHeight - MediaQuery.of(context).padding.top - MediaQuery.of(context).padding.bottom,
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            // Left side - Logo and title
+            Expanded(
+              flex: 2,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  SizedBox(height: verticalSpacing),
+                  // Logo + BO text
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Container(
+                        width: logoSize * 0.8,
+                        height: logoSize * 0.8,
+                        decoration: BoxDecoration(
+                          color: const Color.fromRGBO(8, 111, 222, 0.977),
+                          borderRadius: BorderRadius.circular(logoSize * 0.4),
+                          boxShadow: const [
+                            BoxShadow(
+                              color: Color(0xFFE2E8F0),
+                              offset: Offset(0, 4),
+                              blurRadius: 8,
+                              spreadRadius: 0,
+                            ),
+                          ],
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(logoSize * 0.4),
+                          child: AssetHelper.loadOrmocSeal(
+                            width: logoSize * 0.5,
+                            height: logoSize * 0.5,
+                            fit: BoxFit.contain,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Text(
+                        'BO',
+                        style: TextStyle(
+                          fontSize: logoFontSize * 0.8,
+                          fontWeight: FontWeight.w900,
+                          color: const Color.fromRGBO(8, 111, 222, 0.977),
+                          letterSpacing: 2,
+                          height: 1.1,
+                        ),
+                      ),
+                    ],
+                  ),
+                  SizedBox(height: verticalSpacing * 0.5),
+                  Text(
+                    'Office of Building Official',
+                    style: TextStyle(
+                      fontSize: titleFontSize * 0.8,
+                      color: const Color(0xFF1F2937),
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            // Right side - Description and buttons
+            Expanded(
+              flex: 3,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    'Mobile application for building inspectors to efficiently manage inspections, track compliance, and streamline official processes across the field and office.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: descriptionFontSize * 0.9,
+                      color: const Color(0xFF6B7280),
+                      height: 1.6,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  SizedBox(height: verticalSpacing),
+                  // Buttons in landscape
+                  Container(
+                    width: double.infinity,
+                    height: buttonHeight * 0.8,
+                    decoration: BoxDecoration(
+                      color: const Color.fromRGBO(8, 111, 222, 0.977),
+                      borderRadius: BorderRadius.circular(buttonHeight * 0.4),
+                      boxShadow: const [
+                        BoxShadow(
+                          color: Color(0xFFE2E8F0),
+                          offset: Offset(0, 4),
+                          blurRadius: 8,
+                          spreadRadius: 0,
+                        ),
+                      ],
+                    ),
+                    child: Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(buttonHeight * 0.4),
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const LoginPage(),
+                            ),
+                          );
+                        },
+                        child: Center(
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                'Get Started',
+                                style: TextStyle(
+                                  fontSize: titleFontSize * 0.6,
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.white,
+                                  letterSpacing: 1,
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Icon(
+                                Icons.arrow_forward_rounded,
+                                color: Colors.white,
+                                size: titleFontSize * 0.7,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  SizedBox(height: verticalSpacing * 0.5),
+                  Container(
+                    width: double.infinity,
+                    height: secondaryButtonHeight * 0.8,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(secondaryButtonHeight * 0.4),
+                      border: Border.all(color: const Color.fromRGBO(8, 111, 222, 0.977), width: 2),
+                      boxShadow: const [
+                        BoxShadow(
+                          color: Color(0xFFE2E8F0),
+                          offset: Offset(0, 2),
+                          blurRadius: 4,
+                          spreadRadius: 0,
+                        ),
+                      ],
+                    ),
+                    child: Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(secondaryButtonHeight * 0.4),
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const DebugScreen(),
+                            ),
+                          );
+                        },
+                        child: Center(
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                Icons.settings_outlined,
+                                color: const Color.fromRGBO(8, 111, 222, 0.977),
+                                size: titleFontSize * 0.6,
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Debug & Setup',
+                                style: TextStyle(
+                                  fontSize: titleFontSize * 0.5,
+                                  fontWeight: FontWeight.w600,
+                                  color: const Color.fromRGBO(8, 111, 222, 0.977),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  SizedBox(height: verticalSpacing),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -374,45 +826,205 @@ class _LoginPageState extends State<LoginPage> {
 
   @override
   Widget build(BuildContext context) {
+    final screenSize = MediaQuery.of(context).size;
+    final screenWidth = screenSize.width;
+    final screenHeight = screenSize.height;
+    final orientation = MediaQuery.of(context).orientation;
+    
+    // Enhanced responsive breakpoints
+    final isTablet = screenWidth > 600;
+    final isLargeTablet = screenWidth > 900;
+    final isSmallScreen = screenHeight < 600;
+    final isVerySmallScreen = screenHeight < 500;
+    final isLandscape = orientation == Orientation.landscape;
+    
+    // Dynamic scaling based on screen size and orientation
+    final double baseHeight = isLandscape ? 600.0 : 800.0;
+    final double scale = (screenHeight / baseHeight).clamp(0.6, 1.3);
+    final double smallScreenScale = isVerySmallScreen ? 0.8 : 1.0;
+    final double finalScale = scale * smallScreenScale;
+    
+    // Enhanced responsive dimensions
+    final backButtonSize = (isLargeTablet ? 75.0 : (isTablet ? 65.0 : (isVerySmallScreen ? 40.0 : (isSmallScreen ? 45.0 : 55.0)))) * finalScale;
+    final titleFontSize = (isLargeTablet ? 48.0 : (isTablet ? 42.0 : (isVerySmallScreen ? 24.0 : (isSmallScreen ? 28.0 : 36.0)))) * finalScale;
+    final subtitleFontSize = (isLargeTablet ? 22.0 : (isTablet ? 19.0 : (isVerySmallScreen ? 13.0 : (isSmallScreen ? 15.0 : 17.0)))) * finalScale;
+    final buttonHeight = (isLargeTablet ? 80.0 : (isTablet ? 70.0 : (isVerySmallScreen ? 45.0 : (isSmallScreen ? 50.0 : 65.0)))) * finalScale;
+    final horizontalPadding = (isLargeTablet ? 80.0 : (isTablet ? 60.0 : (isVerySmallScreen ? 16.0 : (isSmallScreen ? 20.0 : 32.0)))) * finalScale;
+    final fieldSpacing = (isVerySmallScreen ? 15.0 : (isSmallScreen ? 20.0 : 28.0)) * finalScale;
+    
+    // Landscape-specific adjustments
+    final landscapePadding = isLandscape ? (screenWidth * 0.1) : horizontalPadding;
+    
     return Scaffold(
       body: Container(
+        width: double.infinity,
+        height: double.infinity,
         decoration: const BoxDecoration(
           gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
             colors: [
-              Color(0xFFE0E5EC),
-              Color(0xFFF0F4F8),
+              Color(0xFFF8FAFC), // Clean white
+              Color(0xFFF1F5F9), // Light gray
+              Color(0xFFE2E8F0), // Slightly darker gray
             ],
+            stops: [0.0, 0.5, 1.0],
           ),
         ),
         child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.all(24.0),
-            child: Form(
-              key: _formKey,
-              child: Column(
-                children: [
-                  const SizedBox(height: 40),
-                  // Back button
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: Container(
-                      width: 50,
-                      height: 50,
+          child: SingleChildScrollView(
+            child: Padding(
+              padding: EdgeInsets.symmetric(
+                horizontal: isLandscape ? landscapePadding : horizontalPadding, 
+                vertical: isLandscape ? 10.0 * finalScale : 20.0 * finalScale
+              ),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  minHeight: screenHeight - MediaQuery.of(context).padding.top - MediaQuery.of(context).padding.bottom,
+                ),
+                child: Form(
+                  key: _formKey,
+                  child: Column(
+                    children: [
+                    SizedBox(height: isSmallScreen ? 20 : 30),
+                    // Enhanced Back button
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Container(
+                        width: backButtonSize,
+                        height: backButtonSize,
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(backButtonSize / 2),
+                          border: Border.all(color: const Color.fromRGBO(8, 111, 222, 0.977), width: 1),
+                          boxShadow: const [
+                            BoxShadow(
+                              color: Color(0xFFE2E8F0),
+                              offset: Offset(0, 2),
+                              blurRadius: 4,
+                              spreadRadius: 0,
+                            ),
+                          ],
+                        ),
+                        child: Material(
+                          color: Colors.transparent,
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(backButtonSize / 2),
+                            onTap: () => Navigator.pop(context),
+                            child: Icon(
+                              Icons.arrow_back_ios_new_rounded,
+                              color: const Color.fromRGBO(8, 111, 222, 0.977),
+                              size: isTablet ? 26 : (isSmallScreen ? 18 : 22),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    SizedBox(height: isSmallScreen ? 30 : 50),
+                    // Clean Login title without neumorphism
+                    Column(
+                      children: [
+                        Text(
+                          'Welcome Back',
+                          style: TextStyle(
+                            fontSize: titleFontSize,
+                            fontWeight: FontWeight.w700,
+                            color: const Color(0xFF1F2937),
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          'Sign in to access your inspector dashboard',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: subtitleFontSize,
+                            color: const Color(0xFF6B7280),
+                            fontWeight: FontWeight.w400,
+                          ),
+                        ),
+                      ],
+                    ),
+                    SizedBox(height: isSmallScreen ? 30 : 40),
+                    // Username field
+                    _buildNeumorphicTextField(
+                      controller: _usernameController,
+                      label: 'Username',
+                      icon: Icons.person_outline_rounded,
+                      keyboardType: TextInputType.text,
+                      validator: (value) {
+                        if (value == null || value.isEmpty) {
+                          return 'Please enter your username';
+                        }
+                        return null;
+                      },
+                    ),
+                    SizedBox(height: fieldSpacing),
+                    // Password field
+                    _buildNeumorphicTextField(
+                      controller: _passwordController,
+                      label: 'Password',
+                      icon: Icons.lock_outline_rounded,
+                      obscureText: _obscurePassword,
+                      suffixIcon: IconButton(
+                        icon: Icon(
+                          _obscurePassword ? Icons.visibility_rounded : Icons.visibility_off_rounded,
+                          color: const Color(0xFF718096),
+                        ),
+                        onPressed: () {
+                          setState(() {
+                            _obscurePassword = !_obscurePassword;
+                          });
+                        },
+                      ),
+                      validator: (value) {
+                        if (value == null || value.isEmpty) {
+                          return 'Please enter your password';
+                        }
+                        if (value.length < 6) {
+                          return 'Password must be at least 6 characters';
+                        }
+                        return null;
+                      },
+                    ),
+                    SizedBox(height: isSmallScreen ? 15 : 20),
+                    // Clean Remember me section
+                    Row(
+                      children: [
+                        Checkbox(
+                          value: _rememberMe,
+                          onChanged: (value) {
+                            setState(() {
+                              _rememberMe = value ?? false;
+                            });
+                          },
+                          activeColor: const Color.fromRGBO(8, 111, 222, 0.977),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                        ),
+                        Text(
+                          'Remember me',
+                          style: TextStyle(
+                            color: const Color(0xFF1F2937),
+                            fontWeight: FontWeight.w500,
+                            fontSize: isTablet ? 18 : (isSmallScreen ? 14 : 16),
+                          ),
+                        ),
+                      ],
+                    ),
+                    SizedBox(height: isSmallScreen ? 30 : 50),
+                    // Enhanced Login button
+                    Container(
+                      width: double.infinity,
+                      height: buttonHeight,
                       decoration: BoxDecoration(
-                        color: const Color(0xFFE0E5EC),
-                        borderRadius: BorderRadius.circular(25),
+                        color:  Color.fromRGBO(8, 111, 222, 0.977),
+                        borderRadius: BorderRadius.circular(buttonHeight / 2),
                         boxShadow: const [
                           BoxShadow(
-                            color: Color(0xFFA3B1C6),
-                            offset: Offset(4, 4),
-                            blurRadius: 8,
-                            spreadRadius: 0,
-                          ),
-                          BoxShadow(
-                            color: Colors.white,
-                            offset: Offset(-4, -4),
+                            color: Color(0xFFE2E8F0),
+                            offset: Offset(0, 4),
                             blurRadius: 8,
                             spreadRadius: 0,
                           ),
@@ -421,164 +1033,45 @@ class _LoginPageState extends State<LoginPage> {
                       child: Material(
                         color: Colors.transparent,
                         child: InkWell(
-                          borderRadius: BorderRadius.circular(25),
-                          onTap: () => Navigator.pop(context),
-                          child: const Icon(
-                            Icons.arrow_back,
-                            color: Color(0xFF4A5568),
+                          borderRadius: BorderRadius.circular(buttonHeight / 2),
+                          onTap: _isLoading ? null : _login,
+                          child: Center(
+                            child: _isLoading
+                                ? SizedBox(
+                                    width: isTablet ? 32 : (isSmallScreen ? 24 : 28),
+                                    height: isTablet ? 32 : (isSmallScreen ? 24 : 28),
+                                    child: const CircularProgressIndicator(
+                                      strokeWidth: 3,
+                                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                    ),
+                                  )
+                                : Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Text(
+                                        'Sign In',
+                                        style: TextStyle(
+                                          fontSize: isTablet ? 22 : (isSmallScreen ? 16 : 20),
+                                          fontWeight: FontWeight.w700,
+                                          color: Colors.white,
+                                          letterSpacing: 1,
+                                        ),
+                                      ),
+                                      SizedBox(width: isTablet ? 16 : 12),
+                                      Icon(
+                                        Icons.login_rounded,
+                                        color: Colors.white,
+                                        size: isTablet ? 28 : (isSmallScreen ? 20 : 24),
+                                      ),
+                                    ],
+                                  ),
                           ),
                         ),
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 40),
-                  // Login title
-                  const Text(
-                    'Welcome Back',
-                    style: TextStyle(
-                      fontSize: 32,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF2D3748),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Sign in to access inspector dashboard',
-                    style: TextStyle(
-                      fontSize: 16,
-                      color: Color(0xFF718096),
-                    ),
-                  ),
-                  const SizedBox(height: 50),
-                  // Username field
-                  _buildNeumorphicTextField(
-                    controller: _usernameController,
-                    label: 'Username',
-                    icon: Icons.person_outline,
-                    keyboardType: TextInputType.text,
-                    validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return 'Please enter your username';
-                      }
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 24),
-                  // Password field
-                  _buildNeumorphicTextField(
-                    controller: _passwordController,
-                    label: 'Password',
-                    icon: Icons.lock_outline,
-                    obscureText: _obscurePassword,
-                    suffixIcon: IconButton(
-                      icon: Icon(
-                        _obscurePassword ? Icons.visibility : Icons.visibility_off,
-                        color: const Color(0xFF718096),
-                      ),
-                      onPressed: () {
-                        setState(() {
-                          _obscurePassword = !_obscurePassword;
-                        });
-                      },
-                    ),
-                    validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return 'Please enter your password';
-                      }
-                      if (value.length < 6) {
-                        return 'Password must be at least 6 characters';
-                      }
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 16),
-                  // Remember me checkbox
-                  Row(
-                    children: [
-                      Checkbox(
-                        value: _rememberMe,
-                        onChanged: (value) {
-                          setState(() {
-                            _rememberMe = value ?? false;
-                          });
-                        },
-                        activeColor: const Color(0xFF4A5568),
-                      ),
-                      const Text(
-                        'Remember me',
-                        style: TextStyle(
-                          color: Color(0xFF4A5568),
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                      const Spacer(),
-                      TextButton(
-                        onPressed: () {
-                          // Add forgot password functionality
-                        },
-                        child: const Text(
-                          'Forgot Password?',
-                          style: TextStyle(
-                            color: Color(0xFF4A5568),
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ),
                     ],
                   ),
-                  const SizedBox(height: 40),
-                  // Login button
-                  Container(
-                    width: double.infinity,
-                    height: 60,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFE0E5EC),
-                      borderRadius: BorderRadius.circular(30),
-                      boxShadow: const [
-                        BoxShadow(
-                          color: Color(0xFFA3B1C6),
-                          offset: Offset(6, 6),
-                          blurRadius: 12,
-                          spreadRadius: 0,
-                        ),
-                        BoxShadow(
-                          color: Colors.white,
-                          offset: Offset(-6, -6),
-                          blurRadius: 12,
-                          spreadRadius: 0,
-                        ),
-                      ],
-                    ),
-                    child: Material(
-                      color: Colors.transparent,
-                      child: InkWell(
-                        borderRadius: BorderRadius.circular(30),
-                        onTap: _isLoading ? null : _login,
-                        child: Center(
-                          child: _isLoading
-                              ? const SizedBox(
-                                  width: 24,
-                                  height: 24,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF2D3748)),
-                                  ),
-                                )
-                              : const Text(
-                                  'Sign In',
-                                  style: TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.w600,
-                                    color: Color(0xFF2D3748),
-                                  ),
-                                ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  const Spacer(),
-                  const SizedBox(height: 20),
-                ],
+                ),
               ),
             ),
           ),
@@ -596,21 +1089,45 @@ class _LoginPageState extends State<LoginPage> {
     Widget? suffixIcon,
     String? Function(String?)? validator,
   }) {
+    final screenSize = MediaQuery.of(context).size;
+    final screenWidth = screenSize.width;
+    final screenHeight = screenSize.height;
+    final orientation = MediaQuery.of(context).orientation;
+    
+    // Enhanced responsive breakpoints
+    final isTablet = screenWidth > 600;
+    final isLargeTablet = screenWidth > 900;
+    final isSmallScreen = screenHeight < 600;
+    final isVerySmallScreen = screenHeight < 500;
+    final isLandscape = orientation == Orientation.landscape;
+    
+    // Dynamic scaling
+    final double baseHeight = isLandscape ? 600.0 : 800.0;
+    final double scale = (screenHeight / baseHeight).clamp(0.6, 1.3);
+    final double smallScreenScale = isVerySmallScreen ? 0.8 : 1.0;
+    final double finalScale = scale * smallScreenScale;
+    
+    // Enhanced responsive dimensions for text field
+    final borderRadius = (isLargeTablet ? 35.0 : (isTablet ? 30.0 : (isVerySmallScreen ? 15.0 : (isSmallScreen ? 20.0 : 25.0)))) * finalScale;
+    final fontSize = (isLargeTablet ? 22.0 : (isTablet ? 19.0 : (isVerySmallScreen ? 13.0 : (isSmallScreen ? 15.0 : 17.0)))) * finalScale;
+    final labelFontSize = (isLargeTablet ? 22.0 : (isTablet ? 19.0 : (isVerySmallScreen ? 13.0 : (isSmallScreen ? 15.0 : 17.0)))) * finalScale;
+    final iconSize = (isLargeTablet ? 28.0 : (isTablet ? 24.0 : (isVerySmallScreen ? 16.0 : (isSmallScreen ? 18.0 : 20.0)))) * finalScale;
+    final iconContainerSize = (isLargeTablet ? 20.0 : (isTablet ? 16.0 : (isVerySmallScreen ? 10.0 : (isSmallScreen ? 12.0 : 12.0)))) * finalScale;
+    final horizontalPadding = (isLargeTablet ? 32.0 : (isTablet ? 28.0 : (isVerySmallScreen ? 16.0 : (isSmallScreen ? 20.0 : 24.0)))) * finalScale;
+    final verticalPadding = (isLargeTablet ? 32.0 : (isTablet ? 28.0 : (isVerySmallScreen ? 16.0 : (isSmallScreen ? 20.0 : 24.0)))) * finalScale;
+    final iconMargin = (isLargeTablet ? 20.0 : (isTablet ? 16.0 : (isVerySmallScreen ? 8.0 : (isSmallScreen ? 10.0 : 12.0)))) * finalScale;
+    final iconPadding = (isLargeTablet ? 16.0 : (isTablet ? 12.0 : (isVerySmallScreen ? 6.0 : (isSmallScreen ? 8.0 : 8.0)))) * finalScale;
+    
     return Container(
       decoration: BoxDecoration(
-        color: const Color(0xFFE0E5EC),
-        borderRadius: BorderRadius.circular(20),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(borderRadius),
+        border: Border.all(color: const Color(0xFFE2E8F0), width: 1),
         boxShadow: const [
           BoxShadow(
-            color: Color(0xFFA3B1C6),
-            offset: Offset(4, 4),
-            blurRadius: 8,
-            spreadRadius: 0,
-          ),
-          BoxShadow(
-            color: Colors.white,
-            offset: Offset(-4, -4),
-            blurRadius: 8,
+            color: Color(0xFFE2E8F0),
+            offset: Offset(0, 2),
+            blurRadius: 4,
             spreadRadius: 0,
           ),
         ],
@@ -620,30 +1137,66 @@ class _LoginPageState extends State<LoginPage> {
         obscureText: obscureText,
         keyboardType: keyboardType,
         validator: validator,
-        style: const TextStyle(
-          color: Color(0xFF2D3748),
-          fontSize: 16,
+        style: TextStyle(
+          color: const Color(0xFF1F2937),
+          fontSize: fontSize,
+          fontWeight: FontWeight.w500,
         ),
         decoration: InputDecoration(
           labelText: label,
-          labelStyle: const TextStyle(
-            color: Color(0xFF718096),
-            fontSize: 16,
+          labelStyle: TextStyle(
+            color: const Color(0xFF6B7280),
+            fontSize: labelFontSize,
+            fontWeight: FontWeight.w600,
           ),
-          prefixIcon: Icon(
-            icon,
-            color: const Color(0xFF718096),
+          prefixIcon: Container(
+            margin: EdgeInsets.all(iconMargin),
+            padding: EdgeInsets.all(iconPadding),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF8FAFC),
+              borderRadius: BorderRadius.circular(iconContainerSize),
+              border: Border.all(color: const Color(0xFFE2E8F0), width: 1),
+            ),
+            child: Icon(
+              icon,
+              color: const Color.fromRGBO(8, 111, 222, 0.977),
+              size: iconSize,
+            ),
           ),
-          suffixIcon: suffixIcon,
+          suffixIcon: suffixIcon != null ? Container(
+            margin: EdgeInsets.all(iconMargin),
+            child: suffixIcon,
+          ) : null,
           border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(borderRadius),
+            borderSide: BorderSide.none,
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(borderRadius),
+            borderSide: BorderSide.none,
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(borderRadius),
+            borderSide: BorderSide.none,
+          ),
+          errorBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(borderRadius),
+            borderSide: BorderSide.none,
+          ),
+          focusedErrorBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(borderRadius),
             borderSide: BorderSide.none,
           ),
           filled: true,
           fillColor: Colors.transparent,
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: 20,
-            vertical: 20,
+          contentPadding: EdgeInsets.symmetric(
+            horizontal: horizontalPadding,
+            vertical: verticalPadding,
+          ),
+          errorStyle: TextStyle(
+            color: const Color(0xFFDC2626),
+            fontSize: (isVerySmallScreen ? 10.0 : (isSmallScreen ? 12.0 : 14.0)) * finalScale,
+            fontWeight: FontWeight.w500,
           ),
         ),
       ),

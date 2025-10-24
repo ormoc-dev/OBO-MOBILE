@@ -3,6 +3,8 @@ import '../services/auth_service.dart';
 import '../services/offline_sync_service.dart';
 import '../models/user.dart';
 import 'assignments_screen.dart';
+import 'qr_scanner_screen.dart';
+import 'profile_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -50,9 +52,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Future<void> _loadSyncStatus() async {
     try {
+      print('Dashboard: Loading sync status...');
+      
       final syncStatus = await OfflineSyncService.getSyncStatus();
       final hasOfflineData = await OfflineSyncService.hasOfflineData();
       final hasCredentials = await OfflineSyncService.hasOfflineCredentials();
+      
+      print('Dashboard: Sync status loaded:');
+      print('  - hasOfflineData: $hasOfflineData');
+      print('  - hasCredentials: $hasCredentials');
+      print('  - lastSync: ${syncStatus.lastSync}');
+      print('  - isSuccess: ${syncStatus.isSuccess}');
+      print('  - hasData: ${syncStatus.hasData}');
       
       setState(() {
         _hasOfflineData = hasOfflineData;
@@ -77,6 +88,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         }
       });
     } catch (e) {
+      print('Dashboard: Error loading sync status: $e');
       setState(() {
         _syncStatus = 'Error loading sync status';
         _hasOfflineData = false;
@@ -87,12 +99,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Future<void> _fetchUserData() async {
+    print('Dashboard: Starting sync...');
     setState(() {
       _isSyncing = true;
     });
 
     try {
       final result = await OfflineSyncService.fetchUserData();
+      
+      print('Dashboard: Sync completed:');
+      print('  - Success: ${result.success}');
+      print('  - Message: ${result.message}');
+      print('  - Assignments count: ${result.assignmentsCount}');
       
       setState(() {
         if (result.success) {
@@ -104,7 +122,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
       });
 
       // Refresh sync status to show updated information
+      print('Dashboard: Refreshing sync status after sync...');
       await _loadSyncStatus();
+      
+      // Force refresh the UI to show updated status
+      if (mounted) {
+        setState(() {
+          // Trigger a rebuild to show updated sync status
+        });
+      }
 
       // Show result dialog
       if (mounted) {
@@ -124,6 +150,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       }
 
     } catch (e) {
+      print('Dashboard: Sync error: $e');
       setState(() {
         _syncStatus = 'Sync error: $e';
         _isSyncing = false;
@@ -247,286 +274,183 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   Widget build(BuildContext context) {
     if (isLoading) {
-      return const Scaffold(
-        body: Center(
-          child: CircularProgressIndicator(),
+      return Scaffold(
+        backgroundColor: const Color(0xFFF8FAFC),
+        body: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                Color(0xFFF8FAFC), // Clean white
+                Color(0xFFF1F5F9), // Light gray
+                Color(0xFFE2E8F0), // Slightly darker gray
+              ],
+              stops: [0.0, 0.5, 1.0],
+            ),
+          ),
+          child: const Center(
+            child: CircularProgressIndicator(
+              valueColor: AlwaysStoppedAnimation<Color>(Color.fromRGBO(8, 111, 222, 0.977)),
+            ),
+          ),
         ),
       );
     }
+
+    final screenSize = MediaQuery.of(context).size;
+    final screenWidth = screenSize.width;
+    final screenHeight = screenSize.height;
+    final orientation = MediaQuery.of(context).orientation;
+    
+    // Enhanced responsive breakpoints
+    final isTablet = screenWidth > 600;
+    final isLargeTablet = screenWidth > 900;
+    final isVerySmallScreen = screenHeight < 500;
+    final isLandscape = orientation == Orientation.landscape;
+    
+    // Dynamic scaling based on screen size and orientation
+    final double baseHeight = isLandscape ? 600.0 : 800.0;
+    final double scale = (screenHeight / baseHeight).clamp(0.6, 1.3);
+    final double smallScreenScale = isVerySmallScreen ? 0.8 : 1.0;
+    final double finalScale = scale * smallScreenScale;
 
     return Scaffold(
       body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
             colors: [
-              Color(0xFFE0E5EC),
-              Color(0xFFF0F4F8),
+              Color(0xFFF8FAFC), // Clean white
+              Color(0xFFF1F5F9), // Light gray
+              Color(0xFFE2E8F0), // Slightly darker gray
             ],
+            stops: [0.0, 0.5, 1.0],
           ),
         ),
         child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.all(24.0),
-            child: Column(
-              children: [
-                // Header with user info and logout
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Welcome Back,',
-                          style: TextStyle(
-                            fontSize: 16,
-                            color: Color(0xFF718096),
-                          ),
-                        ),
-                        Text(
-                          currentUser?.name ?? 'User',
-                          style: const TextStyle(
-                            fontSize: 24,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF2D3748),
-                          ),
-                        ),
-                      ],
-                    ),
-                    Container(
-                      width: 50,
-                      height: 50,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFE0E5EC),
-                        borderRadius: BorderRadius.circular(25),
-                        boxShadow: const [
-                          BoxShadow(
-                            color: Color(0xFFA3B1C6),
-                            offset: Offset(4, 4),
-                            blurRadius: 8,
-                            spreadRadius: 0,
-                          ),
-                          BoxShadow(
-                            color: Colors.white,
-                            offset: Offset(-4, -4),
-                            blurRadius: 8,
-                            spreadRadius: 0,
-                          ),
-                        ],
-                      ),
-                      child: Material(
-                        color: Colors.transparent,
-                        child: InkWell(
-                          borderRadius: BorderRadius.circular(25),
-                          onTap: _showLogoutConfirmation,
-                          child: const Icon(
-                            Icons.logout,
-                            color: Color(0xFF4A5568),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 40),
-                
-                // User role info
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFE0E5EC),
-                    borderRadius: BorderRadius.circular(20),
-                    boxShadow: const [
-                      BoxShadow(
-                        color: Color(0xFFA3B1C6),
-                        offset: Offset(4, 4),
-                        blurRadius: 8,
-                        spreadRadius: 0,
-                      ),
-                      BoxShadow(
-                        color: Colors.white,
-                        offset: Offset(-4, -4),
-                        blurRadius: 8,
-                        spreadRadius: 0,
-                      ),
-                    ],
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Inspector Information',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF2D3748),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      _buildInfoRow('Name', currentUser?.name ?? 'N/A'),
-                      _buildInfoRow('Role', currentUser?.role ?? 'N/A'),
-                      if (currentUser?.inspectorRole != null && currentUser!.inspectorRole!.isNotEmpty)
-                        _buildInfoRow('Inspector Role', currentUser!.inspectorRole!),
-                      _buildInfoRow('Status', currentUser?.status ?? 'N/A'),
-                    ],
-                  ),
-                ),
-                
-                const SizedBox(height: 20),
-                
-                // Sync Status Section
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFE0E5EC),
-                    borderRadius: BorderRadius.circular(16),
-                    boxShadow: const [
-                      BoxShadow(
-                        color: Color(0xFFA3B1C6),
-                        offset: Offset(4, 4),
-                        blurRadius: 8,
-                        spreadRadius: 0,
-                      ),
-                      BoxShadow(
-                        color: Colors.white,
-                        offset: Offset(-4, -4),
-                        blurRadius: 8,
-                        spreadRadius: 0,
-                      ),
-                    ],
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Icon(
-                            Icons.sync,
-                            color: _hasOfflineData ? Colors.green : Colors.orange,
-                            size: 20,
-                          ),
-                          const SizedBox(width: 8),
-                          const Text(
-                            'Data Sync Status',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFF2D3748),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _buildStatusItem(
-                              'Offline Data',
-                              _hasOfflineData ? 'Available' : 'Not Available',
-                              _hasOfflineData ? Colors.green : Colors.red,
-                            ),
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: _buildStatusItem(
-                              'Offline Login',
-                              _hasOfflineCredentials ? 'Available' : 'Not Available',
-                              _hasOfflineCredentials ? Colors.green : Colors.red,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      _buildStatusItem(
-                        'Last Sync',
-                        _lastSyncTime,
-                        _lastSyncTime == 'Never' ? Colors.grey : Colors.blue,
-                      ),
-                    ],
-                  ),
-                ),
-                
-                const SizedBox(height: 20),
-                
-                // Dashboard cards
-                Expanded(
-                  child: GridView.count(
-                    crossAxisCount: 2,
-                    crossAxisSpacing: 20,
-                    mainAxisSpacing: 20,
-                    children: [
-                      _buildDashboardCard(
-                        'Assigned Inspections',
-                        Icons.assignment,
-                        () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => const AssignmentsScreen(),
-                            ),
-                          );
-                        },
-                      ),
-                      _buildDashboardCard(
-                        'Sync My Data',
-                        Icons.sync,
-                        _isSyncing ? null : _fetchUserData,
-                        isLoading: _isSyncing,
-                        statusText: _syncStatus,
-                      ),
-                      _buildDashboardCard(
-                        'Inspection Reports',
-                        Icons.assessment,
-                        () {
-                          // Navigate to inspection reports
-                        },
-                      ),
-                      _buildDashboardCard(
-                        'Profile & Settings',
-                        Icons.person,
-                        () {
-                          // Navigate to profile and settings
-                        },
-                      ),
-                    ],
-                  ),
-                ),
-              ],
+          child: SingleChildScrollView(
+            padding: EdgeInsets.symmetric(
+              horizontal: (isLargeTablet ? 40.0 : (isTablet ? 32.0 : (isVerySmallScreen ? 12.0 : 16.0))) * finalScale,
+              vertical: (isVerySmallScreen ? 12.0 : 16.0) * finalScale,
             ),
+            child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Neumorphic Header Section
+              _buildNeumorphicHeader(context, isTablet),
+              
+              const SizedBox(height: 24),
+              
+              // Quick Stats Cards
+              _buildQuickStatsSection(context, isTablet),
+              
+              const SizedBox(height: 24),
+              
+              // Main Dashboard Grid
+              _buildDashboardGrid(context, isTablet),
+              
+              const SizedBox(height: 24),
+              
+              // Sync Status Card (moved to bottom)
+              _buildSyncStatusCard(context, isTablet),
+              
+              const SizedBox(height: 24),
+            ],
+          ),
           ),
         ),
       ),
     );
   }
 
-  Widget _buildInfoRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8.0),
+  Widget _buildNeumorphicHeader(BuildContext context, bool isTablet) {
+    final screenSize = MediaQuery.of(context).size;
+    final screenWidth = screenSize.width;
+    final screenHeight = screenSize.height;
+    final orientation = MediaQuery.of(context).orientation;
+    
+    // Enhanced responsive breakpoints
+    final isLargeTablet = screenWidth > 900;
+    final isVerySmallScreen = screenHeight < 500;
+    final isLandscape = orientation == Orientation.landscape;
+    
+    // Dynamic scaling
+    final double baseHeight = isLandscape ? 600.0 : 800.0;
+    final double scale = (screenHeight / baseHeight).clamp(0.6, 1.3);
+    final double smallScreenScale = isVerySmallScreen ? 0.8 : 1.0;
+    final double finalScale = scale * smallScreenScale;
+    
+    return Container(
+      padding: EdgeInsets.all((isLargeTablet ? 28.0 : (isTablet ? 24.0 : (isVerySmallScreen ? 16.0 : 20.0))) * finalScale),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20 * finalScale),
+        border: Border.all(color: const Color(0xFFE2E8F0), width: 1),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0xFFE2E8F0),
+            offset: Offset(0, 4),
+            blurRadius: 8,
+            spreadRadius: 0,
+          ),
+        ],
+      ),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(
-            width: 100,
-            child: Text(
-              '$label:',
-              style: const TextStyle(
-                fontSize: 14,
-                color: Color(0xFF718096),
-                fontWeight: FontWeight.w500,
-              ),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Good ${_getGreeting()}',
+                  style: TextStyle(
+                    fontSize: isTablet ? 18 : 16,
+                    color: const Color(0xFF6B7280),
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  currentUser?.name ?? 'Inspector',
+                  style: TextStyle(
+                    fontSize: isTablet ? 28 : 24,
+                    fontWeight: FontWeight.bold,
+                    color: const Color(0xFF1F2937),
+                  ),
+                ),
+                const SizedBox(height: 8),
+              
+              ],
             ),
           ),
-          Expanded(
-            child: Text(
-              value,
-              style: const TextStyle(
-                fontSize: 14,
-                color: Color(0xFF2D3748),
-                fontWeight: FontWeight.w600,
+          Container(
+            width: isTablet ? 60 : 50,
+            height: isTablet ? 60 : 50,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(isTablet ? 30 : 25),
+              border: Border.all(color: const Color(0xFFE2E8F0), width: 1),
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0xFFE2E8F0),
+                  offset: Offset(0, 2),
+                  blurRadius: 4,
+                  spreadRadius: 0,
+                ),
+              ],
+            ),
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(isTablet ? 30 : 25),
+                onTap: _showLogoutConfirmation,
+                child: Icon(
+                  Icons.logout_rounded,
+                  color: const Color.fromRGBO(8, 111, 222, 0.977),
+                  size: isTablet ? 28 : 24,
+                ),
               ),
             ),
           ),
@@ -535,62 +459,511 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildStatusItem(String label, String value, Color color) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _buildQuickStatsSection(BuildContext context, bool isTablet) {
+    return Row(
       children: [
-        Text(
-          label,
-          style: const TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-            color: Color(0xFF4A5568),
+        Expanded(
+          child: _buildStatCard(
+            'Status',
+            currentUser?.status ?? 'Active',
+            Icons.verified_user_rounded,
+            _getStatusColor(currentUser?.status),
+            isTablet,
           ),
         ),
-        const SizedBox(height: 4),
-        Row(
-          children: [
-            Container(
-              width: 8,
-              height: 8,
-              decoration: BoxDecoration(
-                color: color,
-                shape: BoxShape.circle,
-              ),
-            ),
-            const SizedBox(width: 6),
-            Expanded(
-              child: Text(
-                value,
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                  color: color,
-                ),
-              ),
-            ),
-          ],
+        SizedBox(width: isTablet ? 16 : 12),
+        Expanded(
+          child: _buildStatCard(
+            'Role',
+            currentUser?.role ?? 'Inspector',
+            Icons.badge_rounded,
+            const Color(0xFF10B981),
+            isTablet,
+          ),
         ),
       ],
     );
   }
 
-  Widget _buildDashboardCard(String title, IconData icon, VoidCallback? onTap, {bool isLoading = false, String? statusText}) {
+  Widget _buildStatCard(String title, String value, IconData icon, Color color, bool isTablet) {
     return Container(
+      padding: EdgeInsets.all(isTablet ? 20 : 16),
       decoration: BoxDecoration(
-        color: const Color(0xFFE0E5EC),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFE2E8F0), width: 1),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0xFFE2E8F0),
+            offset: Offset(0, 2),
+            blurRadius: 4,
+            spreadRadius: 0,
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF8FAFC),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: const Color(0xFFE2E8F0), width: 1),
+            ),
+            child: Icon(
+              icon,
+              color: color,
+              size: isTablet ? 24 : 20,
+            ),
+          ),
+          SizedBox(height: isTablet ? 12 : 8),
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: isTablet ? 14 : 12,
+              color: const Color(0xFF6B7280),
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: isTablet ? 18 : 16,
+              color: const Color(0xFF1F2937),
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSyncStatusCard(BuildContext context, bool isTablet) {
+    return Container(
+      padding: EdgeInsets.all(isTablet ? 24 : 20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFE2E8F0), width: 1),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0xFFE2E8F0),
+            offset: Offset(0, 2),
+            blurRadius: 4,
+            spreadRadius: 0,
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: _hasOfflineData ? Colors.green.withOpacity(0.1) : Colors.orange.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: _hasOfflineData ? Colors.green.withOpacity(0.3) : Colors.orange.withOpacity(0.3), 
+                    width: 1
+                  ),
+                ),
+                child: Icon(
+                  _hasOfflineData ? Icons.cloud_done_rounded : Icons.cloud_off_rounded,
+                  color: _hasOfflineData ? Colors.green : Colors.orange,
+                  size: isTablet ? 24 : 20,
+                ),
+              ),
+              SizedBox(width: isTablet ? 12 : 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Data Sync Status',
+                      style: TextStyle(
+                        fontSize: isTablet ? 20 : 18,
+                        fontWeight: FontWeight.bold,
+                        color: const Color(0xFF1F2937),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      _hasOfflineData 
+                        ? 'Your data is synced and available offline'
+                        : 'Sync your data to work offline',
+                      style: TextStyle(
+                        fontSize: isTablet ? 14 : 12,
+                        color: const Color(0xFF6B7280),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: isTablet ? 20 : 16),
+          if (isTablet) ...[
+            // Tablet layout - horizontal
+            Row(
+              children: [
+                Expanded(
+                  child: _buildSyncStatusItem(
+                    'Offline Data',
+                    _hasOfflineData ? 'Available' : 'Not Available',
+                    _hasOfflineData ? Colors.green : Colors.red,
+                    isTablet,
+                  ),
+                ),
+                SizedBox(width: isTablet ? 24 : 16),
+                Expanded(
+                  child: _buildSyncStatusItem(
+                    'Offline Login',
+                    _hasOfflineCredentials ? 'Available' : 'Not Available',
+                    _hasOfflineCredentials ? Colors.green : Colors.red,
+                    isTablet,
+                  ),
+                ),
+                SizedBox(width: isTablet ? 24 : 16),
+                Expanded(
+                  child: _buildSyncStatusItem(
+                    'Last Sync',
+                    _lastSyncTime,
+                    _lastSyncTime == 'Never' ? Colors.grey : const Color.fromRGBO(8, 111, 222, 0.977),
+                    isTablet,
+                  ),
+                ),
+              ],
+            ),
+          ] else ...[
+            // Mobile layout - vertical
+            _buildSyncStatusItem(
+              'Offline Data',
+              _hasOfflineData ? 'Available' : 'Not Available',
+              _hasOfflineData ? Colors.green : Colors.red,
+              isTablet,
+            ),
+            const SizedBox(height: 12),
+            _buildSyncStatusItem(
+              'Offline Login',
+              _hasOfflineCredentials ? 'Available' : 'Not Available',
+              _hasOfflineCredentials ? Colors.green : Colors.red,
+              isTablet,
+            ),
+            const SizedBox(height: 12),
+            _buildSyncStatusItem(
+              'Last Sync',
+              _lastSyncTime,
+              _lastSyncTime == 'Never' ? Colors.grey : const Color.fromRGBO(8, 111, 222, 0.977),
+              isTablet,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSyncStatusItem(String label, String value, Color color, bool isTablet) {
+    return Row(
+      children: [
+        Container(
+          width: isTablet ? 12 : 10,
+          height: isTablet ? 12 : 10,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            shape: BoxShape.circle,
+            border: Border.all(color: const Color(0xFFE2E8F0), width: 1),
+          ),
+          child: Center(
+            child: Container(
+              width: isTablet ? 6 : 5,
+              height: isTablet ? 6 : 5,
+              decoration: BoxDecoration(
+                color: color,
+                shape: BoxShape.circle,
+              ),
+            ),
+          ),
+        ),
+        SizedBox(width: isTablet ? 12 : 8),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: isTablet ? 14 : 12,
+                  color: const Color(0xFF6B7280),
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              Text(
+                value,
+                style: TextStyle(
+                  fontSize: isTablet ? 16 : 14,
+                  color: color,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDashboardGrid(BuildContext context, bool isTablet) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Featured QR Scanner Section
+        _buildFeaturedQRScanner(context, isTablet),
+        
+        SizedBox(height: isTablet ? 32 : 24),
+        
+        // Quick Actions Section
+        Text(
+          'Quick Actions',
+          style: TextStyle(
+            fontSize: isTablet ? 24 : 20,
+            fontWeight: FontWeight.bold,
+            color: const Color(0xFF1F2937),
+          ),
+        ),
+        SizedBox(height: isTablet ? 20 : 16),
+        
+        // Primary Actions Row
+        Row(
+          children: [
+            Expanded(
+              child: _buildModernDashboardCard(
+                'Assigned Inspections',
+                Icons.assignment_rounded,
+                const Color(0xFF3B82F6),
+                () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const AssignmentsScreen(),
+                    ),
+                  );
+                },
+                isTablet,
+              ),
+            ),
+            SizedBox(width: isTablet ? 20 : 16),
+            Expanded(
+              child: _buildModernDashboardCard(
+                'Sync My Data',
+                Icons.sync_rounded,
+                const Color(0xFF10B981),
+                _isSyncing ? null : _fetchUserData,
+                isTablet,
+                isLoading: _isSyncing,
+                statusText: _syncStatus,
+              ),
+            ),
+          ],
+        ),
+        
+        SizedBox(height: isTablet ? 20 : 16),
+        
+        // Secondary Actions Row
+        Row(
+          children: [
+            Expanded(
+              child: _buildModernDashboardCard(
+                'Inspection Reports',
+                Icons.assessment_rounded,
+                const Color(0xFFF59E0B),
+                () {
+                  // Navigate to inspection reports
+                },
+                isTablet,
+              ),
+            ),
+            SizedBox(width: isTablet ? 20 : 16),
+            Expanded(
+              child: _buildModernDashboardCard(
+                'Profile & Settings',
+                Icons.person_rounded,
+                const Color(0xFF6366F1),
+                () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const ProfileScreen(),
+                    ),
+                  );
+                },
+                isTablet,
+              ),
+            ),
+          ],
+        ),
+        
+        // Additional actions for tablet
+        if (isTablet) ...[
+          SizedBox(height: 20),
+          Row(
+            children: [
+              Expanded(
+                child: _buildModernDashboardCard(
+                  'Help & Support',
+                  Icons.help_rounded,
+                  const Color(0xFFEF4444),
+                  () {
+                    // Navigate to help and support
+                  },
+                  isTablet,
+                ),
+              ),
+              SizedBox(width: 20),
+              Expanded(
+                child: _buildModernDashboardCard(
+                  'Notifications',
+                  Icons.notifications_rounded,
+                  const Color(0xFF06B6D4),
+                  () {
+                    // Navigate to notifications
+                  },
+                  isTablet,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildFeaturedQRScanner(BuildContext context, bool isTablet) {
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.all(isTablet ? 28 : 24),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Color.fromRGBO(8, 111, 222, 0.977), // Purple
+            Color.fromRGBO(22, 127, 239, 0.976), // Indigo
+          ],
+        ),
         borderRadius: BorderRadius.circular(20),
         boxShadow: const [
           BoxShadow(
-            color: Color(0xFFA3B1C6),
-            offset: Offset(6, 6),
-            blurRadius: 12,
+            color: Color.fromRGBO(123, 168, 216, 0.976),
+            offset: Offset(0, 4),
+            blurRadius: 10,
             spreadRadius: 0,
           ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: const Icon(
+                  Icons.qr_code_scanner_rounded,
+                  color: Colors.white,
+                  size: 32,
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'QR Code Scanner',
+                      style: TextStyle(
+                        fontSize: isTablet ? 24 : 20,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Scan business QR codes for quick inspection access',
+                      style: TextStyle(
+                        fontSize: isTablet ? 16 : 14,
+                        color: Colors.white.withOpacity(0.9),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: isTablet ? 24 : 20),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: _navigateToQRScanner,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.white,
+                foregroundColor: const Color.fromARGB(255, 29, 109, 228),
+                padding: EdgeInsets.symmetric(
+                  vertical: isTablet ? 16 : 14,
+                  horizontal: isTablet ? 32 : 24,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                elevation: 0,
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.qr_code_scanner_rounded, size: 20),
+                  SizedBox(width: isTablet ? 12 : 8),
+                  Text(
+                    'Start Scanning',
+                    style: TextStyle(
+                      fontSize: isTablet ? 16 : 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildModernDashboardCard(
+    String title,
+    IconData icon,
+    Color color,
+    VoidCallback? onTap,
+    bool isTablet, {
+    bool isLoading = false,
+    String? statusText,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFE2E8F0), width: 1),
+        boxShadow: const [
           BoxShadow(
-            color: Colors.white,
-            offset: Offset(-6, -6),
-            blurRadius: 12,
+            color: Color(0xFFE2E8F0),
+            offset: Offset(0, 2),
+            blurRadius: 4,
             spreadRadius: 0,
           ),
         ],
@@ -598,45 +971,54 @@ class _DashboardScreenState extends State<DashboardScreen> {
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(16),
           onTap: onTap,
           child: Padding(
-            padding: const EdgeInsets.all(20),
+            padding: EdgeInsets.all(isTablet ? 24 : 20),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                if (isLoading)
-                  const SizedBox(
-                    width: 40,
-                    height: 40,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 3,
-                      valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF4A5568)),
-                    ),
-                  )
-                else
-                  Icon(
-                    icon,
-                    size: 40,
-                    color: const Color(0xFF4A5568),
+                Container(
+                  padding: EdgeInsets.all(isTablet ? 16 : 12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: const Color(0xFFE2E8F0), width: 1),
                   ),
-                const SizedBox(height: 12),
+                  child: isLoading
+                      ? SizedBox(
+                          width: isTablet ? 32 : 28,
+                          height: isTablet ? 32 : 28,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 3,
+                            valueColor: AlwaysStoppedAnimation<Color>(color),
+                          ),
+                        )
+                      : Icon(
+                          icon,
+                          size: isTablet ? 32 : 28,
+                          color: color,
+                        ),
+                ),
+                SizedBox(height: isTablet ? 16 : 12),
                 Text(
                   title,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF2D3748),
+                  style: TextStyle(
+                    fontSize: isTablet ? 16 : 14,
+                    fontWeight: FontWeight.bold,
+                    color: const Color(0xFF1F2937),
                   ),
                   textAlign: TextAlign.center,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                 ),
                 if (statusText != null && statusText.isNotEmpty) ...[
-                  const SizedBox(height: 8),
+                  SizedBox(height: isTablet ? 8 : 6),
                   Text(
                     statusText,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: Color(0xFF718096),
+                    style: TextStyle(
+                      fontSize: isTablet ? 12 : 10,
+                      color: const Color(0xFF6B7280),
                     ),
                     textAlign: TextAlign.center,
                     maxLines: 2,
@@ -650,4 +1032,38 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ),
     );
   }
+
+  String _getGreeting() {
+    final hour = DateTime.now().hour;
+    if (hour < 12) {
+      return 'Morning';
+    } else if (hour < 17) {
+      return 'Afternoon';
+    } else {
+      return 'Evening';
+    }
+  }
+
+  Color _getStatusColor(String? status) {
+    switch (status?.toLowerCase()) {
+      case 'active':
+        return const Color(0xFF059669);
+      case 'inactive':
+        return const Color(0xFFDC2626);
+      case 'pending':
+        return const Color(0xFFD97706);
+      default:
+        return const Color(0xFF6B7280);
+    }
+  }
+
+  void _navigateToQRScanner() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const QRScannerScreen(),
+      ),
+    );
+  }
+
 }

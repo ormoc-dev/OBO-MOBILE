@@ -3,8 +3,8 @@ import 'package:http/http.dart' as http;
 import '../config/app_config.dart';
 
 class ApiService {
-  // Use the configured base URL
-  static const String baseUrl = AppConfig.baseUrl;
+  // Get the current base URL (supports custom IP)
+  static Future<String> get baseUrl async => await AppConfig.baseUrl;
   
   // Headers for API requests
   static const Map<String, String> headers = {
@@ -15,8 +15,9 @@ class ApiService {
   /// Make HTTP POST request
   static Future<http.Response> post(String endpoint, Map<String, dynamic> body) async {
     try {
+      final currentBaseUrl = await baseUrl;
       final response = await http.post(
-        Uri.parse('$baseUrl$endpoint'),
+        Uri.parse('$currentBaseUrl$endpoint'),
         headers: headers,
         body: jsonEncode(body),
       );
@@ -29,8 +30,9 @@ class ApiService {
   /// Make HTTP GET request
   static Future<http.Response> get(String endpoint, {Map<String, String>? customHeaders}) async {
     try {
+      final currentBaseUrl = await baseUrl;
       final response = await http.get(
-        Uri.parse('$baseUrl$endpoint'),
+        Uri.parse('$currentBaseUrl$endpoint'),
         headers: {...headers, ...?customHeaders},
       );
       return response;

@@ -36,7 +36,12 @@ class OfflineSyncService {
       }
 
       // Fetch user's assignments based on their inspector_role_id
-      final assignmentsResponse = await ApiService.get('/mobile/get_user_assignments.php?user_id=${currentUser.id}&inspector_role_id=${currentUser.inspectorRole}');
+      // For head_inspector role, don't pass inspector_role_id parameter
+      String apiUrl = '/mobile/get_user_assignments.php?user_id=${currentUser.id}';
+      if (currentUser.inspectorRole != null && currentUser.inspectorRole!.isNotEmpty) {
+        apiUrl += '&inspector_role_id=${currentUser.inspectorRole}';
+      }
+      final assignmentsResponse = await ApiService.get(apiUrl);
       final assignmentsData = ApiService.handleResponse(assignmentsResponse);
       
       if (!assignmentsData['success']) {
@@ -49,6 +54,10 @@ class OfflineSyncService {
       // Store current user offline using Hive
       print('OfflineSync: Storing user ${currentUser.name}');
       await HiveOfflineDatabase.saveUser(currentUser);
+      
+      // Verify user was saved
+      final savedUser = HiveOfflineDatabase.getCurrentUser();
+      print('OfflineSync: User saved verification - ${savedUser?.name ?? 'null'} (ID: ${savedUser?.id ?? 'null'})');
 
       // Store user's assignments offline using Hive
       final assignments = (assignmentsData['data']['assignments'] as List)
@@ -56,6 +65,14 @@ class OfflineSyncService {
           .toList();
       print('OfflineSync: Storing ${assignments.length} assignments');
       await HiveOfflineDatabase.saveAssignments(assignments);
+      
+      // Verify assignments were saved
+      final savedAssignments = HiveOfflineDatabase.getAssignments();
+      print('OfflineSync: Assignments saved verification - ${savedAssignments.length} assignments');
+      
+      // Check if data is now available offline
+      final hasData = HiveOfflineDatabase.hasOfflineData();
+      print('OfflineSync: Has offline data after save: $hasData');
 
       // Store user credentials for offline login
       await _storeUserCredentials(currentUser);
@@ -389,7 +406,9 @@ class OfflineSyncService {
           isSuccess = true;
         }
         
+        print('OfflineSyncService getSyncStatus: About to call hasOfflineData()');
         final hasData = await hasOfflineData();
+        print('OfflineSyncService getSyncStatus: hasOfflineData() returned $hasData');
         print('  - Last sync: ${lastSync?.toString() ?? 'null'}');
         print('  - Is success: $isSuccess');
         print('  - Has data: $hasData');
@@ -412,14 +431,35 @@ class OfflineSyncService {
 
   /// Check if offline data exists
   static Future<bool> hasOfflineData() async {
-    if (kIsWeb) {
-      final prefs = await SharedPreferences.getInstance();
-      final hasUsers = prefs.containsKey(_usersKey);
-      final hasAssignments = prefs.containsKey(_assignmentsKey);
-      return hasUsers && hasAssignments;
-    } else {
-      // Use Hive for mobile
-      return HiveOfflineDatabase.hasOfflineData();
+    try {
+      print('OfflineSyncService hasOfflineData: kIsWeb=$kIsWeb');
+      
+      // For now, always use Hive since we know it's working
+      // TODO: Fix platform detection if needed
+      print('OfflineSyncService hasOfflineData: Using Hive directly');
+      final result = HiveOfflineDatabase.hasOfflineData();
+      print('OfflineSyncService hasOfflineData: Hive result=$result');
+      return result;
+      
+      // Original logic (commented out for debugging)
+      /*
+      if (kIsWeb) {
+        final prefs = await SharedPreferences.getInstance();
+        final hasUsers = prefs.containsKey(_usersKey);
+        final hasAssignments = prefs.containsKey(_assignmentsKey);
+        print('OfflineSyncService hasOfflineData (Web): hasUsers=$hasUsers, hasAssignments=$hasAssignments');
+        return hasUsers && hasAssignments;
+      } else {
+        // Use Hive for mobile
+        print('OfflineSyncService hasOfflineData (Mobile): calling HiveOfflineDatabase.hasOfflineData()');
+        final result = HiveOfflineDatabase.hasOfflineData();
+        print('OfflineSyncService hasOfflineData (Mobile): result=$result');
+        return result;
+      }
+      */
+    } catch (e) {
+      print('OfflineSyncService hasOfflineData error: $e');
+      return false;
     }
   }
 
@@ -457,9 +497,14 @@ class OfflineSyncService {
       await prefs.setString(_lastSyncKey, timestamp);
       await prefs.setString(_syncStatusKey, success ? 'success' : 'failed');
     } else {
-      // Use Hive for mobile - this is already handled by HiveOfflineDatabase methods
-      // The sync status is updated when saveUser() and saveAssignments() are called
-      print('Sync status updated in Hive: success=$success, timestamp=$timestamp');
+      // Use Hive for mobile - update sync status in Hive
+      try {
+        await HiveOfflineDatabase.updateSyncStatus('users', timestamp, success ? 'success' : 'failed');
+        await HiveOfflineDatabase.updateSyncStatus('assignments', timestamp, success ? 'success' : 'failed');
+        print('Sync status updated in Hive: success=$success, timestamp=$timestamp');
+      } catch (e) {
+        print('Error updating sync status in Hive: $e');
+      }
     }
   }
 
