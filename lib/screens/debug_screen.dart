@@ -27,13 +27,10 @@ class _DebugScreenState extends State<DebugScreen> {
   bool _hasOfflineCredentials = false;
   String _hiveDebugInfo = 'Not checked';
   String _currentBaseUrl = '';
-  String _selectedEnvironment = 'Local';
+  String _currentIp = '';
   final TextEditingController _ipController = TextEditingController();
-  final TextEditingController _urlController = TextEditingController();
   List<Map<String, dynamic>> _apiLogs = [];
   List<String> _errorLogs = [];
-  Map<String, dynamic> _environmentConfig = <String, dynamic>{};
-  Map<String, dynamic> _localStorage = <String, dynamic>{};
 
   @override
   void initState() {
@@ -44,15 +41,11 @@ class _DebugScreenState extends State<DebugScreen> {
     _loadHiveDebugInfo();
     _loadCustomIp();
     _loadNetworkInfo();
-    _loadEnvironmentConfig();
-    _loadLocalStorage();
-    _loadErrorLogs();
   }
 
   @override
   void dispose() {
     _ipController.dispose();
-    _urlController.dispose();
     super.dispose();
   }
 
@@ -133,59 +126,6 @@ class _DebugScreenState extends State<DebugScreen> {
     }
   }
 
-  Future<void> _loadEnvironmentConfig() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final keys = prefs.getKeys();
-      final config = <String, dynamic>{};
-      
-      for (String key in keys) {
-        final value = prefs.get(key);
-        config[key] = value;
-      }
-      
-      setState(() {
-        _environmentConfig = config;
-      });
-    } catch (e) {
-      setState(() {
-        _environmentConfig = {'error': 'Failed to load: $e'};
-      });
-    }
-  }
-
-  Future<void> _loadLocalStorage() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final keys = prefs.getKeys();
-      final storage = <String, dynamic>{};
-      
-      for (String key in keys) {
-        final value = prefs.get(key);
-        storage[key] = value;
-      }
-      
-      setState(() {
-        _localStorage = storage;
-      });
-    } catch (e) {
-      setState(() {
-        _localStorage = {'error': 'Failed to load: $e'};
-      });
-    }
-  }
-
-  Future<void> _loadErrorLogs() async {
-    // Simulate error logs - in a real app, you'd load from a logging service
-    setState(() {
-      _errorLogs = [
-        '2024-01-15 10:30:15 - Network timeout on API call',
-        '2024-01-15 10:25:42 - Failed to sync offline data',
-        '2024-01-15 10:20:18 - Authentication token expired',
-        '2024-01-15 10:15:33 - Database connection lost',
-      ];
-    });
-  }
 
   Future<void> _copyToClipboard(String text) async {
     await Clipboard.setData(ClipboardData(text: text));
@@ -246,47 +186,34 @@ class _DebugScreenState extends State<DebugScreen> {
     }
   }
 
-  Future<void> _saveCustomUrl(String url) async {
+  Future<void> _saveCustomIp(String ip) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('custom_base_url', url);
+    await prefs.setString('custom_ip', ip);
+    final baseUrl = 'http://$ip/OBO-LGU/api';
+    await prefs.setString('custom_base_url', baseUrl);
     setState(() {
-      _currentBaseUrl = url;
+      _currentIp = ip;
+      _currentBaseUrl = baseUrl;
     });
   }
 
-  void _setEnvironment(String environment) {
-    setState(() {
-      _selectedEnvironment = environment;
-    });
-    
-    String baseUrl;
-    switch (environment) {
-      case 'Local':
-        baseUrl = 'http://$_localIp/obo-lgu/api';
-        break;
-      case 'Staging':
-        baseUrl = 'https://staging-api.obo.com/api';
-        break;
-      case 'Production':
-        baseUrl = 'https://api.obo.com/api';
-        break;
-      default:
-        baseUrl = _currentBaseUrl;
-    }
-    
-    _urlController.text = baseUrl;
-    _saveCustomUrl(baseUrl);
-  }
 
   Future<void> _loadCustomIp() async {
     final prefs = await SharedPreferences.getInstance();
     final customIp = prefs.getString('custom_ip') ?? '';
     final currentBaseUrl = await AppConfig.baseUrl;
     
+    // Extract IP from current base URL
+    String currentIp = '';
+    if (currentBaseUrl.contains('http://')) {
+      final parts = currentBaseUrl.split('http://')[1].split('/')[0];
+      currentIp = parts;
+    }
+    
     setState(() {
       _currentBaseUrl = currentBaseUrl;
-      _ipController.text = customIp;
-      _urlController.text = currentBaseUrl;
+      _currentIp = currentIp;
+      _ipController.text = customIp.isEmpty ? currentIp : customIp;
     });
   }
 
@@ -335,8 +262,7 @@ class _DebugScreenState extends State<DebugScreen> {
               _loadUserInfo();
               _loadHiveDebugInfo();
               _loadNetworkInfo();
-              _loadEnvironmentConfig();
-              _loadLocalStorage();
+              _loadCustomIp();
             },
           ),
         ],
@@ -384,14 +310,11 @@ class _DebugScreenState extends State<DebugScreen> {
                 
                 const SizedBox(height: 24),
                 
-                // Environment & URL Configuration
-                _buildSectionHeader('⚙️ Environment Configuration', Icons.settings),
+                // IP Configuration
+                _buildSectionHeader('⚙️ Server Configuration', Icons.settings),
                 const SizedBox(height: 16),
                 
-                _buildEnvironmentSelector(),
-                const SizedBox(height: 16),
-                
-                _buildUrlConfiguration(),
+                _buildIpConfiguration(),
                 const SizedBox(height: 24),
                 
                 // API Testing
@@ -399,13 +322,6 @@ class _DebugScreenState extends State<DebugScreen> {
                 const SizedBox(height: 16),
                 
                 _buildApiTestSection(),
-                const SizedBox(height: 24),
-                
-                // Developer Tools
-                _buildSectionHeader('🛠️ Developer Tools', Icons.developer_mode),
-                const SizedBox(height: 16),
-                
-                _buildDeveloperTools(),
                 const SizedBox(height: 24),
                 
                 // Offline Data Status
@@ -509,83 +425,7 @@ class _DebugScreenState extends State<DebugScreen> {
     );
   }
 
-  Widget _buildEnvironmentSelector() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE2E8F0), width: 1),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0xFFE2E8F0),
-            offset: Offset(0, 2),
-            blurRadius: 4,
-            spreadRadius: 0,
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Environment Presets',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: Color(0xFF1F2937),
-            ),
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(
-                child: _buildEnvironmentButton('Local', Icons.home),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _buildEnvironmentButton('Staging', Icons.developer_mode),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _buildEnvironmentButton('Production', Icons.cloud),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildEnvironmentButton(String environment, IconData icon) {
-    final isSelected = _selectedEnvironment == environment;
-    return ElevatedButton(
-      onPressed: () => _setEnvironment(environment),
-      style: ElevatedButton.styleFrom(
-        backgroundColor: isSelected 
-            ? const Color.fromRGBO(8, 111, 222, 0.977)
-            : Colors.grey[200],
-        foregroundColor: isSelected ? Colors.white : Colors.black87,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8),
-        ),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 20),
-          const SizedBox(height: 4),
-          Text(
-            environment,
-            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildUrlConfiguration() {
+  Widget _buildIpConfiguration() {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
@@ -608,13 +448,13 @@ class _DebugScreenState extends State<DebugScreen> {
           Row(
             children: [
               const Icon(
-                Icons.link,
+                Icons.computer,
                 color: Color.fromRGBO(8, 111, 222, 0.977),
                 size: 24,
               ),
               const SizedBox(width: 8),
               const Text(
-                'Custom Base URL',
+                'Server IP Address',
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
@@ -628,9 +468,10 @@ class _DebugScreenState extends State<DebugScreen> {
             children: [
               Expanded(
                 child: TextField(
-                  controller: _urlController,
+                  controller: _ipController,
                   decoration: InputDecoration(
-                    hintText: 'e.g., http://192.168.1.100:8000/api',
+                    hintText: 'e.g., 192.168.0.115',
+                    labelText: 'IP Address',
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
                       borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
@@ -646,15 +487,17 @@ class _DebugScreenState extends State<DebugScreen> {
               const SizedBox(width: 8),
               ElevatedButton(
                 onPressed: () async {
-                  final url = _urlController.text.trim();
-                  await _saveCustomUrl(url);
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('URL saved: $url'),
-                        backgroundColor: Colors.green,
-                      ),
-                    );
+                  final ip = _ipController.text.trim();
+                  if (ip.isNotEmpty) {
+                    await _saveCustomIp(ip);
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('IP saved: $ip'),
+                          backgroundColor: Colors.green,
+                        ),
+                      );
+                    }
                   }
                 },
                 style: ElevatedButton.styleFrom(
@@ -671,6 +514,15 @@ class _DebugScreenState extends State<DebugScreen> {
             ],
           ),
           const SizedBox(height: 8),
+          Text(
+            'Current URL: $_currentBaseUrl',
+            style: const TextStyle(
+              fontSize: 12,
+              color: Color(0xFF6B7280),
+              fontStyle: FontStyle.italic,
+            ),
+          ),
+          const SizedBox(height: 8),
           Row(
             children: [
               ElevatedButton(
@@ -682,13 +534,13 @@ class _DebugScreenState extends State<DebugScreen> {
                   ),
                 ),
                 child: const Text(
-                  'Copy URL',
+                  'Copy Full URL',
                   style: TextStyle(color: Colors.white, fontSize: 12),
                 ),
               ),
               const SizedBox(width: 8),
               ElevatedButton(
-                onPressed: () => _copyToClipboard(_localIp),
+                onPressed: () => _copyToClipboard(_currentIp),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF10B981),
                   shape: RoundedRectangleBorder(
@@ -696,7 +548,7 @@ class _DebugScreenState extends State<DebugScreen> {
                   ),
                 ),
                 child: const Text(
-                  'Copy IP',
+                  'Copy IP Only',
                   style: TextStyle(color: Colors.white, fontSize: 12),
                 ),
               ),
@@ -780,95 +632,6 @@ class _DebugScreenState extends State<DebugScreen> {
     );
   }
 
-  Widget _buildDeveloperTools() {
-    return Column(
-      children: [
-        _buildDeveloperToolCard(
-          'Environment Variables',
-          Icons.settings_applications,
-          _environmentConfig.isNotEmpty 
-              ? '${_environmentConfig.length} variables loaded'
-              : 'No environment variables',
-          () => _showEnvironmentDialog(),
-        ),
-        _buildDeveloperToolCard(
-          'Local Storage',
-          Icons.storage,
-          _localStorage.isNotEmpty 
-              ? '${_localStorage.length} items stored'
-              : 'No local storage',
-          () => _showStorageDialog(),
-        ),
-        _buildDeveloperToolCard(
-          'API Logs',
-          Icons.api,
-          '${_apiLogs.length} requests logged',
-          () => _showApiLogsDialog(),
-        ),
-        _buildDeveloperToolCard(
-          'Error Console',
-          Icons.bug_report,
-          '${_errorLogs.length} errors logged',
-          () => _showErrorLogsDialog(),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildDeveloperToolCard(String title, IconData icon, String subtitle, VoidCallback onTap) {
-    return Container(
-      width: double.infinity,
-      margin: const EdgeInsets.only(bottom: 12),
-      child: Material(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(12),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              children: [
-                Icon(
-                  icon,
-                  color: const Color.fromRGBO(8, 111, 222, 0.977),
-                  size: 24,
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        title,
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                          color: Color(0xFF1F2937),
-                        ),
-                      ),
-                      Text(
-                        subtitle,
-                        style: const TextStyle(
-                          fontSize: 14,
-                          color: Color(0xFF6B7280),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const Icon(
-                  Icons.arrow_forward_ios,
-                  size: 16,
-                  color: Color(0xFF6B7280),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
 
   Widget _buildOfflineDataSection() {
     return Container(
@@ -1076,148 +839,4 @@ class _DebugScreenState extends State<DebugScreen> {
     );
   }
 
-  void _showEnvironmentDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Environment Variables'),
-        content: SizedBox(
-          width: double.maxFinite,
-          child: _environmentConfig.isNotEmpty 
-            ? ListView.builder(
-                shrinkWrap: true,
-                itemCount: _environmentConfig.length,
-                itemBuilder: (context, index) {
-                  final key = _environmentConfig.keys.elementAt(index);
-                  final value = _environmentConfig[key];
-                  return ListTile(
-                    title: Text(key),
-                    subtitle: Text(value.toString()),
-                    trailing: IconButton(
-                      icon: const Icon(Icons.copy),
-                      onPressed: () => _copyToClipboard('$key: $value'),
-                    ),
-                  );
-                },
-              )
-            : const Text('No environment variables found'),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Close'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showStorageDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Local Storage'),
-        content: SizedBox(
-          width: double.maxFinite,
-          child: _localStorage.isNotEmpty 
-            ? ListView.builder(
-                shrinkWrap: true,
-                itemCount: _localStorage.length,
-                itemBuilder: (context, index) {
-                  final key = _localStorage.keys.elementAt(index);
-                  final value = _localStorage[key];
-                  return ListTile(
-                    title: Text(key),
-                    subtitle: Text(value.toString()),
-                    trailing: IconButton(
-                      icon: const Icon(Icons.copy),
-                      onPressed: () => _copyToClipboard('$key: $value'),
-                    ),
-                  );
-                },
-              )
-            : const Text('No local storage found'),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Close'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showApiLogsDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('API Request Logs'),
-        content: SizedBox(
-          width: double.maxFinite,
-          child: _apiLogs.isNotEmpty 
-            ? ListView.builder(
-                shrinkWrap: true,
-                itemCount: _apiLogs.length,
-                itemBuilder: (context, index) {
-                  final log = _apiLogs[index];
-                  return Card(
-                    child: ListTile(
-                      title: Text('${log['status']} - ${log['latency']}'),
-                      subtitle: Text('${log['url']}\n${log['timestamp']}'),
-                      trailing: IconButton(
-                        icon: const Icon(Icons.copy),
-                        onPressed: () => _copyToClipboard(log.toString()),
-                      ),
-                    ),
-                  );
-                },
-              )
-            : const Text('No API logs found'),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Close'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showErrorLogsDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Error Console'),
-        content: SizedBox(
-          width: double.maxFinite,
-          child: _errorLogs.isNotEmpty 
-            ? ListView.builder(
-                shrinkWrap: true,
-                itemCount: _errorLogs.length,
-                itemBuilder: (context, index) {
-                  final error = _errorLogs[index];
-                  return Card(
-                    child: ListTile(
-                      title: Text(error),
-                      trailing: IconButton(
-                        icon: const Icon(Icons.copy),
-                        onPressed: () => _copyToClipboard(error),
-                      ),
-                    ),
-                  );
-                },
-              )
-            : const Text('No error logs found'),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Close'),
-          ),
-        ],
-      ),
-    );
-  }
 }

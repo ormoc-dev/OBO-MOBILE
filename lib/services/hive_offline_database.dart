@@ -98,6 +98,11 @@ class HiveOfflineDatabase {
     return _syncStatusBox!;
   }
 
+  static Box<Inspection> get inspectionBox {
+    if (_inspectionBox == null) throw Exception('Database not initialized. Call initialize() first.');
+    return _inspectionBox!;
+  }
+
   // User operations
   static Future<void> saveUser(User user) async {
     try {
@@ -311,27 +316,41 @@ class HiveOfflineDatabase {
 
   // Inspection storage methods
   static Future<void> saveInspection(Inspection inspection) async {
-    if (_inspectionBox == null) {
-      print('Inspection box not initialized');
-      return;
-    }
-    
     try {
-      await _inspectionBox!.put(inspection.id, inspection);
-      print('Inspection saved: ${inspection.id}');
+      if (!_initialized) {
+        print('Hive saveInspection: Database not initialized');
+        return;
+      }
+      
+      print('Hive saveInspection: Saving inspection ${inspection.id}');
+      await inspectionBox.put(inspection.id, inspection);
+      print('Inspection saved successfully: ${inspection.id}');
+      
+      // Verify the inspection was saved
+      final savedInspection = inspectionBox.get(inspection.id);
+      if (savedInspection != null) {
+        print('Inspection verification successful: ${savedInspection.id}');
+      } else {
+        print('Inspection verification failed: Not found in database');
+      }
     } catch (e) {
       print('Error saving inspection: $e');
     }
   }
 
   static List<Inspection> getInspections() {
-    if (_inspectionBox == null) {
-      print('Inspection box not initialized');
-      return [];
-    }
-    
     try {
-      return _inspectionBox!.values.toList();
+      if (!_initialized) {
+        print('Hive getInspections: Database not initialized');
+        return [];
+      }
+      
+      final inspections = inspectionBox.values.toList();
+      print('Hive getInspections: Found ${inspections.length} inspections');
+      for (final inspection in inspections) {
+        print('  - Inspection: ${inspection.id}, User: ${inspection.userId}, Synced: ${inspection.isSynced}');
+      }
+      return inspections;
     } catch (e) {
       print('Error getting inspections: $e');
       return [];
@@ -339,13 +358,13 @@ class HiveOfflineDatabase {
   }
 
   static Inspection? getInspection(String id) {
-    if (_inspectionBox == null) {
-      print('Inspection box not initialized');
-      return null;
-    }
-    
     try {
-      return _inspectionBox!.get(id);
+      if (!_initialized) {
+        print('Hive getInspection: Database not initialized');
+        return null;
+      }
+      
+      return inspectionBox.get(id);
     } catch (e) {
       print('Error getting inspection: $e');
       return null;
@@ -353,13 +372,13 @@ class HiveOfflineDatabase {
   }
 
   static Future<void> deleteInspection(String id) async {
-    if (_inspectionBox == null) {
-      print('Inspection box not initialized');
-      return;
-    }
-    
     try {
-      await _inspectionBox!.delete(id);
+      if (!_initialized) {
+        print('Hive deleteInspection: Database not initialized');
+        return;
+      }
+      
+      await inspectionBox.delete(id);
       print('Inspection deleted: $id');
     } catch (e) {
       print('Error deleting inspection: $e');
@@ -367,13 +386,15 @@ class HiveOfflineDatabase {
   }
 
   static List<Inspection> getUnsyncedInspections() {
-    if (_inspectionBox == null) {
-      print('Inspection box not initialized');
-      return [];
-    }
-    
     try {
-      return _inspectionBox!.values.where((inspection) => !inspection.isSynced).toList();
+      if (!_initialized) {
+        print('Hive getUnsyncedInspections: Database not initialized');
+        return [];
+      }
+      
+      final unsynced = inspectionBox.values.where((inspection) => !inspection.isSynced).toList();
+      print('Hive getUnsyncedInspections: Found ${unsynced.length} unsynced inspections');
+      return unsynced;
     } catch (e) {
       print('Error getting unsynced inspections: $e');
       return [];
@@ -381,16 +402,16 @@ class HiveOfflineDatabase {
   }
 
   static Future<void> markInspectionAsSynced(String id) async {
-    if (_inspectionBox == null) {
-      print('Inspection box not initialized');
-      return;
-    }
-    
     try {
-      final inspection = _inspectionBox!.get(id);
+      if (!_initialized) {
+        print('Hive markInspectionAsSynced: Database not initialized');
+        return;
+      }
+      
+      final inspection = inspectionBox.get(id);
       if (inspection != null) {
         inspection.markAsSynced();
-        await _inspectionBox!.put(id, inspection);
+        await inspectionBox.put(id, inspection);
         print('Inspection marked as synced: $id');
       }
     } catch (e) {

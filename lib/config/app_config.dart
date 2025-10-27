@@ -5,7 +5,7 @@ class AppConfig {
   // IMPORTANT: Update this URL to match your XAMPP server setup
   
   // Default base URL (fallback)
-  static const String _defaultBaseUrl = 'http://172.31.208.1/OBO-LGU/api';
+  static const String _defaultBaseUrl = 'http://192.168.0.115/OBO-LGU/api';
   
   // Get the current base URL (checks for custom IP first)
   static Future<String> get baseUrl async {

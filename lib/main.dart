@@ -205,30 +205,272 @@ class WelcomePage extends StatelessWidget {
               context, screenWidth, screenHeight, finalScale, 
               logoSize, logoFontSize, titleFontSize, descriptionFontSize,
               buttonHeight, secondaryButtonHeight, landscapeVerticalSpacing
-            ) : FittedBox(
-              fit: BoxFit.scaleDown,
-              alignment: Alignment.topCenter,
+            ) : SingleChildScrollView(
               child: ConstrainedBox(
                 constraints: BoxConstraints(
-                  minWidth: screenWidth - (isLandscape ? landscapePadding : horizontalPadding) * 2,
-                  maxWidth: screenWidth - (isLandscape ? landscapePadding : horizontalPadding) * 2,
+                  minHeight: screenHeight - MediaQuery.of(context).padding.top - MediaQuery.of(context).padding.bottom,
                 ),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                  SizedBox(height: isSmallScreen ? 10 : 20),
-                  // Version number at the top right with neumorphism
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: Container(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: isTablet ? 16 : 12, 
-                        vertical: isTablet ? 8 : 6
+                    SizedBox(height: isSmallScreen ? 10 : 20),
+                    // Version number at the top right with neumorphism
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: Container(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: isTablet ? 16 : 12, 
+                          vertical: isTablet ? 8 : 6
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(15),
+                          border: Border.all(color: const Color.fromRGBO(8, 111, 222, 0.977), width: 1),
+                          boxShadow: const [
+                            BoxShadow(
+                              color: Color(0xFFE2E8F0),
+                              offset: Offset(0, 2),
+                              blurRadius: 4,
+                              spreadRadius: 0,
+                            ),
+                          ],
+                        ),
+                        child: Text(
+                          'v0.2.1',
+                          style: TextStyle(
+                            fontSize: isTablet ? 16 : 14,
+                            color: const Color.fromRGBO(8, 111, 222, 0.977),
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
                       ),
+                    ),
+                    SizedBox(height: isSmallScreen ? 20 : 40),
+                    // Logo + BO text combined
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        // Logo as the "O"
+                        Container(
+                          width: logoSize,
+                          height: logoSize,
+                          decoration: BoxDecoration(
+                            color: const Color.fromRGBO(8, 111, 222, 0.977),
+                            borderRadius: BorderRadius.circular(logoSize / 2),
+                            boxShadow: const [
+                              BoxShadow(
+                                color: Color(0xFFE2E8F0),
+                                offset: Offset(0, 4),
+                                blurRadius: 8,
+                                spreadRadius: 0,
+                              ),
+                            ],
+                          ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(logoSize / 2),
+                            child: AssetHelper.loadOrmocSeal(
+                              width: logoSize * 0.620, // 5/8 of container size
+                              height: logoSize * 0.620,
+                              fit: BoxFit.contain,
+                            ),
+                          ),
+                        ),
+                        SizedBox(width: isTablet ? 12 : 8),
+                        // BO text
+                        Text(
+                          'BO',
+                          style: TextStyle(
+                            fontSize: logoFontSize,
+                            fontWeight: FontWeight.w900,
+                            color: const Color.fromRGBO(8, 111, 222, 0.977),
+                            letterSpacing: 2,
+                            height: 1.1,
+                          ),
+                        ),
+                      ],
+                    ),
+                    SizedBox(height: verticalSpacing),
+                    // Simple subtitle without neumorphism
+                    Text(
+                      'Office of Building Official',
+                      style: TextStyle(
+                        fontSize: titleFontSize,
+                        color: const Color(0xFF1F2937),
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    SizedBox(height: verticalSpacing),
+                    // Description + Key features checklist
+                    Padding(
+                      padding: EdgeInsets.symmetric(horizontal: isTablet ? 40 : 20),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          
+                          const SizedBox(height: 16),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Icon(
+                                    Icons.check_circle_rounded,
+                                    color: const Color.fromRGBO(8, 111, 222, 0.977),
+                                    size: isTablet ? 20 : 18,
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Text(
+                                      'Assign, track, and complete inspections with clear status updates',
+                                      style: TextStyle(
+                                        fontSize: isTablet ? 18 : (isSmallScreen ? 14 : 16),
+                                        color: const Color(0xFF1F2937),
+                                        height: 1.5,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 10),
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Icon(
+                                    Icons.check_circle_rounded,
+                                    color: const Color.fromRGBO(8, 111, 222, 0.977),
+                                    size: isTablet ? 20 : 18,
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Text(
+                                      'QR code scanning for fast record lookup and verification',
+                                      style: TextStyle(
+                                        fontSize: isTablet ? 18 : (isSmallScreen ? 14 : 16),
+                                        color: const Color(0xFF1F2937),
+                                        height: 1.5,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 10),
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Icon(
+                                    Icons.check_circle_rounded,
+                                    color: const Color.fromRGBO(8, 111, 222, 0.977),
+                                    size: isTablet ? 20 : 18,
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Text(
+                                      'Offline-first design with secure local storage and one-tap sync',
+                                      style: TextStyle(
+                                        fontSize: isTablet ? 18 : (isSmallScreen ? 14 : 16),
+                                        color: const Color(0xFF1F2937),
+                                        height: 1.5,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 10),
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Icon(
+                                    Icons.check_circle_rounded,
+                                    color: const Color.fromRGBO(8, 111, 222, 0.977),
+                                    size: isTablet ? 20 : 18,
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Text(
+                                      'Modern, clean UI built for tablets and small screens',
+                                      style: TextStyle(
+                                        fontSize: isTablet ? 18 : (isSmallScreen ? 14 : 16),
+                                        color: const Color(0xFF1F2937),
+                                        height: 1.5,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    SizedBox(height: (isSmallScreen ? 24 : 40) * scale),
+                    // Enhanced Get Started Button
+                    Container(
+                      width: double.infinity,
+                      height: buttonHeight,
+                      decoration: BoxDecoration(
+                        color: const Color.fromRGBO(8, 111, 222, 0.977),
+                        borderRadius: BorderRadius.circular(buttonHeight / 2),
+                        boxShadow: const [
+                          BoxShadow(
+                            color: Color(0xFFE2E8F0),
+                            offset: Offset(0, 4),
+                            blurRadius: 8,
+                            spreadRadius: 0,
+                          ),
+                        ],
+                      ),
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(buttonHeight / 2),
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => const LoginPage(),
+                              ),
+                            );
+                          },
+                          child: Center(
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(
+                                  'Get Started',
+                                  style: TextStyle(
+                                    fontSize: isTablet ? 22 : (isSmallScreen ? 16 : 20),
+                                    fontWeight: FontWeight.w700,
+                                    color: Colors.white,
+                                    letterSpacing: 1,
+                                  ),
+                                ),
+                                SizedBox(width: isTablet ? 16 : 12),
+                                Icon(
+                                  Icons.arrow_forward_rounded,
+                                  color: Colors.white,
+                                  size: isTablet ? 28 : 24,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    SizedBox(height: (isSmallScreen ? 12 : 16) * scale),
+                    // Enhanced Secondary button
+                    Container(
+                      width: double.infinity,
+                      height: secondaryButtonHeight,
                       decoration: BoxDecoration(
                         color: Colors.white,
-                        borderRadius: BorderRadius.circular(15),
-                        border: Border.all(color: const Color.fromRGBO(8, 111, 222, 0.977), width: 1),
+                        borderRadius: BorderRadius.circular(secondaryButtonHeight / 2),
+                        border: Border.all(color: const Color.fromRGBO(8, 111, 222, 0.977), width: 2),
                         boxShadow: const [
                           BoxShadow(
                             color: Color(0xFFE2E8F0),
@@ -238,300 +480,46 @@ class WelcomePage extends StatelessWidget {
                           ),
                         ],
                       ),
-                      child: Text(
-                        'v0.2.1',
-                        style: TextStyle(
-                          fontSize: isTablet ? 16 : 14,
-                          color: const Color.fromRGBO(8, 111, 222, 0.977),
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                  ),
-                  SizedBox(height: isSmallScreen ? 20 : 40),
-                  // Logo + BO text combined
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      // Logo as the "O"
-                      Container(
-                        width: logoSize,
-                        height: logoSize,
-                        decoration: BoxDecoration(
-                          color: const Color.fromRGBO(8, 111, 222, 0.977),
-                          borderRadius: BorderRadius.circular(logoSize / 2),
-                          boxShadow: const [
-                            BoxShadow(
-                              color: Color(0xFFE2E8F0),
-                              offset: Offset(0, 4),
-                              blurRadius: 8,
-                              spreadRadius: 0,
-                            ),
-                          ],
-                        ),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(logoSize / 2),
-                          child: AssetHelper.loadOrmocSeal(
-                            width: logoSize * 0.620, // 5/8 of container size
-                            height: logoSize * 0.620,
-                            fit: BoxFit.contain,
-                          ),
-                        ),
-                      ),
-                      SizedBox(width: isTablet ? 12 : 8),
-                      // BO text
-                      Text(
-                        'BO',
-                        style: TextStyle(
-                          fontSize: logoFontSize,
-                          fontWeight: FontWeight.w900,
-                          color: const Color.fromRGBO(8, 111, 222, 0.977),
-                          letterSpacing: 2,
-                          height: 1.1,
-                        ),
-                      ),
-                    ],
-                  ),
-                  SizedBox(height: verticalSpacing),
-                  // Simple subtitle without neumorphism
-                  Text(
-                    'Office of Building Official',
-                    style: TextStyle(
-                      fontSize: titleFontSize,
-                      color: const Color(0xFF1F2937),
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  SizedBox(height: verticalSpacing),
-                  // Description + Key features checklist
-                  Padding(
-                    padding: EdgeInsets.symmetric(horizontal: isTablet ? 40 : 20),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Mobile application for building inspectors to efficiently manage inspections, track compliance, and streamline official processes across the field and office. Designed for speed, accuracy, and reliability—even when offline.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: descriptionFontSize,
-                            color: const Color(0xFF6B7280),
-                        height: 1.6,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                        const SizedBox(height: 16),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Icon(
-                                  Icons.check_circle_rounded,
-                                  color: const Color.fromRGBO(8, 111, 222, 0.977),
-                                  size: isTablet ? 20 : 18,
-                                ),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: Text(
-                                    'Assign, track, and complete inspections with clear status updates',
-                                    style: TextStyle(
-                                      fontSize: isTablet ? 18 : (isSmallScreen ? 14 : 16),
-                                      color: const Color(0xFF1F2937),
-                                      height: 1.5,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 10),
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Icon(
-                                  Icons.check_circle_rounded,
-                                  color: const Color.fromRGBO(8, 111, 222, 0.977),
-                                  size: isTablet ? 20 : 18,
-                                ),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: Text(
-                                    'QR code scanning for fast record lookup and verification',
-                                    style: TextStyle(
-                                      fontSize: isTablet ? 18 : (isSmallScreen ? 14 : 16),
-                                      color: const Color(0xFF1F2937),
-                                      height: 1.5,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 10),
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Icon(
-                                  Icons.check_circle_rounded,
-                                  color: const Color.fromRGBO(8, 111, 222, 0.977),
-                                  size: isTablet ? 20 : 18,
-                                ),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: Text(
-                                    'Offline-first design with secure local storage and one-tap sync',
-                                    style: TextStyle(
-                                      fontSize: isTablet ? 18 : (isSmallScreen ? 14 : 16),
-                                      color: const Color(0xFF1F2937),
-                                      height: 1.5,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 10),
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Icon(
-                                  Icons.check_circle_rounded,
-                                  color: const Color.fromRGBO(8, 111, 222, 0.977),
-                                  size: isTablet ? 20 : 18,
-                                ),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: Text(
-                                    'Modern, clean UI built for tablets and small screens',
-                                    style: TextStyle(
-                                      fontSize: isTablet ? 18 : (isSmallScreen ? 14 : 16),
-                                      color: const Color(0xFF1F2937),
-                                      height: 1.5,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                  SizedBox(height: (isSmallScreen ? 24 : 40) * scale),
-                  // Enhanced Get Started Button
-                  Container(
-                    width: double.infinity,
-                    height: buttonHeight,
-                    decoration: BoxDecoration(
-                      color: const Color.fromRGBO(8, 111, 222, 0.977),
-                      borderRadius: BorderRadius.circular(buttonHeight / 2),
-                      boxShadow: const [
-                        BoxShadow(
-                          color: Color(0xFFE2E8F0),
-                          offset: Offset(0, 4),
-                          blurRadius: 8,
-                          spreadRadius: 0,
-                        ),
-                      ],
-                    ),
-                    child: Material(
-                      color: Colors.transparent,
-                      child: InkWell(
-                        borderRadius: BorderRadius.circular(buttonHeight / 2),
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => const LoginPage(),
-                            ),
-                          );
-                        },
-                        child: Center(
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Text(
-                                'Get Started',
-                                style: TextStyle(
-                                  fontSize: isTablet ? 22 : (isSmallScreen ? 16 : 20),
-                                  fontWeight: FontWeight.w700,
-                                  color: Colors.white,
-                                  letterSpacing: 1,
-                                ),
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(secondaryButtonHeight / 2),
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => const DebugScreen(),
                               ),
-                              SizedBox(width: isTablet ? 16 : 12),
-                              Icon(
-                                Icons.arrow_forward_rounded,
-                                color: Colors.white,
-                                size: isTablet ? 28 : 24,
-                              ),
-                            ],
+                            );
+                          },
+                          child: Center(
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  Icons.settings_outlined,
+                                  color: const Color.fromRGBO(8, 111, 222, 0.977),
+                                  size: isTablet ? 24 : 20,
+                                ),
+                                SizedBox(width: isTablet ? 12 : 8),
+                                Text(
+                                  'Debug & Setup',
+                                  style: TextStyle(
+                                    fontSize: isTablet ? 19 : (isSmallScreen ? 15 : 17),
+                                    fontWeight: FontWeight.w600,
+                                    color: const Color.fromRGBO(8, 111, 222, 0.977),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ),
                     ),
-                  ),
-                  SizedBox(height: (isSmallScreen ? 12 : 16) * scale),
-                  // Enhanced Secondary button
-                  Container(
-                    width: double.infinity,
-                    height: secondaryButtonHeight,
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(secondaryButtonHeight / 2),
-                      border: Border.all(color: const Color.fromRGBO(8, 111, 222, 0.977), width: 2),
-                      boxShadow: const [
-                        BoxShadow(
-                          color: Color(0xFFE2E8F0),
-                          offset: Offset(0, 2),
-                          blurRadius: 4,
-                          spreadRadius: 0,
-                        ),
-                      ],
-                    ),
-                    child: Material(
-                      color: Colors.transparent,
-                      child: InkWell(
-                        borderRadius: BorderRadius.circular(secondaryButtonHeight / 2),
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => const DebugScreen(),
-                            ),
-                          );
-                        },
-                        child: Center(
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                Icons.settings_outlined,
-                                color: const Color.fromRGBO(8, 111, 222, 0.977),
-                                size: isTablet ? 24 : 20,
-                              ),
-                              SizedBox(width: isTablet ? 12 : 8),
-                              Text(
-                                'Debug & Setup',
-                                style: TextStyle(
-                                  fontSize: isTablet ? 19 : (isSmallScreen ? 15 : 17),
-                                  fontWeight: FontWeight.w600,
-                                  color: const Color.fromRGBO(8, 111, 222, 0.977),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  SizedBox(height: (isSmallScreen ? 16 : 28) * finalScale),
-                ],
+                    SizedBox(height: (isSmallScreen ? 16 : 28) * finalScale),
+                  ],
+                ),
               ),
-            ),
             ),
           ),
         ),

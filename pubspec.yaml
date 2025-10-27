@@ -63,6 +63,11 @@ dependencies:
   flutter_map: ^6.1.0
   latlong2: ^0.9.1
   geolocator: ^10.1.0
+  
+  # Image and video capture
+  image_picker: ^1.0.4
+  camera: ^0.10.5+5
+  video_player: ^2.8.1
 
 dev_dependencies:
   flutter_test:

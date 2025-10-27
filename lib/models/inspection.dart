@@ -64,6 +64,18 @@ class Inspection extends HiveObject {
   @HiveField(19)
   double? longitude;
 
+  @HiveField(20)
+  List<String> imagePaths;
+
+  @HiveField(21)
+  List<String> videoPaths;
+
+  @HiveField(22)
+  DateTime? inspectionStartTime;
+
+  @HiveField(23)
+  DateTime? inspectionEndTime;
+
   Inspection({
     required this.id,
     required this.scannedData,
@@ -85,6 +97,10 @@ class Inspection extends HiveObject {
     this.userId,
     this.latitude,
     this.longitude,
+    this.imagePaths = const [],
+    this.videoPaths = const [],
+    this.inspectionStartTime,
+    this.inspectionEndTime,
   });
 
   // Factory constructor for creating from form data
@@ -105,6 +121,10 @@ class Inspection extends HiveObject {
     String? userId,
     double? latitude,
     double? longitude,
+    List<String> imagePaths = const [],
+    List<String> videoPaths = const [],
+    DateTime? inspectionStartTime,
+    DateTime? inspectionEndTime,
   }) {
     final now = DateTime.now();
     return Inspection(
@@ -128,6 +148,10 @@ class Inspection extends HiveObject {
       userId: userId,
       latitude: latitude,
       longitude: longitude,
+      imagePaths: imagePaths,
+      videoPaths: videoPaths,
+      inspectionStartTime: inspectionStartTime,
+      inspectionEndTime: inspectionEndTime,
     );
   }
 
@@ -154,6 +178,10 @@ class Inspection extends HiveObject {
       'user_id': userId,
       'latitude': latitude,
       'longitude': longitude,
+      'image_paths': imagePaths,
+      'video_paths': videoPaths,
+      'inspection_start_time': inspectionStartTime?.toIso8601String(),
+      'inspection_end_time': inspectionEndTime?.toIso8601String(),
     };
   }
 

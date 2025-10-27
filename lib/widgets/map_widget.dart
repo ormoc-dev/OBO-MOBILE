@@ -29,7 +29,10 @@ class _MapWidgetState extends State<MapWidget> {
   void initState() {
     super.initState();
     _selectedLocation = widget.initialLocation;
-    _getCurrentLocation();
+    // Delay location request to ensure map is ready
+    Future.delayed(const Duration(milliseconds: 100), () {
+      _getCurrentLocation();
+    });
   }
 
   Future<void> _getCurrentLocation() async {
@@ -42,6 +45,9 @@ class _MapWidgetState extends State<MapWidget> {
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) {
         _showLocationError('Location services are disabled.');
+        setState(() {
+          _isLoadingLocation = false;
+        });
         return;
       }
 
@@ -51,18 +57,25 @@ class _MapWidgetState extends State<MapWidget> {
         permission = await Geolocator.requestPermission();
         if (permission == LocationPermission.denied) {
           _showLocationError('Location permissions are denied.');
+          setState(() {
+            _isLoadingLocation = false;
+          });
           return;
         }
       }
 
       if (permission == LocationPermission.deniedForever) {
         _showLocationError('Location permissions are permanently denied.');
+        setState(() {
+          _isLoadingLocation = false;
+        });
         return;
       }
 
-      // Get current position
+      // Get current position with timeout
       Position position = await Geolocator.getCurrentPosition(
         desiredAccuracy: LocationAccuracy.high,
+        timeLimit: const Duration(seconds: 10),
       );
 
       setState(() {
@@ -74,7 +87,18 @@ class _MapWidgetState extends State<MapWidget> {
       });
 
       // Move map to current location
-      _mapController.move(_currentLocation!, 15.0);
+      try {
+        _mapController.move(_currentLocation!, 15.0);
+      } catch (e) {
+        // If map controller is not ready, wait a bit and try again
+        Future.delayed(const Duration(milliseconds: 500), () {
+          try {
+            _mapController.move(_currentLocation!, 15.0);
+          } catch (e) {
+            print('Failed to move map: $e');
+          }
+        });
+      }
     } catch (e) {
       setState(() {
         _isLoadingLocation = false;
@@ -106,13 +130,20 @@ class _MapWidgetState extends State<MapWidget> {
 
   void _centerOnCurrentLocation() {
     if (_currentLocation != null) {
-      _mapController.move(_currentLocation!, 15.0);
-      setState(() {
-        _selectedLocation = _currentLocation;
-      });
-      if (widget.onLocationSelected != null) {
-        widget.onLocationSelected!(_currentLocation!);
+      try {
+        _mapController.move(_currentLocation!, 15.0);
+        setState(() {
+          _selectedLocation = _currentLocation;
+        });
+        if (widget.onLocationSelected != null) {
+          widget.onLocationSelected!(_currentLocation!);
+        }
+      } catch (e) {
+        print('Failed to center on current location: $e');
       }
+    } else {
+      // Try to get current location again
+      _getCurrentLocation();
     }
   }
 
@@ -148,6 +179,13 @@ class _MapWidgetState extends State<MapWidget> {
                   urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                   userAgentPackageName: 'com.ormoc.obo_mobile',
                   maxZoom: 18,
+                  minZoom: 1,
+                  tileBuilder: (context, tileWidget, tile) {
+                    return tileWidget;
+                  },
+                  errorTileCallback: (tile, error, stackTrace) {
+                    print('Tile loading error: $error');
+                  },
                 ),
                 
                 // Markers Layer
@@ -235,9 +273,15 @@ class _MapWidgetState extends State<MapWidget> {
                       ],
                     ),
                     child: IconButton(
-                      onPressed: _centerOnCurrentLocation,
-                      icon: const Icon(Icons.my_location),
-                      tooltip: 'Center on current location',
+                      onPressed: _isLoadingLocation ? null : _centerOnCurrentLocation,
+                      icon: _isLoadingLocation 
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.my_location),
+                      tooltip: _isLoadingLocation ? 'Getting location...' : 'Center on current location',
                     ),
                   ),
                 ],

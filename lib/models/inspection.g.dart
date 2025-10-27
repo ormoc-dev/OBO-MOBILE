@@ -37,13 +37,17 @@ class InspectionAdapter extends TypeAdapter<Inspection> {
       userId: fields[17] as String?,
       latitude: fields[18] as double?,
       longitude: fields[19] as double?,
+      imagePaths: (fields[20] as List).cast<String>(),
+      videoPaths: (fields[21] as List).cast<String>(),
+      inspectionStartTime: fields[22] as DateTime?,
+      inspectionEndTime: fields[23] as DateTime?,
     );
   }
 
   @override
   void write(BinaryWriter writer, Inspection obj) {
     writer
-      ..writeByte(20)
+      ..writeByte(24)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -83,7 +87,15 @@ class InspectionAdapter extends TypeAdapter<Inspection> {
       ..writeByte(18)
       ..write(obj.latitude)
       ..writeByte(19)
-      ..write(obj.longitude);
+      ..write(obj.longitude)
+      ..writeByte(20)
+      ..write(obj.imagePaths)
+      ..writeByte(21)
+      ..write(obj.videoPaths)
+      ..writeByte(22)
+      ..write(obj.inspectionStartTime)
+      ..writeByte(23)
+      ..write(obj.inspectionEndTime);
   }
 
   @override

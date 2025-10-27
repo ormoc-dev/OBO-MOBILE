@@ -11,24 +11,43 @@ class QRScannerScreen extends StatefulWidget {
   State<QRScannerScreen> createState() => _QRScannerScreenState();
 }
 
-class _QRScannerScreenState extends State<QRScannerScreen> {
+class _QRScannerScreenState extends State<QRScannerScreen> with TickerProviderStateMixin {
   bool hasPermission = false;
   bool isPermissionRequested = false;
   String? scannedData;
   MobileScannerController? controller;
   bool isScanning = true;
   bool isWeb = false;
+  late AnimationController _scanAnimationController;
+  late Animation<double> _scanAnimation;
 
   @override
   void initState() {
     super.initState();
     isWeb = kIsWeb;
     _initializeScanner();
+    _initializeAnimation();
+  }
+
+  void _initializeAnimation() {
+    _scanAnimationController = AnimationController(
+      duration: const Duration(seconds: 2),
+      vsync: this,
+    );
+    _scanAnimation = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(CurvedAnimation(
+      parent: _scanAnimationController,
+      curve: Curves.easeInOut,
+    ));
+    _scanAnimationController.repeat();
   }
 
   @override
   void dispose() {
     controller?.dispose();
+    _scanAnimationController.dispose();
     super.dispose();
   }
 
@@ -332,7 +351,7 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
                     ),
                   ),
                   child: const Text(
-                    'Go to Inspection Form',
+                    'Inspect Now',
                     style: TextStyle(
                       fontSize: 16,
                       color: Colors.white,
@@ -411,12 +430,11 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
       margin: EdgeInsets.symmetric(horizontal: isTablet ? 32.0 : 16.0, vertical: 16.0),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFFE2E8F0), width: 1),
-        boxShadow: const [
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
           BoxShadow(
-            color: Color(0xFFE2E8F0),
-            offset: Offset(0, 4),
+            color: Colors.black.withOpacity(0.05),
+            offset: const Offset(0, 2),
             blurRadius: 8,
             spreadRadius: 0,
           ),
@@ -428,17 +446,8 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
             width: isTablet ? 50 : 45,
             height: isTablet ? 50 : 45,
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: const Color.fromRGBO(8, 111, 222, 0.977),
               borderRadius: BorderRadius.circular(isTablet ? 25 : 22.5),
-              border: Border.all(color: const Color(0xFFE2E8F0), width: 1),
-              boxShadow: const [
-                BoxShadow(
-                  color: Color(0xFFE2E8F0),
-                  offset: Offset(0, 2),
-                  blurRadius: 4,
-                  spreadRadius: 0,
-                ),
-              ],
             ),
             child: Material(
               color: Colors.transparent,
@@ -447,7 +456,7 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
                 onTap: () => Navigator.pop(context),
                 child: Icon(
                   Icons.arrow_back_ios_rounded,
-                  color: const Color.fromRGBO(8, 111, 222, 0.977),
+                  color: Colors.white,
                   size: isTablet ? 24 : 20,
                 ),
               ),
@@ -504,19 +513,18 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
       margin: EdgeInsets.all(isTablet ? 32.0 : 16.0),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFFE2E8F0), width: 1),
-        boxShadow: const [
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
           BoxShadow(
-            color: Color(0xFFE2E8F0),
-            offset: Offset(0, 4),
+            color: Colors.black.withOpacity(0.05),
+            offset: const Offset(0, 2),
             blurRadius: 8,
             spreadRadius: 0,
           ),
         ],
       ),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(16),
         child: _buildScannerPreview(context, isTablet),
       ),
     );
@@ -654,12 +662,11 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
             ),
           ),
           // Scan line animation
-          TweenAnimationBuilder<double>(
-            duration: const Duration(seconds: 2),
-            tween: Tween(begin: 0.0, end: 1.0),
-            builder: (context, value, child) {
+          AnimatedBuilder(
+            animation: _scanAnimation,
+            builder: (context, child) {
               return Positioned(
-                top: (isTablet ? 300 : 250) * value,
+                top: (isTablet ? 300 : 250) * _scanAnimation.value,
                 left: isTablet ? 32.0 : 16.0,
                 right: isTablet ? 32.0 : 16.0,
                 child: Container(
@@ -675,10 +682,6 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
                   ),
                 ),
               );
-            },
-            onEnd: () {
-              // Restart animation
-              setState(() {});
             },
           ),
           // Instructions
@@ -1017,15 +1020,14 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
             },
             isTablet,
           ),
-          if (isWeb)
-            _buildControlButton(
-              'Manual Input',
-              Icons.keyboard_rounded,
-              () {
-                _showManualInputDialog();
-              },
-              isTablet,
-            ),
+          _buildControlButton(
+            'Manual Input',
+            Icons.keyboard_rounded,
+            () {
+              _showManualInputDialog();
+            },
+            isTablet,
+          ),
         ],
       ),
     );

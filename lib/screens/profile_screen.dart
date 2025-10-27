@@ -146,35 +146,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Widget _buildHeader(BuildContext context, bool isTablet) {
     return Row(
       children: [
-        Container(
-          width: isTablet ? 48 : 40,
-          height: isTablet ? 48 : 40,
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(isTablet ? 24 : 20),
-            border: Border.all(color: const Color(0xFFE2E8F0), width: 1),
-            boxShadow: const [
-              BoxShadow(
-                color: Color(0xFFE2E8F0),
-                offset: Offset(0, 2),
-                blurRadius: 4,
-                spreadRadius: 0,
-              ),
-            ],
-          ),
-          child: Material(
-            color: Colors.transparent,
-            child: InkWell(
-              borderRadius: BorderRadius.circular(isTablet ? 24 : 20),
-              onTap: () => Navigator.of(context).pop(),
-              child: Icon(
-                Icons.arrow_back_rounded,
-                color: const Color.fromRGBO(8, 111, 222, 0.977),
-                size: isTablet ? 24 : 20,
-              ),
-            ),
-          ),
-        ),
+        
         const SizedBox(width: 16),
         Text(
           'Profile & Settings',

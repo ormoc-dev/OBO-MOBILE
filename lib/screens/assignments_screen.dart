@@ -10,19 +10,18 @@ class AssignmentsScreen extends StatefulWidget {
   State<AssignmentsScreen> createState() => _AssignmentsScreenState();
 }
 
-class _AssignmentsScreenState extends State<AssignmentsScreen> with TickerProviderStateMixin {
-  late TabController _tabController;
+class _AssignmentsScreenState extends State<AssignmentsScreen> {
   List<Assignment> _assignments = [];
-  AssignmentStatistics? _statistics;
   bool _isLoading = true;
   String _errorMessage = '';
   bool _isOffline = false;
+  String _searchQuery = '';
+  String _selectedStatus = 'All';
   final ConnectivityService _connectivityService = ConnectivityService();
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
     _loadAssignments();
     
     // Listen for connectivity changes
@@ -40,12 +39,6 @@ class _AssignmentsScreenState extends State<AssignmentsScreen> with TickerProvid
     });
   }
 
-  @override
-  void dispose() {
-    _tabController.dispose();
-    super.dispose();
-  }
-
   Future<void> _loadAssignments() async {
     setState(() {
       _isLoading = true;
@@ -58,7 +51,6 @@ class _AssignmentsScreenState extends State<AssignmentsScreen> with TickerProvid
       if (response.success && response.data != null) {
         setState(() {
           _assignments = response.data!.assignments;
-          _statistics = response.data!.statistics;
           _isLoading = false;
         });
       } else {
@@ -75,117 +67,86 @@ class _AssignmentsScreenState extends State<AssignmentsScreen> with TickerProvid
     }
   }
 
-  Future<void> _loadAssignmentsByStatus(String status) async {
-    setState(() {
-      _isLoading = true;
-      _errorMessage = '';
-    });
+  List<Assignment> get _filteredAssignments {
+    List<Assignment> filtered = _assignments;
 
-    try {
-      final response = await AssignmentService.getAssignments(status: status);
-      
-      if (response.success && response.data != null) {
-        setState(() {
-          _assignments = response.data!.assignments;
-          _statistics = response.data!.statistics;
-          _isLoading = false;
-        });
-      } else {
-        setState(() {
-          _errorMessage = response.message;
-          _isLoading = false;
-        });
-      }
-    } catch (e) {
-      setState(() {
-        _errorMessage = e.toString();
-        _isLoading = false;
-      });
+    // Filter by search query
+    if (_searchQuery.isNotEmpty) {
+      filtered = filtered.where((assignment) {
+        return assignment.businessName.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+               assignment.businessId.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+               assignment.departmentName.toLowerCase().contains(_searchQuery.toLowerCase());
+      }).toList();
     }
+
+    // Filter by status
+    if (_selectedStatus != 'All') {
+      filtered = filtered.where((assignment) {
+        switch (_selectedStatus) {
+          case 'Pending':
+            return assignment.statusDisplayName.toLowerCase() == 'assigned';
+          case 'Progress':
+            return assignment.statusDisplayName.toLowerCase() == 'in progress';
+          case 'Done':
+            return assignment.statusDisplayName.toLowerCase() == 'completed';
+          default:
+            return true;
+        }
+      }).toList();
+    }
+
+    return filtered;
   }
 
   @override
   Widget build(BuildContext context) {
     final screenSize = MediaQuery.of(context).size;
     final screenWidth = screenSize.width;
-    final screenHeight = screenSize.height;
-    final orientation = MediaQuery.of(context).orientation;
-    
-    // Enhanced responsive breakpoints
-    final isTablet = screenWidth > 600;
-    final isLargeTablet = screenWidth > 900;
-    final isSmallScreen = screenHeight < 600;
-    final isVerySmallScreen = screenHeight < 500;
-    final isLandscape = orientation == Orientation.landscape;
-    
-    // Dynamic scaling
-    final double baseHeight = isLandscape ? 600.0 : 800.0;
-    final double scale = (screenHeight / baseHeight).clamp(0.6, 1.3);
-    final double smallScreenScale = isVerySmallScreen ? 0.8 : 1.0;
-    final double finalScale = scale * smallScreenScale;
+    final isTablet = screenWidth > 768;
+    final isDesktop = screenWidth > 1024;
     
     return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Color(0xFFF8FAFC), // Clean white
-              Color(0xFFF1F5F9), // Light gray
-              Color(0xFFE2E8F0), // Slightly darker gray
-            ],
-            stops: [0.0, 0.5, 1.0],
-          ),
-        ),
-        child: SafeArea(
-          child: Column(
+      backgroundColor: const Color(0xFFF8FAFC),
+      body: SafeArea(
+        child: Column(
           children: [
-            // Neumorphic Header
-            _buildNeumorphicHeader(context, isTablet),
+            // Clean Header
+            _buildCleanHeader(context, isTablet),
             
-            const SizedBox(height: 16),
+            const SizedBox(height: 20),
 
-            // Statistics Cards
-            if (_statistics != null) _buildNeumorphicStatisticsCards(isTablet),
-
-            const SizedBox(height: 16),
-
-            // Neumorphic Tab Bar
-            _buildNeumorphicTabBar(isTablet),
-
-            const SizedBox(height: 16),
+            // Search and Filter Bar
+            _buildSearchAndFilter(context, isTablet),
 
             // Content
             Expanded(
               child: _isLoading
-                  ? const Center(child: CircularProgressIndicator())
+                  ? _buildLoadingWidget()
                   : _errorMessage.isNotEmpty
-                      ? _buildNeumorphicErrorWidget()
-                      : _assignments.isEmpty
-                          ? _buildNeumorphicEmptyWidget()
-                          : _buildNeumorphicAssignmentsList(),
+                      ? _buildErrorWidget()
+                      : _filteredAssignments.isEmpty
+                          ? _buildEmptyWidget()
+                          : _buildAssignmentsList(isTablet, isDesktop),
             ),
           ],
-        ),
         ),
       ),
     );
   }
 
-  // Neumorphic UI Methods
-  Widget _buildNeumorphicHeader(BuildContext context, bool isTablet) {
+  // Clean Modern UI Methods
+  Widget _buildCleanHeader(BuildContext context, bool isTablet) {
     return Container(
-      padding: EdgeInsets.all(isTablet ? 20.0 : 16.0),
-      margin: EdgeInsets.symmetric(horizontal: isTablet ? 32.0 : 16.0),
-      decoration: BoxDecoration(
+      padding: EdgeInsets.symmetric(
+        horizontal: isTablet ? 24.0 : 16.0,
+        vertical: isTablet ? 20.0 : 16.0,
+      ),
+      decoration: const BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFFE2E8F0), width: 1),
-        boxShadow: const [
+        boxShadow: [
           BoxShadow(
-            color: Color(0xFFE2E8F0),
-            offset: Offset(0, 4),
+            color: Color(0x0F000000),
+            offset: Offset(0, 2),
             blurRadius: 8,
             spreadRadius: 0,
           ),
@@ -193,269 +154,193 @@ class _AssignmentsScreenState extends State<AssignmentsScreen> with TickerProvid
       ),
       child: Row(
         children: [
-          Container(
-            width: isTablet ? 50 : 45,
-            height: isTablet ? 50 : 45,
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(isTablet ? 25 : 22.5),
-              border: Border.all(color: const Color(0xFFE2E8F0), width: 1),
-              boxShadow: const [
-                BoxShadow(
-                  color: Color(0xFFE2E8F0),
-                  offset: Offset(0, 2),
-                  blurRadius: 4,
-                  spreadRadius: 0,
-                ),
-              ],
-            ),
-            child: Material(
-              color: Colors.transparent,
-              child: InkWell(
-                borderRadius: BorderRadius.circular(isTablet ? 25 : 22.5),
-                onTap: () => Navigator.pop(context),
-                child: Icon(
-                  Icons.arrow_back_ios_rounded,
-                  color: const Color.fromRGBO(8, 111, 222, 0.977),
-                  size: isTablet ? 24 : 20,
-                ),
-              ),
-            ),
-          ),
+          // Back Button
+          
+          
           SizedBox(width: isTablet ? 20 : 16),
+          
+          // Title and Status
           Expanded(
-            child: Row(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Assigned Inspections',
-                        style: TextStyle(
-                          fontSize: isTablet ? 24 : 20,
-                          fontWeight: FontWeight.bold,
-                          color: const Color(0xFF1F2937),
-                        ),
-                      ),
-                      if (_isOffline) ...[
-                        const SizedBox(height: 4),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFFEF3C7),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: const Color(0xFFF59E0B), width: 1),
-                          ),
-                          child: const Text(
-                            'OFFLINE',
-                            style: TextStyle(
-                              color: Color(0xFFF59E0B),
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ],
+                Text(
+                  'Assigned Inspections',
+                  style: TextStyle(
+                    fontSize: isTablet ? 24 : 20,
+                    fontWeight: FontWeight.bold,
+                    color: const Color(0xFF1E293B),
                   ),
                 ),
-                Container(
-                  width: isTablet ? 50 : 45,
-                  height: isTablet ? 50 : 45,
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(isTablet ? 25 : 22.5),
-                    border: Border.all(color: const Color(0xFFE2E8F0), width: 1),
-                    boxShadow: const [
-                      BoxShadow(
-                        color: Color(0xFFE2E8F0),
-                        offset: Offset(0, 2),
-                        blurRadius: 4,
-                        spreadRadius: 0,
-                      ),
-                    ],
-                  ),
-                  child: Material(
-                    color: Colors.transparent,
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(isTablet ? 25 : 22.5),
-                      onTap: _loadAssignments,
-                      child: Icon(
-                        Icons.refresh_rounded,
-                        color: const Color.fromRGBO(8, 111, 222, 0.977),
-                        size: isTablet ? 24 : 20,
+                if (_isOffline) ...[
+                  const SizedBox(height: 4),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFEF3C7),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Text(
+                      'OFFLINE',
+                      style: TextStyle(
+                        color: Color(0xFFF59E0B),
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
                   ),
-                ),
+                ],
               ],
             ),
           ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildNeumorphicStatisticsCards(bool isTablet) {
-    return Container(
-      height: isTablet ? 110 : 90,
-      margin: EdgeInsets.symmetric(horizontal: isTablet ? 32.0 : 16.0),
-      child: ListView(
-        scrollDirection: Axis.horizontal,
-        children: [
-          _buildNeumorphicStatCard('Total', _statistics!.totalAssignments, const Color(0xFF4A5568), isTablet),
-          SizedBox(width: isTablet ? 16 : 12),
-          _buildNeumorphicStatCard('Pending', _statistics!.pendingAssignments, const Color(0xFFF59E0B), isTablet),
-          SizedBox(width: isTablet ? 16 : 12),
-          _buildNeumorphicStatCard('Progress', _statistics!.inProgressAssignments, const Color(0xFF3B82F6), isTablet),
-          SizedBox(width: isTablet ? 16 : 12),
-          _buildNeumorphicStatCard('Done', _statistics!.completedAssignments, const Color(0xFF10B981), isTablet),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildNeumorphicStatCard(String title, int count, Color color, bool isTablet) {
-    return Container(
-      width: isTablet ? 120 : 100,
-      padding: EdgeInsets.all(isTablet ? 16 : 12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFFE2E8F0), width: 1),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0xFFE2E8F0),
-            offset: Offset(0, 2),
-            blurRadius: 4,
-            spreadRadius: 0,
-          ),
-        ],
-      ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            padding: EdgeInsets.all(isTablet ? 10 : 6),
-            decoration: BoxDecoration(
-              color: const Color(0xFFF8FAFC),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: const Color(0xFFE2E8F0), width: 1),
+          
+          // Refresh Button
+          IconButton(
+            onPressed: _loadAssignments,
+            icon: const Icon(
+              Icons.refresh_rounded,
+              color: Color(0xFF2563EB),
             ),
-            child: Text(
-              count.toString(),
-              style: TextStyle(
-                fontSize: isTablet ? 24 : 20,
-                fontWeight: FontWeight.bold,
-                color: color,
+            style: IconButton.styleFrom(
+              backgroundColor: const Color(0xFFF1F5F9),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
               ),
             ),
           ),
-          SizedBox(height: isTablet ? 6 : 4),
-          Text(
-            title,
-            style: TextStyle(
-              fontSize: isTablet ? 12 : 10,
-              color: const Color(0xFF6B7280),
-              fontWeight: FontWeight.w600,
-            ),
-            textAlign: TextAlign.center,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
         ],
       ),
     );
   }
 
-  Widget _buildNeumorphicTabBar(bool isTablet) {
+  Widget _buildSearchAndFilter(BuildContext context, bool isTablet) {
     return Container(
-      margin: EdgeInsets.symmetric(horizontal: isTablet ? 32.0 : 16.0),
-      padding: EdgeInsets.all(isTablet ? 6 : 4),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(25),
-        border: Border.all(color: const Color(0xFFE2E8F0), width: 1),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0xFFE2E8F0),
-            offset: Offset(0, 2),
-            blurRadius: 4,
-            spreadRadius: 0,
-          ),
-        ],
-      ),
-      child: TabBar(
-        controller: _tabController,
-        indicator: BoxDecoration(
-              color: const Color.fromRGBO(8, 111, 222, 0.977),
-          borderRadius: BorderRadius.circular(20),
-          boxShadow: const [
-            BoxShadow(
-              color: Color(0xFFE2E8F0),
-              offset: Offset(0, 2),
-              blurRadius: 4,
-              spreadRadius: 0,
+      padding: EdgeInsets.all(isTablet ? 20 : 16),
+      color: Colors.white,
+      child: Column(
+        children: [
+          // Search Bar
+          TextField(
+            onChanged: (value) {
+              setState(() {
+                _searchQuery = value;
+              });
+            },
+            decoration: InputDecoration(
+              hintText: 'Search assignments...',
+              prefixIcon: const Icon(Icons.search_rounded),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: Color(0xFF3B82F6), width: 2),
+              ),
+              contentPadding: EdgeInsets.symmetric(
+                horizontal: isTablet ? 16 : 12,
+                vertical: isTablet ? 16 : 12,
+              ),
             ),
-          ],
-        ),
-        labelColor: Colors.white,
-        unselectedLabelColor: const Color(0xFF6B7280),
-        labelStyle: TextStyle(
-          fontSize: isTablet ? 14 : 12,
-          fontWeight: FontWeight.w600,
-        ),
-        unselectedLabelStyle: TextStyle(
-          fontSize: isTablet ? 14 : 12,
-          fontWeight: FontWeight.w500,
-        ),
-        onTap: (index) {
-          switch (index) {
-            case 0:
-              _loadAssignments();
-              break;
-            case 1:
-              _loadAssignmentsByStatus('assigned');
-              break;
-            case 2:
-              _loadAssignmentsByStatus('in_progress');
-              break;
-            case 3:
-              _loadAssignmentsByStatus('completed');
-              break;
-          }
-        },
-        tabs: [
-          Tab(text: 'All (${_statistics?.totalAssignments ?? 0})'),
-          Tab(text: 'Pending (${_statistics?.pendingAssignments ?? 0})'),
-          Tab(text: 'Progress (${_statistics?.inProgressAssignments ?? 0})'),
-          Tab(text: 'Done (${_statistics?.completedAssignments ?? 0})'),
+          ),
+          
+          const SizedBox(height: 12),
+          
+          // Filter Chips
+          Row(
+            children: [
+              _buildFilterChip('All', _selectedStatus == 'All', () {
+                setState(() {
+                  _selectedStatus = 'All';
+                });
+              }, isTablet),
+              const SizedBox(width: 8),
+              _buildFilterChip('Pending', _selectedStatus == 'Pending', () {
+                setState(() {
+                  _selectedStatus = 'Pending';
+                });
+              }, isTablet),
+              const SizedBox(width: 8),
+              _buildFilterChip('Progress', _selectedStatus == 'Progress', () {
+                setState(() {
+                  _selectedStatus = 'Progress';
+                });
+              }, isTablet),
+              const SizedBox(width: 8),
+              _buildFilterChip('Done', _selectedStatus == 'Done', () {
+                setState(() {
+                  _selectedStatus = 'Done';
+                });
+              }, isTablet),
+            ],
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildNeumorphicErrorWidget() {
+  Widget _buildFilterChip(String label, bool isSelected, VoidCallback onTap, bool isTablet) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: EdgeInsets.symmetric(
+          horizontal: isTablet ? 16 : 12,
+          vertical: isTablet ? 8 : 6,
+        ),
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFF3B82F6) : Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isSelected ? const Color(0xFF3B82F6) : const Color(0xFFE2E8F0),
+            width: 1,
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: isTablet ? 14 : 12,
+            fontWeight: FontWeight.w600,
+            color: isSelected ? Colors.white : const Color(0xFF374151),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLoadingWidget() {
+    return const Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          CircularProgressIndicator(
+            valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF2563EB)),
+          ),
+          SizedBox(height: 16),
+          Text(
+            'Loading assignments...',
+            style: TextStyle(
+              fontSize: 16,
+              color: Color(0xFF64748B),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildErrorWidget() {
     return Center(
       child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 32),
+        margin: const EdgeInsets.symmetric(horizontal: 24),
         padding: const EdgeInsets.all(32),
         decoration: BoxDecoration(
-          color: const Color(0xFFE0E5EC),
-          borderRadius: BorderRadius.circular(20),
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
           boxShadow: const [
             BoxShadow(
-              color: Color(0xFFA3B1C6),
-              offset: Offset(8, 8),
-              blurRadius: 16,
-              spreadRadius: 0,
-            ),
-            BoxShadow(
-              color: Colors.white,
-              offset: Offset(-8, -8),
-              blurRadius: 16,
+              color: Color(0x0F000000),
+              offset: Offset(0, 2),
+              blurRadius: 8,
               spreadRadius: 0,
             ),
           ],
@@ -466,22 +351,8 @@ class _AssignmentsScreenState extends State<AssignmentsScreen> with TickerProvid
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: const Color(0xFFE0E5EC),
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: const [
-                  BoxShadow(
-                    color: Color(0xFFA3B1C6),
-                    offset: Offset(4, 4),
-                    blurRadius: 8,
-                    spreadRadius: 0,
-                  ),
-                  BoxShadow(
-                    color: Colors.white,
-                    offset: Offset(-4, -4),
-                    blurRadius: 8,
-                    spreadRadius: 0,
-                  ),
-                ],
+                color: const Color(0xFFFEF2F2),
+                borderRadius: BorderRadius.circular(12),
               ),
               child: const Icon(
                 Icons.error_outline_rounded,
@@ -495,7 +366,7 @@ class _AssignmentsScreenState extends State<AssignmentsScreen> with TickerProvid
               style: TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
-                color: Color(0xFF2D3748),
+                color: Color(0xFF1E293B),
               ),
             ),
             const SizedBox(height: 8),
@@ -503,46 +374,25 @@ class _AssignmentsScreenState extends State<AssignmentsScreen> with TickerProvid
               _errorMessage,
               style: const TextStyle(
                 fontSize: 14,
-                color: Color(0xFF6B7280),
+                color: Color(0xFF64748B),
               ),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 24),
-            Container(
-              decoration: BoxDecoration(
-                color: const Color(0xFFE0E5EC),
-                borderRadius: BorderRadius.circular(25),
-                boxShadow: const [
-                  BoxShadow(
-                    color: Color(0xFFA3B1C6),
-                    offset: Offset(4, 4),
-                    blurRadius: 8,
-                    spreadRadius: 0,
-                  ),
-                  BoxShadow(
-                    color: Colors.white,
-                    offset: Offset(-4, -4),
-                    blurRadius: 8,
-                    spreadRadius: 0,
-                  ),
-                ],
-              ),
-              child: ElevatedButton(
-                onPressed: _loadAssignments,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.transparent,
-                  shadowColor: Colors.transparent,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(25),
-                  ),
-                  padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
+            ElevatedButton(
+              onPressed: _loadAssignments,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF2563EB),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
                 ),
-                child: const Text(
-                  'Retry',
-                  style: TextStyle(
-                    color: Color(0xFF4A5568),
-                    fontWeight: FontWeight.w600,
-                  ),
+                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
+              ),
+              child: const Text(
+                'Retry',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
             ),
@@ -552,25 +402,19 @@ class _AssignmentsScreenState extends State<AssignmentsScreen> with TickerProvid
     );
   }
 
-  Widget _buildNeumorphicEmptyWidget() {
+  Widget _buildEmptyWidget() {
     return Center(
       child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 32),
+        margin: const EdgeInsets.symmetric(horizontal: 24),
         padding: const EdgeInsets.all(32),
         decoration: BoxDecoration(
-          color: const Color(0xFFE0E5EC),
-          borderRadius: BorderRadius.circular(20),
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
           boxShadow: const [
             BoxShadow(
-              color: Color(0xFFA3B1C6),
-              offset: Offset(8, 8),
-              blurRadius: 16,
-              spreadRadius: 0,
-            ),
-            BoxShadow(
-              color: Colors.white,
-              offset: Offset(-8, -8),
-              blurRadius: 16,
+              color: Color(0x0F000000),
+              offset: Offset(0, 2),
+              blurRadius: 8,
               spreadRadius: 0,
             ),
           ],
@@ -581,27 +425,13 @@ class _AssignmentsScreenState extends State<AssignmentsScreen> with TickerProvid
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: const Color(0xFFE0E5EC),
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: const [
-                  BoxShadow(
-                    color: Color(0xFFA3B1C6),
-                    offset: Offset(4, 4),
-                    blurRadius: 8,
-                    spreadRadius: 0,
-                  ),
-                  BoxShadow(
-                    color: Colors.white,
-                    offset: Offset(-4, -4),
-                    blurRadius: 8,
-                    spreadRadius: 0,
-                  ),
-                ],
+                color: const Color(0xFFF1F5F9),
+                borderRadius: BorderRadius.circular(12),
               ),
               child: const Icon(
                 Icons.assignment_outlined,
                 size: 48,
-                color: Color(0xFF6B7280),
+                color: Color(0xFF64748B),
               ),
             ),
             const SizedBox(height: 20),
@@ -610,7 +440,7 @@ class _AssignmentsScreenState extends State<AssignmentsScreen> with TickerProvid
               style: TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
-                color: Color(0xFF2D3748),
+                color: Color(0xFF1E293B),
               ),
             ),
             const SizedBox(height: 8),
@@ -618,7 +448,7 @@ class _AssignmentsScreenState extends State<AssignmentsScreen> with TickerProvid
               'You don\'t have any assigned inspections yet.',
               style: TextStyle(
                 fontSize: 14,
-                color: Color(0xFF6B7280),
+                color: Color(0xFF64748B),
               ),
               textAlign: TextAlign.center,
             ),
@@ -628,29 +458,28 @@ class _AssignmentsScreenState extends State<AssignmentsScreen> with TickerProvid
     );
   }
 
-  Widget _buildNeumorphicAssignmentsList() {
+  Widget _buildAssignmentsList(bool isTablet, bool isDesktop) {
     return ListView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      itemCount: _assignments.length,
+      padding: EdgeInsets.symmetric(horizontal: isTablet ? 24 : 16),
+      itemCount: _filteredAssignments.length,
       itemBuilder: (context, index) {
-        final assignment = _assignments[index];
-        return _buildNeumorphicAssignmentCard(assignment);
+        final assignment = _filteredAssignments[index];
+        return _buildAssignmentCard(assignment, isTablet);
       },
     );
   }
 
-  Widget _buildNeumorphicAssignmentCard(Assignment assignment) {
+  Widget _buildAssignmentCard(Assignment assignment, bool isTablet) {
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.all(20),
+      padding: EdgeInsets.all(isTablet ? 24 : 20),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFFE2E8F0), width: 1),
+        borderRadius: BorderRadius.circular(16),
         boxShadow: const [
           BoxShadow(
-            color: Color(0xFFE2E8F0),
-            offset: Offset(0, 4),
+            color: Color(0x0F000000),
+            offset: Offset(0, 2),
             blurRadius: 8,
             spreadRadius: 0,
           ),
@@ -665,19 +494,22 @@ class _AssignmentsScreenState extends State<AssignmentsScreen> with TickerProvid
               Expanded(
                 child: Text(
                   assignment.businessName,
-                  style: const TextStyle(
-                    fontSize: 18,
+                  style: TextStyle(
+                    fontSize: isTablet ? 20 : 18,
                     fontWeight: FontWeight.bold,
-                    color: Color(0xFF1F2937),
+                    color: const Color(0xFF1E293B),
                   ),
                 ),
               ),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFF8FAFC),
-                  borderRadius: BorderRadius.circular(15),
-                  border: Border.all(color: const Color(0xFFE2E8F0), width: 1),
+                  color: Color(int.parse(assignment.statusColor.replaceFirst('#', '0xFF'))).withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: Color(int.parse(assignment.statusColor.replaceFirst('#', '0xFF'))),
+                    width: 1,
+                  ),
                 ),
                 child: Text(
                   assignment.statusDisplayName,
@@ -693,57 +525,37 @@ class _AssignmentsScreenState extends State<AssignmentsScreen> with TickerProvid
           
           const SizedBox(height: 16),
           
-          // Business ID
-          _buildNeumorphicInfoRow('Business ID', assignment.businessId),
+          // Assignment details
+          _buildInfoRow('Business ID', assignment.businessId, isTablet),
+          _buildInfoRow('Department', assignment.departmentName, isTablet),
           
-          // Department
-          _buildNeumorphicInfoRow('Department', assignment.departmentName),
-          
-          // Address
           if (assignment.businessAddress != null && assignment.businessAddress!.isNotEmpty)
-            _buildNeumorphicInfoRow('Address', assignment.businessAddress!),
+            _buildInfoRow('Address', assignment.businessAddress!, isTablet),
           
-          // Inspection Date
           if (assignment.inspectionDate != null)
-            _buildNeumorphicInfoRow('Inspection Date', assignment.inspectionDate!),
+            _buildInfoRow('Inspection Date', assignment.inspectionDate!, isTablet),
           
-          // Assigned Date
-          _buildNeumorphicInfoRow('Assigned Date', assignment.assignedAt),
+          _buildInfoRow('Assigned Date', assignment.assignedAt, isTablet),
           
-          // Assigned By
           if (assignment.assignedByName != null)
-            _buildNeumorphicInfoRow('Assigned By', assignment.assignedByName!),
+            _buildInfoRow('Assigned By', assignment.assignedByName!, isTablet),
           
-          // Notes
           if (assignment.assignmentNotes != null && assignment.assignmentNotes!.isNotEmpty)
-            _buildNeumorphicInfoRow('Notes', assignment.assignmentNotes!),
+            _buildInfoRow('Notes', assignment.assignmentNotes!, isTablet),
           
           const SizedBox(height: 20),
           
           // Action Button
-          Container(
+          SizedBox(
             width: double.infinity,
-            decoration: BoxDecoration(
-              color: const Color.fromRGBO(8, 111, 222, 0.977),
-              borderRadius: BorderRadius.circular(25),
-              boxShadow: const [
-                BoxShadow(
-                  color: Color(0xFFE2E8F0),
-                  offset: Offset(0, 2),
-                  blurRadius: 4,
-                  spreadRadius: 0,
-                ),
-              ],
-            ),
             child: ElevatedButton(
               onPressed: () {
                 _showAssignmentDetails(assignment);
               },
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.transparent,
-                shadowColor: Colors.transparent,
+                backgroundColor: const Color(0xFF2563EB),
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(25),
+                  borderRadius: BorderRadius.circular(12),
                 ),
                 padding: const EdgeInsets.symmetric(vertical: 12),
               ),
@@ -761,25 +573,24 @@ class _AssignmentsScreenState extends State<AssignmentsScreen> with TickerProvid
     );
   }
 
-  Widget _buildNeumorphicInfoRow(String label, String value) {
+  Widget _buildInfoRow(String label, String value, bool isTablet) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: const Color(0xFFF8FAFC),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE2E8F0), width: 1),
+        borderRadius: BorderRadius.circular(8),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
-            width: 100,
+            width: isTablet ? 120 : 100,
             child: Text(
               '$label:',
               style: const TextStyle(
                 fontSize: 14,
-                color: Color(0xFF6B7280),
+                color: Color(0xFF64748B),
                 fontWeight: FontWeight.w500,
               ),
             ),
@@ -789,312 +600,7 @@ class _AssignmentsScreenState extends State<AssignmentsScreen> with TickerProvid
               value,
               style: const TextStyle(
                 fontSize: 14,
-                color: Color(0xFF2D3748),
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // Original methods (keeping for compatibility)
-  Widget _buildStatisticsCards() {
-    return Container(
-      height: 100,
-      margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
-      child: ListView(
-        scrollDirection: Axis.horizontal,
-        children: [
-          _buildStatCard('Total', _statistics!.totalAssignments, const Color(0xFF4A5568)),
-          const SizedBox(width: 12),
-          _buildStatCard('Pending', _statistics!.pendingAssignments, const Color(0xFFFFA500)),
-          const SizedBox(width: 12),
-          _buildStatCard('In Progress', _statistics!.inProgressAssignments, const Color(0xFF007BFF)),
-          const SizedBox(width: 12),
-          _buildStatCard('Completed', _statistics!.completedAssignments, const Color(0xFF28A745)),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildStatCard(String title, int count, Color color) {
-    return Container(
-      width: 100,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFFE0E5EC),
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0xFFA3B1C6),
-            offset: Offset(4, 4),
-            blurRadius: 8,
-            spreadRadius: 0,
-          ),
-          BoxShadow(
-            color: Colors.white,
-            offset: Offset(-4, -4),
-            blurRadius: 8,
-            spreadRadius: 0,
-          ),
-        ],
-      ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Text(
-            count.toString(),
-            style: TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-              color: color,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            title,
-            style: const TextStyle(
-              fontSize: 12,
-              color: Color(0xFF4A5568),
-              fontWeight: FontWeight.w500,
-            ),
-            textAlign: TextAlign.center,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildErrorWidget() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Icon(
-            Icons.error_outline,
-            size: 64,
-            color: Color(0xFFDC3545),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'Error loading assignments',
-            style: const TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: Color(0xFF2D3748),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            _errorMessage,
-            style: const TextStyle(
-              fontSize: 14,
-              color: Color(0xFF718096),
-            ),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 20),
-          ElevatedButton(
-            onPressed: _loadAssignments,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF4A5568),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(25),
-              ),
-            ),
-            child: const Text(
-              'Retry',
-              style: TextStyle(color: Colors.white),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildEmptyWidget() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Icon(
-            Icons.assignment_outlined,
-            size: 64,
-            color: Color(0xFF718096),
-          ),
-          const SizedBox(height: 16),
-          const Text(
-            'No assignments found',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: Color(0xFF2D3748),
-            ),
-          ),
-          const SizedBox(height: 8),
-          const Text(
-            'You don\'t have any assigned inspections yet.',
-            style: TextStyle(
-              fontSize: 14,
-              color: Color(0xFF718096),
-            ),
-            textAlign: TextAlign.center,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildAssignmentsList() {
-    return ListView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 24),
-      itemCount: _assignments.length,
-      itemBuilder: (context, index) {
-        final assignment = _assignments[index];
-        return _buildAssignmentCard(assignment);
-      },
-    );
-  }
-
-  Widget _buildAssignmentCard(Assignment assignment) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: const Color(0xFFE0E5EC),
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0xFFA3B1C6),
-            offset: Offset(6, 6),
-            blurRadius: 12,
-            spreadRadius: 0,
-          ),
-          BoxShadow(
-            color: Colors.white,
-            offset: Offset(-6, -6),
-            blurRadius: 12,
-            spreadRadius: 0,
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Header with status
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  assignment.businessName,
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF1F2937),
-                  ),
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: Color(int.parse(assignment.statusColor.replaceFirst('#', '0xFF'))),
-                  borderRadius: BorderRadius.circular(15),
-                ),
-                child: Text(
-                  assignment.statusDisplayName,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          
-          const SizedBox(height: 12),
-          
-          // Business ID
-          _buildInfoRow('Business ID', assignment.businessId),
-          
-          // Department
-          _buildInfoRow('Department', assignment.departmentName),
-          
-          // Address
-          if (assignment.businessAddress != null && assignment.businessAddress!.isNotEmpty)
-            _buildInfoRow('Address', assignment.businessAddress!),
-          
-          // Inspection Date
-          if (assignment.inspectionDate != null)
-            _buildInfoRow('Inspection Date', assignment.inspectionDate!),
-          
-          // Assigned Date
-          _buildInfoRow('Assigned Date', assignment.assignedAt),
-          
-          // Assigned By
-          if (assignment.assignedByName != null)
-            _buildInfoRow('Assigned By', assignment.assignedByName!),
-          
-          // Notes
-          if (assignment.assignmentNotes != null && assignment.assignmentNotes!.isNotEmpty)
-            _buildInfoRow('Notes', assignment.assignmentNotes!),
-          
-          const SizedBox(height: 16),
-          
-          // Action Button
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              onPressed: () {
-                // TODO: Navigate to assignment details
-                _showAssignmentDetails(assignment);
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF4A5568),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(25),
-                ),
-                padding: const EdgeInsets.symmetric(vertical: 12),
-              ),
-              child: const Text(
-                'View Details',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildInfoRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8.0),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 100,
-            child: Text(
-              '$label:',
-              style: const TextStyle(
-                fontSize: 14,
-                color: Color(0xFF6B7280),
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ),
-          Expanded(
-            child: Text(
-              value,
-              style: const TextStyle(
-                fontSize: 14,
-                color: Color(0xFF2D3748),
+                color: Color(0xFF1E293B),
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -1114,18 +620,18 @@ class _AssignmentsScreenState extends State<AssignmentsScreen> with TickerProvid
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              _buildInfoRow('Business ID', assignment.businessId),
-              _buildInfoRow('Department', assignment.departmentName),
+              _buildInfoRow('Business ID', assignment.businessId, false),
+              _buildInfoRow('Department', assignment.departmentName, false),
               if (assignment.businessAddress != null && assignment.businessAddress!.isNotEmpty)
-                _buildInfoRow('Address', assignment.businessAddress!),
+                _buildInfoRow('Address', assignment.businessAddress!, false),
               if (assignment.inspectionDate != null)
-                _buildInfoRow('Inspection Date', assignment.inspectionDate!),
-              _buildInfoRow('Status', assignment.statusDisplayName),
-              _buildInfoRow('Assigned Date', assignment.assignedAt),
+                _buildInfoRow('Inspection Date', assignment.inspectionDate!, false),
+              _buildInfoRow('Status', assignment.statusDisplayName, false),
+              _buildInfoRow('Assigned Date', assignment.assignedAt, false),
               if (assignment.assignedByName != null)
-                _buildInfoRow('Assigned By', assignment.assignedByName!),
+                _buildInfoRow('Assigned By', assignment.assignedByName!, false),
               if (assignment.assignmentNotes != null && assignment.assignmentNotes!.isNotEmpty)
-                _buildInfoRow('Notes', assignment.assignmentNotes!),
+                _buildInfoRow('Notes', assignment.assignmentNotes!, false),
             ],
           ),
         ),
