@@ -158,14 +158,15 @@ class WelcomePage extends StatelessWidget {
     final isLandscape = orientation == Orientation.landscape;
     
     // Dynamic scaling based on screen size and orientation
-    final double baseHeight = isLandscape ? 600.0 : 800.0;
-    final double scale = (screenHeight / baseHeight).clamp(0.6, 1.3);
+    // Adjust base height for better tablet scaling
+    final double baseHeight = isLandscape ? 600.0 : (isLargeTablet ? 1000.0 : 800.0);
+    final double scale = (screenHeight / baseHeight).clamp(0.6, 1.2);
     
     // Additional scaling for very small screens
     final double smallScreenScale = isVerySmallScreen ? 0.8 : 1.0;
     final double finalScale = scale * smallScreenScale;
     
-    // Enhanced responsive dimensions with better breakpoints
+    // Enhanced responsive dimensions with better breakpoints (same as dashboard)
     final logoSize = (isLargeTablet ? 120.0 : (isTablet ? 100.0 : (isVerySmallScreen ? 50.0 : (isSmallScreen ? 60.0 : 80.0)))) * finalScale;
     final logoFontSize = (isLargeTablet ? 120.0 : (isTablet ? 100.0 : (isVerySmallScreen ? 50.0 : (isSmallScreen ? 60.0 : 80.0)))) * finalScale;
     final titleFontSize = (isLargeTablet ? 28.0 : (isTablet ? 24.0 : (isVerySmallScreen ? 14.0 : (isSmallScreen ? 16.0 : 20.0)))) * finalScale;
@@ -174,6 +175,11 @@ class WelcomePage extends StatelessWidget {
     final secondaryButtonHeight = (isLargeTablet ? 70.0 : (isTablet ? 60.0 : (isVerySmallScreen ? 40.0 : (isSmallScreen ? 45.0 : 55.0)))) * finalScale;
     final horizontalPadding = (isLargeTablet ? 80.0 : (isTablet ? 60.0 : (isVerySmallScreen ? 16.0 : (isSmallScreen ? 20.0 : 32.0)))) * finalScale;
     final verticalSpacing = (isVerySmallScreen ? 15.0 : (isSmallScreen ? 20.0 : 30.0)) * finalScale;
+    
+    // Additional responsive dimensions for better control
+    final iconSize = (isLargeTablet ? 24.0 : (isTablet ? 20.0 : (isVerySmallScreen ? 14.0 : (isSmallScreen ? 16.0 : 18.0)))) * finalScale;
+    final versionFontSize = (isLargeTablet ? 18.0 : (isTablet ? 16.0 : (isVerySmallScreen ? 10.0 : (isSmallScreen ? 12.0 : 14.0)))) * finalScale;
+    final featureFontSize = (isLargeTablet ? 20.0 : (isTablet ? 18.0 : (isVerySmallScreen ? 12.0 : (isSmallScreen ? 14.0 : 16.0)))) * finalScale;
     
     // Landscape-specific adjustments
     final landscapePadding = isLandscape ? (screenWidth * 0.1) : horizontalPadding;
@@ -204,7 +210,8 @@ class WelcomePage extends StatelessWidget {
             child: isLandscape ? _buildLandscapeLayout(
               context, screenWidth, screenHeight, finalScale, 
               logoSize, logoFontSize, titleFontSize, descriptionFontSize,
-              buttonHeight, secondaryButtonHeight, landscapeVerticalSpacing
+              buttonHeight, secondaryButtonHeight, landscapeVerticalSpacing,
+              isTablet, isLargeTablet, isSmallScreen, isVerySmallScreen
             ) : SingleChildScrollView(
               child: ConstrainedBox(
                 constraints: BoxConstraints(
@@ -219,12 +226,12 @@ class WelcomePage extends StatelessWidget {
                       alignment: Alignment.centerRight,
                       child: Container(
                         padding: EdgeInsets.symmetric(
-                          horizontal: isTablet ? 16 : 12, 
-                          vertical: isTablet ? 8 : 6
+                          horizontal: (isLargeTablet ? 20.0 : (isTablet ? 16.0 : (isVerySmallScreen ? 8.0 : (isSmallScreen ? 10.0 : 12.0)))) * finalScale, 
+                          vertical: (isLargeTablet ? 12.0 : (isTablet ? 8.0 : (isVerySmallScreen ? 4.0 : (isSmallScreen ? 5.0 : 6.0)))) * finalScale
                         ),
                         decoration: BoxDecoration(
                           color: Colors.white,
-                          borderRadius: BorderRadius.circular(15),
+                          borderRadius: BorderRadius.circular((isLargeTablet ? 20.0 : (isTablet ? 15.0 : (isVerySmallScreen ? 8.0 : (isSmallScreen ? 10.0 : 12.0)))) * finalScale),
                           border: Border.all(color: const Color.fromRGBO(8, 111, 222, 0.977), width: 1),
                           boxShadow: const [
                             BoxShadow(
@@ -238,7 +245,7 @@ class WelcomePage extends StatelessWidget {
                         child: Text(
                           'v0.2.1',
                           style: TextStyle(
-                            fontSize: isTablet ? 16 : 14,
+                            fontSize: versionFontSize,
                             color: const Color.fromRGBO(8, 111, 222, 0.977),
                             fontWeight: FontWeight.w600,
                           ),
@@ -276,7 +283,7 @@ class WelcomePage extends StatelessWidget {
                             ),
                           ),
                         ),
-                        SizedBox(width: isTablet ? 12 : 8),
+                        SizedBox(width: (isLargeTablet ? 16.0 : (isTablet ? 12.0 : (isVerySmallScreen ? 6.0 : (isSmallScreen ? 8.0 : 8.0)))) * finalScale),
                         // BO text
                         Text(
                           'BO',
@@ -318,14 +325,14 @@ class WelcomePage extends StatelessWidget {
                                   Icon(
                                     Icons.check_circle_rounded,
                                     color: const Color.fromRGBO(8, 111, 222, 0.977),
-                                    size: isTablet ? 20 : 18,
+                                    size: iconSize,
                                   ),
                                   const SizedBox(width: 10),
                                   Expanded(
                                     child: Text(
                                       'Assign, track, and complete inspections with clear status updates',
                                       style: TextStyle(
-                                        fontSize: isTablet ? 18 : (isSmallScreen ? 14 : 16),
+                                        fontSize: featureFontSize,
                                         color: const Color(0xFF1F2937),
                                         height: 1.5,
                                         fontWeight: FontWeight.w500,
@@ -341,14 +348,14 @@ class WelcomePage extends StatelessWidget {
                                   Icon(
                                     Icons.check_circle_rounded,
                                     color: const Color.fromRGBO(8, 111, 222, 0.977),
-                                    size: isTablet ? 20 : 18,
+                                    size: iconSize,
                                   ),
                                   const SizedBox(width: 10),
                                   Expanded(
                                     child: Text(
                                       'QR code scanning for fast record lookup and verification',
                                       style: TextStyle(
-                                        fontSize: isTablet ? 18 : (isSmallScreen ? 14 : 16),
+                                        fontSize: featureFontSize,
                                         color: const Color(0xFF1F2937),
                                         height: 1.5,
                                         fontWeight: FontWeight.w500,
@@ -364,14 +371,14 @@ class WelcomePage extends StatelessWidget {
                                   Icon(
                                     Icons.check_circle_rounded,
                                     color: const Color.fromRGBO(8, 111, 222, 0.977),
-                                    size: isTablet ? 20 : 18,
+                                    size: iconSize,
                                   ),
                                   const SizedBox(width: 10),
                                   Expanded(
                                     child: Text(
                                       'Offline-first design with secure local storage and one-tap sync',
                                       style: TextStyle(
-                                        fontSize: isTablet ? 18 : (isSmallScreen ? 14 : 16),
+                                        fontSize: featureFontSize,
                                         color: const Color(0xFF1F2937),
                                         height: 1.5,
                                         fontWeight: FontWeight.w500,
@@ -387,14 +394,14 @@ class WelcomePage extends StatelessWidget {
                                   Icon(
                                     Icons.check_circle_rounded,
                                     color: const Color.fromRGBO(8, 111, 222, 0.977),
-                                    size: isTablet ? 20 : 18,
+                                    size: iconSize,
                                   ),
                                   const SizedBox(width: 10),
                                   Expanded(
                                     child: Text(
                                       'Modern, clean UI built for tablets and small screens',
                                       style: TextStyle(
-                                        fontSize: isTablet ? 18 : (isSmallScreen ? 14 : 16),
+                                        fontSize: featureFontSize,
                                         color: const Color(0xFF1F2937),
                                         height: 1.5,
                                         fontWeight: FontWeight.w500,
@@ -408,7 +415,7 @@ class WelcomePage extends StatelessWidget {
                         ],
                       ),
                     ),
-                    SizedBox(height: (isSmallScreen ? 24 : 40) * scale),
+                    SizedBox(height: (isLargeTablet ? 32.0 : (isTablet ? 28.0 : (isVerySmallScreen ? 20.0 : (isSmallScreen ? 24.0 : 30.0)))) * finalScale),
                     // Enhanced Get Started Button
                     Container(
                       width: double.infinity,
@@ -444,17 +451,17 @@ class WelcomePage extends StatelessWidget {
                                 Text(
                                   'Get Started',
                                   style: TextStyle(
-                                    fontSize: isTablet ? 22 : (isSmallScreen ? 16 : 20),
+                                    fontSize: (isLargeTablet ? 24.0 : (isTablet ? 22.0 : (isVerySmallScreen ? 14.0 : (isSmallScreen ? 16.0 : 20.0)))) * finalScale,
                                     fontWeight: FontWeight.w700,
                                     color: Colors.white,
                                     letterSpacing: 1,
                                   ),
                                 ),
-                                SizedBox(width: isTablet ? 16 : 12),
+                                SizedBox(width: (isLargeTablet ? 20.0 : (isTablet ? 16.0 : (isVerySmallScreen ? 8.0 : (isSmallScreen ? 10.0 : 12.0)))) * finalScale),
                                 Icon(
                                   Icons.arrow_forward_rounded,
                                   color: Colors.white,
-                                  size: isTablet ? 28 : 24,
+                                  size: (isLargeTablet ? 32.0 : (isTablet ? 28.0 : (isVerySmallScreen ? 18.0 : (isSmallScreen ? 20.0 : 24.0)))) * finalScale,
                                 ),
                               ],
                             ),
@@ -462,7 +469,7 @@ class WelcomePage extends StatelessWidget {
                         ),
                       ),
                     ),
-                    SizedBox(height: (isSmallScreen ? 12 : 16) * scale),
+                    SizedBox(height: (isLargeTablet ? 16.0 : (isTablet ? 14.0 : (isVerySmallScreen ? 8.0 : (isSmallScreen ? 10.0 : 12.0)))) * finalScale),
                     // Enhanced Secondary button
                     Container(
                       width: double.infinity,
@@ -499,13 +506,13 @@ class WelcomePage extends StatelessWidget {
                                 Icon(
                                   Icons.settings_outlined,
                                   color: const Color.fromRGBO(8, 111, 222, 0.977),
-                                  size: isTablet ? 24 : 20,
+                                  size: (isLargeTablet ? 28.0 : (isTablet ? 24.0 : (isVerySmallScreen ? 16.0 : (isSmallScreen ? 18.0 : 20.0)))) * finalScale,
                                 ),
-                                SizedBox(width: isTablet ? 12 : 8),
+                                SizedBox(width: (isLargeTablet ? 16.0 : (isTablet ? 12.0 : (isVerySmallScreen ? 6.0 : (isSmallScreen ? 8.0 : 8.0)))) * finalScale),
                                 Text(
                                   'Debug & Setup',
                                   style: TextStyle(
-                                    fontSize: isTablet ? 19 : (isSmallScreen ? 15 : 17),
+                                    fontSize: (isLargeTablet ? 21.0 : (isTablet ? 19.0 : (isVerySmallScreen ? 13.0 : (isSmallScreen ? 15.0 : 17.0)))) * finalScale,
                                     fontWeight: FontWeight.w600,
                                     color: const Color.fromRGBO(8, 111, 222, 0.977),
                                   ),
@@ -516,7 +523,7 @@ class WelcomePage extends StatelessWidget {
                         ),
                       ),
                     ),
-                    SizedBox(height: (isSmallScreen ? 16 : 28) * finalScale),
+                    SizedBox(height: (isLargeTablet ? 20.0 : (isTablet ? 16.0 : (isVerySmallScreen ? 12.0 : (isSmallScreen ? 14.0 : 18.0)))) * finalScale),
                   ],
                 ),
               ),
@@ -539,6 +546,10 @@ class WelcomePage extends StatelessWidget {
     double buttonHeight,
     double secondaryButtonHeight,
     double verticalSpacing,
+    bool isTablet,
+    bool isLargeTablet,
+    bool isSmallScreen,
+    bool isVerySmallScreen,
   ) {
     return SingleChildScrollView(
       child: ConstrainedBox(
@@ -827,8 +838,9 @@ class _LoginPageState extends State<LoginPage> {
     final isLandscape = orientation == Orientation.landscape;
     
     // Dynamic scaling based on screen size and orientation
-    final double baseHeight = isLandscape ? 600.0 : 800.0;
-    final double scale = (screenHeight / baseHeight).clamp(0.6, 1.3);
+    // Adjust base height for better tablet scaling
+    final double baseHeight = isLandscape ? 600.0 : (isLargeTablet ? 1000.0 : 800.0);
+    final double scale = (screenHeight / baseHeight).clamp(0.6, 1.2);
     final double smallScreenScale = isVerySmallScreen ? 0.8 : 1.0;
     final double finalScale = scale * smallScreenScale;
     
@@ -1090,8 +1102,9 @@ class _LoginPageState extends State<LoginPage> {
     final isLandscape = orientation == Orientation.landscape;
     
     // Dynamic scaling
-    final double baseHeight = isLandscape ? 600.0 : 800.0;
-    final double scale = (screenHeight / baseHeight).clamp(0.6, 1.3);
+    // Adjust base height for better tablet scaling
+    final double baseHeight = isLandscape ? 600.0 : (isLargeTablet ? 1000.0 : 800.0);
+    final double scale = (screenHeight / baseHeight).clamp(0.6, 1.2);
     final double smallScreenScale = isVerySmallScreen ? 0.8 : 1.0;
     final double finalScale = scale * smallScreenScale;
     

@@ -9,8 +9,15 @@ import 'package:latlong2/latlong.dart';
 
 class InspectionFormScreen extends StatefulWidget {
   final String? scannedData;
+  final Inspection? existingInspection;
+  final bool isEditing;
   
-  const InspectionFormScreen({super.key, this.scannedData});
+  const InspectionFormScreen({
+    super.key, 
+    this.scannedData,
+    this.existingInspection,
+    this.isEditing = false,
+  });
 
   @override
   State<InspectionFormScreen> createState() => _InspectionFormScreenState();
@@ -32,13 +39,16 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
   // Location data for Civil/Structural section
   LatLng? _civilStructuralLocation;
   
-  // Media capture data
-  List<String> _imagePaths = [];
-  List<String> _videoPaths = [];
+  // Media capture data for each section
+  Map<String, List<String>> _sectionImagePaths = {};
+  Map<String, List<String>> _sectionVideoPaths = {};
   
   // Inspection timing
   DateTime? _inspectionStartTime;
   DateTime? _inspectionEndTime;
+  
+  // Initialization flag
+  bool _isInitialized = false;
 
   @override
   void initState() {
@@ -57,15 +67,84 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
       'Electrical/Electronics': false,
     };
 
+    // Ensure media maps are initialized
+    _sectionImagePaths = {};
+    _sectionVideoPaths = {};
+
     // Initialize controllers and status
     for (String section in _selectedSections.keys) {
       _remarksControllers[section] = TextEditingController();
       _assessmentControllers[section] = TextEditingController();
-      _sectionStatus[section] = 'field'; // Default status
+      _sectionStatus[section] = 'not_passed'; // Default status
+      _sectionImagePaths[section] = []; // Initialize empty image list for each section
+      _sectionVideoPaths[section] = []; // Initialize empty video list for each section
     }
     
-    // Set inspection start time when form is initialized
-    _inspectionStartTime = DateTime.now();
+    // Handle editing mode - pre-fill data from existing inspection
+    if (widget.isEditing && widget.existingInspection != null) {
+      _loadExistingInspectionData(widget.existingInspection!);
+    } else {
+      // Set inspection start time when form is initialized (only for new inspections)
+      _inspectionStartTime = DateTime.now();
+    }
+    
+    // Mark as initialized
+    _isInitialized = true;
+  }
+
+  void _loadExistingInspectionData(Inspection inspection) {
+    // Load existing section data
+    final sections = {
+      'Mechanical': {'remarks': inspection.mechanicalRemarks, 'assessment': inspection.mechanicalAssessment},
+      'Line and Grade': {'remarks': inspection.lineGradeRemarks, 'assessment': inspection.lineGradeAssessment},
+      'Architectural': {'remarks': inspection.architecturalRemarks, 'assessment': inspection.architecturalAssessment},
+      'Civil/Structural': {'remarks': inspection.civilStructuralRemarks, 'assessment': inspection.civilStructuralAssessment},
+      'Sanitary/Plumbing': {'remarks': inspection.sanitaryPlumbingRemarks, 'assessment': inspection.sanitaryPlumbingAssessment},
+      'Electrical/Electronics': {'remarks': inspection.electricalElectronicsRemarks, 'assessment': inspection.electricalElectronicsAssessment},
+    };
+
+    // Pre-fill section data
+    for (String section in sections.keys) {
+      final sectionData = sections[section]!;
+      final remarks = sectionData['remarks']!;
+      final assessment = sectionData['assessment']!;
+      
+      // Select section if it has data
+      if (remarks.isNotEmpty || assessment.isNotEmpty) {
+        _selectedSections[section] = true;
+        _remarksControllers[section]?.text = remarks;
+        _assessmentControllers[section]?.text = assessment;
+      }
+    }
+
+    // Load section status
+    if (inspection.sectionStatus.isNotEmpty) {
+      inspection.sectionStatus.forEach((section, status) {
+        _sectionStatus[section] = status;
+      });
+    }
+
+    // Load section-specific media
+    if (inspection.sectionImagePaths != null) {
+      inspection.sectionImagePaths!.forEach((section, images) {
+        _sectionImagePaths[section] = List<String>.from(images);
+      });
+    }
+    
+    if (inspection.sectionVideoPaths != null) {
+      inspection.sectionVideoPaths!.forEach((section, videos) {
+        _sectionVideoPaths[section] = List<String>.from(videos);
+      });
+    }
+
+    // Load location data for Civil/Structural
+    if (inspection.latitude != null && inspection.longitude != null) {
+      _civilStructuralLocation = LatLng(inspection.latitude!, inspection.longitude!);
+    }
+
+    // Load timing data
+    _inspectionStartTime = inspection.inspectionStartTime;
+    _inspectionEndTime = inspection.inspectionEndTime;
   }
 
   @override
@@ -81,6 +160,15 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Ensure initialization is complete
+    if (!_isInitialized) {
+      return const Scaffold(
+        body: Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
+    
     final screenWidth = MediaQuery.of(context).size.width;
     final isTablet = screenWidth > 600;
 
@@ -141,14 +229,6 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: const Color(0xFFE2E8F0), width: 1),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0xFFE2E8F0),
-            offset: Offset(0, 2),
-            blurRadius: 8,
-            spreadRadius: 0,
-          ),
-        ],
       ),
       child: Row(
         children: [
@@ -198,14 +278,6 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: const Color(0xFFE2E8F0), width: 1),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0xFFE2E8F0),
-            offset: Offset(0, 2),
-            blurRadius: 8,
-            spreadRadius: 0,
-          ),
-        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -266,14 +338,6 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: const Color(0xFFE2E8F0), width: 1),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0xFFE2E8F0),
-            offset: Offset(0, 2),
-            blurRadius: 8,
-            spreadRadius: 0,
-          ),
-        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -480,14 +544,6 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: const Color(0xFFE2E8F0), width: 1),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0xFFE2E8F0),
-            offset: Offset(0, 2),
-            blurRadius: 8,
-            spreadRadius: 0,
-          ),
-        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -548,6 +604,11 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
       onTap: () {
         setState(() {
           _selectedSections[section] = !isSelected;
+          // Initialize media paths for newly selected sections
+          if (!isSelected) {
+            _sectionImagePaths[section] = [];
+            _sectionVideoPaths[section] = [];
+          }
         });
       },
       child: Container(
@@ -562,14 +623,6 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
             color: isSelected ? sectionData['color'] : const Color(0xFFE2E8F0),
             width: 2,
           ),
-          boxShadow: [
-            BoxShadow(
-              color: isSelected ? sectionData['color'].withOpacity(0.2) : const Color(0xFFE2E8F0),
-              offset: const Offset(0, 2),
-              blurRadius: 4,
-              spreadRadius: 0,
-            ),
-          ],
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -646,19 +699,32 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
     }
 
     return selectedSections.map((section) {
-      final sectionData = _getSectionData(section);
-      return Column(
-        children: [
-          _buildDynamicSectionCard(
-            context,
-            isTablet,
-            section,
-            sectionData['icon'],
-            sectionData['color'],
-          ),
-          const SizedBox(height: 16),
-        ],
-      );
+      try {
+        // Ensure media paths are initialized for this section
+        if (_sectionImagePaths[section] == null) {
+          _sectionImagePaths[section] = [];
+        }
+        if (_sectionVideoPaths[section] == null) {
+          _sectionVideoPaths[section] = [];
+        }
+        
+        final sectionData = _getSectionData(section);
+        return Column(
+          children: [
+            _buildDynamicSectionCard(
+              context,
+              isTablet,
+              section,
+              sectionData['icon'],
+              sectionData['color'],
+            ),
+            const SizedBox(height: 16),
+          ],
+        );
+      } catch (e) {
+        print('Error building section $section: $e');
+        return Container(); // Return empty container on error
+      }
     }).toList();
   }
 
@@ -716,14 +782,6 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: const Color(0xFFE2E8F0), width: 1),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0xFFE2E8F0),
-            offset: Offset(0, 2),
-            blurRadius: 8,
-            spreadRadius: 0,
-          ),
-        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -831,7 +889,7 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
   }
 
   Widget _buildStatusSelection(String section, bool isTablet, Color color) {
-    final currentStatus = _sectionStatus[section] ?? 'field';
+    final currentStatus = _sectionStatus[section] ?? 'not_passed';
     
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -848,13 +906,13 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
         Row(
           children: [
             _buildStatusChip(
-              'Field',
-              'field',
+              'Not Passed',
+              'not_passed',
               currentStatus,
-              const Color(0xFF6B7280),
-              Icons.location_on_rounded,
+              const Color(0xFFEF4444),
+              Icons.close_rounded,
               isTablet,
-              () => _updateStatus(section, 'field'),
+              () => _updateStatus(section, 'not_passed'),
             ),
             const SizedBox(width: 8),
             _buildStatusChip(
@@ -976,16 +1034,16 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
         ),
         const SizedBox(height: 12),
         MediaCaptureWidget(
-          imagePaths: _imagePaths,
-          videoPaths: _videoPaths,
+          imagePaths: _sectionImagePaths[title] ?? [],
+          videoPaths: _sectionVideoPaths[title] ?? [],
           onImagesChanged: (images) {
             setState(() {
-              _imagePaths = images;
+              _sectionImagePaths[title] = images;
             });
           },
           onVideosChanged: (videos) {
             setState(() {
-              _videoPaths = videos;
+              _sectionVideoPaths[title] = videos;
             });
           },
           isTablet: isTablet,
@@ -1035,6 +1093,10 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
         MapWidget(
           title: 'Civil/Structural Inspection Location',
           initialLocation: _civilStructuralLocation,
+          enableLocationPicker: true,
+          showSearchBar: true,
+          showAddressInfo: true,
+          height: 450,
           onLocationSelected: (location) {
             setState(() {
               _civilStructuralLocation = location;
@@ -1060,7 +1122,7 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    'Location marked: ${_civilStructuralLocation!.latitude.toStringAsFixed(4)}, ${_civilStructuralLocation!.longitude.toStringAsFixed(4)}',
+                    'Location marked: ${_civilStructuralLocation!.latitude.toStringAsFixed(8)}, ${_civilStructuralLocation!.longitude.toStringAsFixed(8)}',
                     style: const TextStyle(
                       fontSize: 12,
                       color: Color(0xFF0EA5E9),
@@ -1161,29 +1223,70 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
         final currentUser = await AuthService.getCurrentUser();
         final userId = currentUser?.id.toString();
 
+        // Collect all media from all sections
+        List<String> allImagePaths = [];
+        List<String> allVideoPaths = [];
+        
+        for (String section in selectedSections) {
+          allImagePaths.addAll(_sectionImagePaths[section] ?? []);
+          allVideoPaths.addAll(_sectionVideoPaths[section] ?? []);
+        }
+
         // Create inspection object with dynamic data
-        final inspection = Inspection.fromFormData(
-          scannedData: widget.scannedData ?? 'No QR data',
-          mechanicalRemarks: _getSectionText('Mechanical', 'remarks'),
-          mechanicalAssessment: _getSectionText('Mechanical', 'assessment'),
-          lineGradeRemarks: _getSectionText('Line and Grade', 'remarks'),
-          lineGradeAssessment: _getSectionText('Line and Grade', 'assessment'),
-          architecturalRemarks: _getSectionText('Architectural', 'remarks'),
-          architecturalAssessment: _getSectionText('Architectural', 'assessment'),
-          civilStructuralRemarks: _getSectionText('Civil/Structural', 'remarks'),
-          civilStructuralAssessment: _getSectionText('Civil/Structural', 'assessment'),
-          sanitaryPlumbingRemarks: _getSectionText('Sanitary/Plumbing', 'remarks'),
-          sanitaryPlumbingAssessment: _getSectionText('Sanitary/Plumbing', 'assessment'),
-          electricalElectronicsRemarks: _getSectionText('Electrical/Electronics', 'remarks'),
-          electricalElectronicsAssessment: _getSectionText('Electrical/Electronics', 'assessment'),
-          userId: userId,
-          latitude: _civilStructuralLocation?.latitude,
-          longitude: _civilStructuralLocation?.longitude,
-          imagePaths: _imagePaths,
-          videoPaths: _videoPaths,
-          inspectionStartTime: _inspectionStartTime,
-          inspectionEndTime: _inspectionEndTime,
-        );
+        final inspection = widget.isEditing && widget.existingInspection != null
+            ? Inspection(
+                id: widget.existingInspection!.id, // Keep existing ID
+                scannedData: widget.existingInspection!.scannedData, // Keep existing scanned data
+                mechanicalRemarks: _getSectionText('Mechanical', 'remarks'),
+                mechanicalAssessment: _getSectionText('Mechanical', 'assessment'),
+                lineGradeRemarks: _getSectionText('Line and Grade', 'remarks'),
+                lineGradeAssessment: _getSectionText('Line and Grade', 'assessment'),
+                architecturalRemarks: _getSectionText('Architectural', 'remarks'),
+                architecturalAssessment: _getSectionText('Architectural', 'assessment'),
+                civilStructuralRemarks: _getSectionText('Civil/Structural', 'remarks'),
+                civilStructuralAssessment: _getSectionText('Civil/Structural', 'assessment'),
+                sanitaryPlumbingRemarks: _getSectionText('Sanitary/Plumbing', 'remarks'),
+                sanitaryPlumbingAssessment: _getSectionText('Sanitary/Plumbing', 'assessment'),
+                electricalElectronicsRemarks: _getSectionText('Electrical/Electronics', 'remarks'),
+                electricalElectronicsAssessment: _getSectionText('Electrical/Electronics', 'assessment'),
+                imagePaths: allImagePaths,
+                videoPaths: allVideoPaths,
+                sectionImagePaths: _sectionImagePaths,
+                sectionVideoPaths: _sectionVideoPaths,
+                inspectionStartTime: _inspectionStartTime,
+                inspectionEndTime: _inspectionEndTime,
+                sectionStatus: _sectionStatus,
+                isSynced: widget.existingInspection!.isSynced,
+                createdAt: widget.existingInspection!.createdAt, // Keep original creation time
+                updatedAt: DateTime.now(), // Update modification time
+                latitude: _civilStructuralLocation?.latitude,
+                longitude: _civilStructuralLocation?.longitude,
+              )
+            : Inspection.fromFormData(
+                scannedData: widget.scannedData ?? 'No QR data',
+                mechanicalRemarks: _getSectionText('Mechanical', 'remarks'),
+                mechanicalAssessment: _getSectionText('Mechanical', 'assessment'),
+                lineGradeRemarks: _getSectionText('Line and Grade', 'remarks'),
+                lineGradeAssessment: _getSectionText('Line and Grade', 'assessment'),
+                architecturalRemarks: _getSectionText('Architectural', 'remarks'),
+                architecturalAssessment: _getSectionText('Architectural', 'assessment'),
+                civilStructuralRemarks: _getSectionText('Civil/Structural', 'remarks'),
+                civilStructuralAssessment: _getSectionText('Civil/Structural', 'assessment'),
+                sanitaryPlumbingRemarks: _getSectionText('Sanitary/Plumbing', 'remarks'),
+                sanitaryPlumbingAssessment: _getSectionText('Sanitary/Plumbing', 'assessment'),
+                electricalElectronicsRemarks: _getSectionText('Electrical/Electronics', 'remarks'),
+                electricalElectronicsAssessment: _getSectionText('Electrical/Electronics', 'assessment'),
+                userId: userId,
+                latitude: _civilStructuralLocation?.latitude,
+                longitude: _civilStructuralLocation?.longitude,
+                imagePaths: allImagePaths,
+                videoPaths: allVideoPaths,
+                sectionImagePaths: _sectionImagePaths,
+                sectionVideoPaths: _sectionVideoPaths,
+                inspectionStartTime: _inspectionStartTime,
+                inspectionEndTime: _inspectionEndTime,
+                sectionStatus: _sectionStatus,
+              );
 
         // Save to Hive database
         await HiveOfflineDatabase.saveInspection(inspection);
@@ -1194,8 +1297,8 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
         print('Inspection saved to Hive: ${inspection.id}');
         print('Scanned data: ${inspection.scannedData}');
         print('Selected sections: $selectedSections');
-        print('Images captured: ${_imagePaths.length}');
-        print('Videos captured: ${_videoPaths.length}');
+        print('Images captured: ${allImagePaths.length}');
+        print('Videos captured: ${allVideoPaths.length}');
         print('Inspection duration: ${_calculateDuration()}');
 
         // Show success dialog
@@ -1203,8 +1306,8 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
           showDialog(
             context: context,
             builder: (context) => AlertDialog(
-              title: const Text('Inspection Submitted'),
-              content: Text('Your inspection for ${selectedSections.length} section(s) has been saved successfully${_imagePaths.isNotEmpty || _videoPaths.isNotEmpty ? ' with ${_imagePaths.length} photo(s) and ${_videoPaths.length} video(s)' : ''}${_inspectionStartTime != null && _inspectionEndTime != null ? ' (Duration: ${_calculateDuration()})' : ''} and will be synced when online.'),
+              title: Text(widget.isEditing ? 'Inspection Updated' : 'Inspection Submitted'),
+              content: Text('Your inspection for ${selectedSections.length} section(s) has been ${widget.isEditing ? 'updated' : 'saved'} successfully${allImagePaths.isNotEmpty || allVideoPaths.isNotEmpty ? ' with ${allImagePaths.length} photo(s) and ${allVideoPaths.length} video(s)' : ''}${_inspectionStartTime != null && _inspectionEndTime != null ? ' (Duration: ${_calculateDuration()})' : ''} and will be synced when online.'),
               actions: [
                 TextButton(
                   onPressed: () {
@@ -1308,14 +1411,6 @@ class _CalculatorDialogState extends State<CalculatorDialog> with TickerProvider
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(20),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.1),
-              offset: const Offset(0, 10),
-              blurRadius: 20,
-              spreadRadius: 0,
-            ),
-          ],
         ),
         child: Column(
           children: [
@@ -1461,57 +1556,6 @@ class _CalculatorDialogState extends State<CalculatorDialog> with TickerProvider
     );
   }
 
-  // Unit Conversion Tab
-  Widget _buildConversionCalculator() {
-    return Column(
-      children: [
-        // Length conversions
-        _buildConversionRow('Length', ['m', 'ft', 'in', 'cm']),
-        const SizedBox(height: 6),
-        
-        // Area conversions
-        _buildConversionRow('Area', ['m²', 'ft²', 'in²', 'cm²']),
-        const SizedBox(height: 6),
-        
-        // Volume conversions
-        _buildConversionRow('Volume', ['m³', 'ft³', 'L', 'gal']),
-        const SizedBox(height: 6),
-        
-        // Weight conversions
-        _buildConversionRow('Weight', ['kg', 'lb', 'oz', 'g']),
-        const SizedBox(height: 6),
-        
-        // Temperature conversions
-        _buildConversionRow('Temperature', ['°C', '°F', 'K', '°R']),
-      ],
-    );
-  }
-
-  // Inspection-specific Calculator Tab
-  Widget _buildInspectionCalculator() {
-    return Column(
-      children: [
-        // Area calculations
-        _buildInspectionRow('Area', ['Rectangle', 'Circle', 'Triangle', 'Trapezoid']),
-        const SizedBox(height: 6),
-        
-        // Volume calculations
-        _buildInspectionRow('Volume', ['Box', 'Cylinder', 'Sphere', 'Cone']),
-        const SizedBox(height: 6),
-        
-        // Percentage calculations
-        _buildInspectionRow('Percentage', ['Defect %', 'Progress %', 'Quality %', 'Completion %']),
-        const SizedBox(height: 6),
-        
-        // Ratio calculations
-        _buildInspectionRow('Ratio', ['Aspect Ratio', 'Slope', 'Grade', 'Pitch']),
-        const SizedBox(height: 6),
-        
-        // Material calculations
-        _buildInspectionRow('Materials', ['Concrete', 'Steel', 'Wood', 'Paint']),
-      ],
-    );
-  }
 
   Widget _buildButtonRow(List<String> buttons, {bool isLastRow = false}) {
     return Row(
@@ -1539,49 +1583,6 @@ class _CalculatorDialogState extends State<CalculatorDialog> with TickerProvider
     );
   }
 
-  Widget _buildConversionRow(String category, List<String> units) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          category,
-          style: TextStyle(
-            fontSize: widget.isTablet ? 12 : 10,
-            fontWeight: FontWeight.w600,
-            color: const Color(0xFF6B7280),
-          ),
-        ),
-        const SizedBox(height: 4),
-        Row(
-          children: units.map((unit) => Expanded(
-            child: _buildCalculatorButton(unit),
-          )).toList(),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildInspectionRow(String category, List<String> functions) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          category,
-          style: TextStyle(
-            fontSize: widget.isTablet ? 12 : 10,
-            fontWeight: FontWeight.w600,
-            color: const Color(0xFF6B7280),
-          ),
-        ),
-        const SizedBox(height: 4),
-        Row(
-          children: functions.map((function) => Expanded(
-            child: _buildCalculatorButton(function),
-          )).toList(),
-        ),
-      ],
-    );
-  }
 
   Widget _buildCalculatorButton(String text) {
     final bool isNumber = RegExp(r'[0-9]').hasMatch(text);

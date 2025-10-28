@@ -70,11 +70,20 @@ class Inspection extends HiveObject {
   @HiveField(21)
   List<String> videoPaths;
 
+  @HiveField(25)
+  Map<String, List<String>>? sectionImagePaths;
+
+  @HiveField(26)
+  Map<String, List<String>>? sectionVideoPaths;
+
   @HiveField(22)
   DateTime? inspectionStartTime;
 
   @HiveField(23)
   DateTime? inspectionEndTime;
+
+  @HiveField(24)
+  Map<String, String> sectionStatus;
 
   Inspection({
     required this.id,
@@ -99,8 +108,11 @@ class Inspection extends HiveObject {
     this.longitude,
     this.imagePaths = const [],
     this.videoPaths = const [],
+    this.sectionImagePaths,
+    this.sectionVideoPaths,
     this.inspectionStartTime,
     this.inspectionEndTime,
+    this.sectionStatus = const {},
   });
 
   // Factory constructor for creating from form data
@@ -123,8 +135,11 @@ class Inspection extends HiveObject {
     double? longitude,
     List<String> imagePaths = const [],
     List<String> videoPaths = const [],
+    Map<String, List<String>>? sectionImagePaths,
+    Map<String, List<String>>? sectionVideoPaths,
     DateTime? inspectionStartTime,
     DateTime? inspectionEndTime,
+    Map<String, String> sectionStatus = const {},
   }) {
     final now = DateTime.now();
     return Inspection(
@@ -150,8 +165,11 @@ class Inspection extends HiveObject {
       longitude: longitude,
       imagePaths: imagePaths,
       videoPaths: videoPaths,
+      sectionImagePaths: sectionImagePaths,
+      sectionVideoPaths: sectionVideoPaths,
       inspectionStartTime: inspectionStartTime,
       inspectionEndTime: inspectionEndTime,
+      sectionStatus: sectionStatus,
     );
   }
 
@@ -180,8 +198,11 @@ class Inspection extends HiveObject {
       'longitude': longitude,
       'image_paths': imagePaths,
       'video_paths': videoPaths,
+      'section_image_paths': sectionImagePaths ?? {},
+      'section_video_paths': sectionVideoPaths ?? {},
       'inspection_start_time': inspectionStartTime?.toIso8601String(),
       'inspection_end_time': inspectionEndTime?.toIso8601String(),
+      'section_status': sectionStatus,
     };
   }
 

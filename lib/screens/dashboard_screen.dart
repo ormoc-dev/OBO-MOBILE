@@ -3,6 +3,7 @@ import '../services/auth_service.dart';
 import '../services/offline_sync_service.dart';
 import '../services/hive_offline_database.dart';
 import '../models/user.dart';
+import '../models/inspection.dart';
 import 'assignments_screen.dart';
 import 'qr_scanner_screen.dart';
 import 'profile_screen.dart';
@@ -26,9 +27,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
   PageController _pageController = PageController(initialPage: 0);
   
   // Quick Stats data
-  int _todayInspections = 0;
-  int _pendingAssignments = 0;
-  int _weeklyCompleted = 0;
+  int? _todayInspections;
+  int? _weeklyCompleted;
+  int? _inProgressInspections;
+  int? _pendingInspections; // Same as in_progress, but using reports screen terminology
   bool _statsLoading = true;
 
   @override
@@ -160,6 +162,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Future<void> _loadQuickStats() async {
+    print('=== DASHBOARD QUICK STATS START ===');
+    print('Dashboard: Starting _loadQuickStats...');
+    print('Dashboard: Current user: ${currentUser?.id} (${currentUser?.name})');
     setState(() {
       _statsLoading = true;
     });
@@ -168,46 +173,129 @@ class _DashboardScreenState extends State<DashboardScreen> {
       // Ensure Hive is initialized
       await HiveOfflineDatabase.initialize();
       
-      // Load assignments from Hive
-      final assignments = HiveOfflineDatabase.getAssignments();
-      print('Quick Stats: Loaded ${assignments.length} assignments from Hive');
+      // Load inspections from Hive (same as inspection_form_screen.dart)
+      final allInspections = HiveOfflineDatabase.getInspections();
+      print('Quick Stats: Loaded ${allInspections.length} inspections from Hive');
       
-      // Calculate today's inspections (assignments due today)
+      // Filter inspections by current user (same logic as inspection_reports_screen.dart)
+      List<Inspection> inspections;
+      if (currentUser?.id == null) {
+        print('Dashboard: No current user found, showing all inspections');
+        inspections = allInspections;
+      } else {
+        // Filter inspections by current user
+        inspections = allInspections.where((inspection) {
+          final matches = inspection.userId == currentUser?.id.toString();
+          print('Dashboard: Inspection ${inspection.id}: userId=${inspection.userId}, currentUserId=${currentUser?.id.toString()}, matches=$matches');
+          return matches;
+        }).toList();
+        print('Dashboard: User-specific inspections: ${inspections.length}');
+      }
+      
+      // Debug: Print inspection details
+      for (final inspection in inspections) {
+        print('  - Inspection: ${inspection.id}');
+        print('    Created: ${inspection.createdAt}');
+        print('    Updated: ${inspection.updatedAt}');
+        print('    Section Status: ${inspection.sectionStatus}');
+        print('    User ID: ${inspection.userId}');
+        print('    Section Status Values: ${inspection.sectionStatus.values.toList()}');
+        print('    Has in_progress: ${inspection.sectionStatus.values.contains('in_progress')}');
+        print('    Has passed: ${inspection.sectionStatus.values.contains('passed')}');
+        print('    Has not_passed: ${inspection.sectionStatus.values.contains('not_passed')}');
+      }
+      
       final today = DateTime.now();
-      final todayInspections = assignments.where((assignment) {
-        final assignedDate = DateTime.tryParse(assignment.assignedAt) ?? DateTime.now();
-        return assignedDate.year == today.year &&
-               assignedDate.month == today.month &&
-               assignedDate.day == today.day;
+      
+      // Calculate today's inspections (actual inspection records created today)
+      final todayInspections = inspections.where((inspection) {
+        final createdDate = inspection.createdAt;
+        final isToday = createdDate.year == today.year &&
+               createdDate.month == today.month &&
+               createdDate.day == today.day;
+        if (isToday) {
+          print('    Today inspection: ${inspection.id} (${createdDate})');
+        } else {
+          print('    Not today: ${inspection.id} (${createdDate}) vs today (${today})');
+        }
+        return isToday;
       }).length;
       
-      // Calculate pending assignments (assigned status)
-      final pendingAssignments = assignments.where((assignment) {
-        return assignment.statusDisplayName.toLowerCase() == 'assigned';
-      }).length;
+      print('Dashboard: Today inspections count: $todayInspections');
       
-      // Calculate weekly completed (completed in last 7 days)
+      
+      // Calculate weekly completed inspections (completed in last 7 days)
+      // Using SAME logic as inspection_reports_screen.dart
       final weekAgo = today.subtract(const Duration(days: 7));
-      final weeklyCompleted = assignments.where((assignment) {
-        if (assignment.statusDisplayName.toLowerCase() != 'completed') return false;
-        final completedDate = DateTime.tryParse(assignment.assignedAt) ?? DateTime.now();
-        return completedDate.isAfter(weekAgo);
+      final weeklyCompleted = inspections.where((inspection) {
+        // Check if inspection is completed (same logic as reports screen)
+        final sectionStatuses = inspection.sectionStatus.values.toList();
+        final isCompleted = sectionStatuses.isNotEmpty && 
+                           !sectionStatuses.contains('in_progress') &&
+                           (sectionStatuses.contains('passed') || sectionStatuses.contains('not_passed'));
+        
+        print('    Weekly check for ${inspection.id}:');
+        print('      Section statuses: $sectionStatuses');
+        print('      Is completed: $isCompleted');
+        
+        if (!isCompleted) return false;
+        
+        // Check if completed within the last week
+        final completedDate = inspection.updatedAt;
+        final isWithinWeek = completedDate.isAfter(weekAgo);
+        if (isWithinWeek) {
+          print('    Weekly completed: ${inspection.id} (${completedDate}) - Status: ${inspection.sectionStatus}');
+        } else {
+          print('    Completed but not this week: ${inspection.id} (${completedDate}) vs weekAgo (${weekAgo})');
+        }
+        return isWithinWeek;
       }).length;
       
-      print('Quick Stats: Today=$todayInspections, Pending=$pendingAssignments, Weekly=$weeklyCompleted');
+      print('Dashboard: Weekly completed count: $weeklyCompleted');
+      
+      // Calculate in-progress inspections (have sections in progress)
+      // Using SAME logic as inspection_reports_screen.dart
+      final inProgressInspections = inspections.where((inspection) {
+        final sectionStatuses = inspection.sectionStatus.values.toList();
+        final hasInProgress = sectionStatuses.contains('in_progress');
+        if (hasInProgress) {
+          print('    In progress: ${inspection.id} (${inspection.sectionStatus})');
+        } else {
+          print('    Not in progress: ${inspection.id} (${inspection.sectionStatus})');
+        }
+        return hasInProgress;
+      }).length;
+      
+      print('Dashboard: In progress count: $inProgressInspections');
+      
+      // Calculate pending inspections (same as in_progress, using reports screen terminology)
+      final pendingInspections = inspections.where((inspection) {
+        final sectionStatuses = inspection.sectionStatus.values.toList();
+        return sectionStatuses.contains('in_progress');
+      }).length;
+      
+      print('Dashboard: Pending inspections count: $pendingInspections');
+      
+      print('Quick Stats: Today=$todayInspections, Weekly=$weeklyCompleted, InProgress=$inProgressInspections, Pending=$pendingInspections');
       
       setState(() {
         _todayInspections = todayInspections;
-        _pendingAssignments = pendingAssignments;
         _weeklyCompleted = weeklyCompleted;
+        _inProgressInspections = inProgressInspections;
+        _pendingInspections = pendingInspections;
         _statsLoading = false;
       });
+      
+      print('Dashboard: Quick stats loaded successfully');
+      print('=== DASHBOARD QUICK STATS END ===');
     } catch (e) {
       print('Error loading quick stats: $e');
+      print('=== DASHBOARD QUICK STATS ERROR ===');
       setState(() {
         _todayInspections = 0;
-        _pendingAssignments = 0;
         _weeklyCompleted = 0;
+        _inProgressInspections = 0;
+        _pendingInspections = 0;
         _statsLoading = false;
       });
     }
@@ -355,13 +443,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final screenHeight = screenSize.height;
     final orientation = MediaQuery.of(context).orientation;
     
-    // Enhanced responsive breakpoints
+    // Enhanced responsive breakpoints (same as main.dart)
     final isTablet = screenWidth > 600;
     final isLargeTablet = screenWidth > 900;
+    final isSmallScreen = screenHeight < 600;
     final isVerySmallScreen = screenHeight < 500;
     final isLandscape = orientation == Orientation.landscape;
     
-    // Dynamic scaling based on screen size and orientation
+    // Dynamic scaling based on screen size and orientation (same as main.dart)
     final double baseHeight = isLandscape ? 600.0 : 800.0;
     final double scale = (screenHeight / baseHeight).clamp(0.6, 1.3);
     final double smallScreenScale = isVerySmallScreen ? 0.8 : 1.0;
@@ -393,31 +482,31 @@ class _DashboardScreenState extends State<DashboardScreen> {
         child: SafeArea(
           child: SingleChildScrollView(
             padding: EdgeInsets.symmetric(
-              horizontal: (isLargeTablet ? 40.0 : (isTablet ? 32.0 : (isVerySmallScreen ? 12.0 : 16.0))) * finalScale,
-              vertical: (isVerySmallScreen ? 12.0 : 16.0) * finalScale,
+              horizontal: (isLargeTablet ? 40.0 : (isTablet ? 32.0 : (isVerySmallScreen ? 12.0 : (isSmallScreen ? 16.0 : 20.0)))) * finalScale,
+              vertical: (isVerySmallScreen ? 12.0 : (isSmallScreen ? 16.0 : 20.0)) * finalScale,
             ),
             child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // Neumorphic Header Section
-              _buildNeumorphicHeader(context, isTablet),
+              _buildNeumorphicHeader(context, isTablet, isLargeTablet, isSmallScreen, isVerySmallScreen, finalScale),
               
-              const SizedBox(height: 24),
+              SizedBox(height: (isSmallScreen ? 16.0 : 24.0) * finalScale),
               
               // Quick Stats Overview
-              _buildQuickStatsOverview(context, isTablet),
+              _buildQuickStatsOverview(context, isTablet, isLargeTablet, isSmallScreen, isVerySmallScreen, finalScale),
               
-              const SizedBox(height: 24),
+              SizedBox(height: (isSmallScreen ? 16.0 : 24.0) * finalScale),
               
               // Quick Stats Cards
-              _buildQuickStatsSection(context, isTablet),
+              _buildQuickStatsSection(context, isTablet, isLargeTablet, isSmallScreen, isVerySmallScreen, finalScale),
               
-              const SizedBox(height: 24),
+              SizedBox(height: (isSmallScreen ? 16.0 : 24.0) * finalScale),
               
                   // Main Dashboard Grid (includes sync status card)
-              _buildDashboardGrid(context, isTablet),
+              _buildDashboardGrid(context, isTablet, isLargeTablet, isSmallScreen, isVerySmallScreen, finalScale),
               
-                  const SizedBox(height: 100), // Extra space for bottom navbar
+                  SizedBox(height: (isSmallScreen ? 60.0 : 100.0) * finalScale), // Extra space for bottom navbar
             ],
           ),
           ),
@@ -434,32 +523,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
           const ProfileScreen(),
         ],
         ),
-      bottomNavigationBar: _buildBottomNavigationBar(context, isTablet),
+      bottomNavigationBar: _buildBottomNavigationBar(context, isTablet, isLargeTablet, isSmallScreen, isVerySmallScreen, finalScale),
     );
   }
 
-  Widget _buildNeumorphicHeader(BuildContext context, bool isTablet) {
-    final screenSize = MediaQuery.of(context).size;
-    final screenWidth = screenSize.width;
-    final screenHeight = screenSize.height;
-    final orientation = MediaQuery.of(context).orientation;
-    
-    // Enhanced responsive breakpoints
-    final isLargeTablet = screenWidth > 900;
-    final isVerySmallScreen = screenHeight < 500;
-    final isLandscape = orientation == Orientation.landscape;
-    
-    // Dynamic scaling
-    final double baseHeight = isLandscape ? 600.0 : 800.0;
-    final double scale = (screenHeight / baseHeight).clamp(0.6, 1.3);
-    final double smallScreenScale = isVerySmallScreen ? 0.8 : 1.0;
-    final double finalScale = scale * smallScreenScale;
-    
+  Widget _buildNeumorphicHeader(BuildContext context, bool isTablet, bool isLargeTablet, bool isSmallScreen, bool isVerySmallScreen, double finalScale) {
     return Container(
-      padding: EdgeInsets.all((isLargeTablet ? 28.0 : (isTablet ? 24.0 : (isVerySmallScreen ? 16.0 : 20.0))) * finalScale),
+      padding: EdgeInsets.all((isLargeTablet ? 28.0 : (isTablet ? 24.0 : (isVerySmallScreen ? 16.0 : (isSmallScreen ? 18.0 : 20.0)))) * finalScale),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(20 * finalScale),
+        borderRadius: BorderRadius.circular((isLargeTablet ? 20.0 : (isTablet ? 18.0 : (isVerySmallScreen ? 12.0 : (isSmallScreen ? 14.0 : 16.0)))) * finalScale),
         border: Border.all(color: const Color(0xFFE2E8F0), width: 1),
         boxShadow: const [
           BoxShadow(
@@ -479,31 +552,31 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 Text(
                   'Good ${_getGreeting()}',
                   style: TextStyle(
-                    fontSize: isTablet ? 18 : 16,
+                    fontSize: (isLargeTablet ? 20.0 : (isTablet ? 18.0 : (isVerySmallScreen ? 12.0 : (isSmallScreen ? 14.0 : 16.0)))) * finalScale,
                     color: const Color(0xFF6B7280),
                     fontWeight: FontWeight.w500,
                   ),
                 ),
-                const SizedBox(height: 4),
+                SizedBox(height: (isVerySmallScreen ? 2.0 : 4.0) * finalScale),
                 Text(
                   currentUser?.name ?? 'Inspector',
                   style: TextStyle(
-                    fontSize: isTablet ? 28 : 24,
+                    fontSize: (isLargeTablet ? 32.0 : (isTablet ? 28.0 : (isVerySmallScreen ? 18.0 : (isSmallScreen ? 20.0 : 24.0)))) * finalScale,
                     fontWeight: FontWeight.bold,
                     color: const Color(0xFF1F2937),
                   ),
                 ),
-                const SizedBox(height: 8),
+                SizedBox(height: (isVerySmallScreen ? 4.0 : 8.0) * finalScale),
               
               ],
             ),
           ),
           Container(
-            width: isTablet ? 60 : 50,
-            height: isTablet ? 60 : 50,
+            width: (isLargeTablet ? 70.0 : (isTablet ? 60.0 : (isVerySmallScreen ? 40.0 : (isSmallScreen ? 45.0 : 50.0)))) * finalScale,
+            height: (isLargeTablet ? 70.0 : (isTablet ? 60.0 : (isVerySmallScreen ? 40.0 : (isSmallScreen ? 45.0 : 50.0)))) * finalScale,
             decoration: BoxDecoration(
               color: Colors.white,
-              borderRadius: BorderRadius.circular(isTablet ? 30 : 25),
+              borderRadius: BorderRadius.circular((isLargeTablet ? 35.0 : (isTablet ? 30.0 : (isVerySmallScreen ? 20.0 : (isSmallScreen ? 22.5 : 25.0)))) * finalScale),
               border: Border.all(color: const Color(0xFFE2E8F0), width: 1),
               boxShadow: const [
                 BoxShadow(
@@ -517,12 +590,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
             child: Material(
               color: Colors.transparent,
               child: InkWell(
-                borderRadius: BorderRadius.circular(isTablet ? 30 : 25),
+                borderRadius: BorderRadius.circular((isLargeTablet ? 35.0 : (isTablet ? 30.0 : (isVerySmallScreen ? 20.0 : (isSmallScreen ? 22.5 : 25.0)))) * finalScale),
                 onTap: _showLogoutConfirmation,
                 child: Icon(
                   Icons.logout_rounded,
                   color: const Color.fromRGBO(8, 111, 222, 0.977),
-                  size: isTablet ? 28 : 24,
+                  size: (isLargeTablet ? 32.0 : (isTablet ? 28.0 : (isVerySmallScreen ? 18.0 : (isSmallScreen ? 20.0 : 24.0)))) * finalScale,
                 ),
               ),
             ),
@@ -532,7 +605,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildQuickStatsSection(BuildContext context, bool isTablet) {
+  Widget _buildQuickStatsSection(BuildContext context, bool isTablet, bool isLargeTablet, bool isSmallScreen, bool isVerySmallScreen, double finalScale) {
     return Row(
       children: [
         Expanded(
@@ -541,29 +614,29 @@ class _DashboardScreenState extends State<DashboardScreen> {
             currentUser?.status ?? 'Active',
             Icons.verified_user_rounded,
             _getStatusColor(currentUser?.status),
-            isTablet,
+            isTablet, isLargeTablet, isSmallScreen, isVerySmallScreen, finalScale,
           ),
         ),
-        SizedBox(width: isTablet ? 16 : 12),
+        SizedBox(width: (isLargeTablet ? 20.0 : (isTablet ? 16.0 : (isVerySmallScreen ? 8.0 : (isSmallScreen ? 10.0 : 12.0)))) * finalScale),
         Expanded(
           child: _buildQuickStatCard(
             'Role',
             currentUser?.role ?? 'Inspector',
             Icons.badge_rounded,
             const Color(0xFF10B981),
-            isTablet,
+            isTablet, isLargeTablet, isSmallScreen, isVerySmallScreen, finalScale,
           ),
         ),
       ],
     );
   }
 
-  Widget _buildQuickStatCard(String title, String value, IconData icon, Color color, bool isTablet) {
+  Widget _buildQuickStatCard(String title, String value, IconData icon, Color color, bool isTablet, bool isLargeTablet, bool isSmallScreen, bool isVerySmallScreen, double finalScale) {
     return Container(
-      padding: EdgeInsets.all(isTablet ? 20 : 16),
+      padding: EdgeInsets.all((isLargeTablet ? 24.0 : (isTablet ? 20.0 : (isVerySmallScreen ? 12.0 : (isSmallScreen ? 14.0 : 16.0)))) * finalScale),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular((isLargeTablet ? 18.0 : (isTablet ? 16.0 : (isVerySmallScreen ? 10.0 : (isSmallScreen ? 12.0 : 14.0)))) * finalScale),
         border: Border.all(color: const Color(0xFFE2E8F0), width: 1),
         boxShadow: const [
           BoxShadow(
@@ -578,32 +651,32 @@ class _DashboardScreenState extends State<DashboardScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
-            padding: const EdgeInsets.all(8),
+            padding: EdgeInsets.all((isVerySmallScreen ? 4.0 : (isSmallScreen ? 6.0 : 8.0)) * finalScale),
             decoration: BoxDecoration(
               color: const Color(0xFFF8FAFC),
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular((isVerySmallScreen ? 4.0 : (isSmallScreen ? 6.0 : 8.0)) * finalScale),
               border: Border.all(color: const Color(0xFFE2E8F0), width: 1),
             ),
             child: Icon(
               icon,
               color: color,
-              size: isTablet ? 24 : 20,
+              size: (isLargeTablet ? 28.0 : (isTablet ? 24.0 : (isVerySmallScreen ? 16.0 : (isSmallScreen ? 18.0 : 20.0)))) * finalScale,
             ),
           ),
-          SizedBox(height: isTablet ? 12 : 8),
+          SizedBox(height: (isVerySmallScreen ? 6.0 : (isSmallScreen ? 8.0 : (isTablet ? 12.0 : 8.0))) * finalScale),
           Text(
             title,
             style: TextStyle(
-              fontSize: isTablet ? 14 : 12,
+              fontSize: (isLargeTablet ? 16.0 : (isTablet ? 14.0 : (isVerySmallScreen ? 10.0 : (isSmallScreen ? 11.0 : 12.0)))) * finalScale,
               color: const Color(0xFF6B7280),
               fontWeight: FontWeight.w500,
             ),
           ),
-          const SizedBox(height: 4),
+          SizedBox(height: (isVerySmallScreen ? 2.0 : 4.0) * finalScale),
           Text(
             value,
             style: TextStyle(
-              fontSize: isTablet ? 18 : 16,
+              fontSize: (isLargeTablet ? 20.0 : (isTablet ? 18.0 : (isVerySmallScreen ? 12.0 : (isSmallScreen ? 14.0 : 16.0)))) * finalScale,
               color: const Color(0xFF1F2937),
               fontWeight: FontWeight.bold,
             ),
@@ -614,12 +687,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
 
-  Widget _buildSyncStatusCard(BuildContext context, bool isTablet) {
+  Widget _buildSyncStatusCard(BuildContext context, bool isTablet, bool isLargeTablet, bool isSmallScreen, bool isVerySmallScreen, double finalScale) {
     return Container(
-      padding: EdgeInsets.all(isTablet ? 24 : 20),
+      padding: EdgeInsets.all((isLargeTablet ? 28.0 : (isTablet ? 24.0 : (isVerySmallScreen ? 16.0 : (isSmallScreen ? 18.0 : 20.0)))) * finalScale),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular((isLargeTablet ? 24.0 : (isTablet ? 20.0 : (isVerySmallScreen ? 12.0 : (isSmallScreen ? 14.0 : 16.0)))) * finalScale),
         border: Border.all(
           color: const Color.fromRGBO(8, 111, 222, 0.977),
           width: 2,
@@ -933,15 +1006,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildDashboardGrid(BuildContext context, bool isTablet) {
+  Widget _buildDashboardGrid(BuildContext context, bool isTablet, bool isLargeTablet, bool isSmallScreen, bool isVerySmallScreen, double finalScale) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
        
-        SizedBox(height: isTablet ? 20 : 16),
+        SizedBox(height: (isLargeTablet ? 24.0 : (isTablet ? 20.0 : (isVerySmallScreen ? 12.0 : (isSmallScreen ? 14.0 : 16.0)))) * finalScale),
         
         // Sync Status Card with integrated sync button
-        _buildSyncStatusCard(context, isTablet),
+        _buildSyncStatusCard(context, isTablet, isLargeTablet, isSmallScreen, isVerySmallScreen, finalScale),
       ],
     );
   }
@@ -973,7 +1046,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
 
-  Widget _buildBottomNavigationBar(BuildContext context, bool isTablet) {
+  Widget _buildBottomNavigationBar(BuildContext context, bool isTablet, bool isLargeTablet, bool isSmallScreen, bool isVerySmallScreen, double finalScale) {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
@@ -993,8 +1066,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
       child: SafeArea(
         child: Padding(
           padding: EdgeInsets.symmetric(
-            horizontal: isTablet ? 24 : 16,
-            vertical: isTablet ? 16 : 12,
+            horizontal: (isLargeTablet ? 28.0 : (isTablet ? 24.0 : (isVerySmallScreen ? 12.0 : (isSmallScreen ? 14.0 : 16.0)))) * finalScale,
+            vertical: (isLargeTablet ? 20.0 : (isTablet ? 16.0 : (isVerySmallScreen ? 8.0 : (isSmallScreen ? 10.0 : 12.0)))) * finalScale,
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
@@ -1005,7 +1078,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 label: 'Home',
                 isSelected: _currentIndex == 0,
                 onTap: () => _onNavItemTapped(0),
-                isTablet: isTablet,
+                isTablet: isTablet, isLargeTablet: isLargeTablet, isSmallScreen: isSmallScreen, isVerySmallScreen: isVerySmallScreen, finalScale: finalScale,
               ),
               
               // Assignments
@@ -1014,11 +1087,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 label: 'Assignments',
                 isSelected: _currentIndex == 1,
                 onTap: () => _onNavItemTapped(1),
-                isTablet: isTablet,
+                isTablet: isTablet, isLargeTablet: isLargeTablet, isSmallScreen: isSmallScreen, isVerySmallScreen: isVerySmallScreen, finalScale: finalScale,
               ),
               
               // QR Scanner - Center Button
-              _buildQRScannerButton(isTablet),
+              _buildQRScannerButton(isTablet, isLargeTablet, isSmallScreen, isVerySmallScreen, finalScale),
               
               // Reports
               _buildNavItem(
@@ -1026,7 +1099,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 label: 'Reports',
                 isSelected: _currentIndex == 3,
                 onTap: () => _onNavItemTapped(3),
-                isTablet: isTablet,
+                isTablet: isTablet, isLargeTablet: isLargeTablet, isSmallScreen: isSmallScreen, isVerySmallScreen: isVerySmallScreen, finalScale: finalScale,
               ),
               
               // Profile
@@ -1035,8 +1108,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 label: 'Profile',
                 isSelected: _currentIndex == 4,
                 onTap: () => _onNavItemTapped(4),
-                isTablet: isTablet,
-                    ),
+                isTablet: isTablet, isLargeTablet: isLargeTablet, isSmallScreen: isSmallScreen, isVerySmallScreen: isVerySmallScreen, finalScale: finalScale,
+              ),
                   ],
                 ),
               ),
@@ -1050,17 +1123,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
     required bool isSelected,
     required VoidCallback onTap,
     required bool isTablet,
+    required bool isLargeTablet,
+    required bool isSmallScreen,
+    required bool isVerySmallScreen,
+    required double finalScale,
   }) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
                 padding: EdgeInsets.symmetric(
-          horizontal: isTablet ? 16 : 12,
-          vertical: isTablet ? 12 : 8,
+          horizontal: (isLargeTablet ? 20.0 : (isTablet ? 16.0 : (isVerySmallScreen ? 8.0 : (isSmallScreen ? 10.0 : 12.0)))) * finalScale,
+          vertical: (isLargeTablet ? 16.0 : (isTablet ? 12.0 : (isVerySmallScreen ? 6.0 : (isSmallScreen ? 8.0 : 8.0)))) * finalScale,
                 ),
         decoration: BoxDecoration(
           color: isSelected ? const Color.fromRGBO(8, 111, 222, 0.1) : Colors.transparent,
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular((isLargeTablet ? 16.0 : (isTablet ? 12.0 : (isVerySmallScreen ? 6.0 : (isSmallScreen ? 8.0 : 10.0)))) * finalScale),
                 ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -1070,13 +1147,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
               color: isSelected 
                 ? const Color.fromRGBO(8, 111, 222, 0.977)
                 : const Color(0xFF6B7280),
-              size: isTablet ? 28 : 24,
+              size: (isLargeTablet ? 32.0 : (isTablet ? 28.0 : (isVerySmallScreen ? 18.0 : (isSmallScreen ? 20.0 : 24.0)))) * finalScale,
             ),
-            SizedBox(height: isTablet ? 6 : 4),
+            SizedBox(height: (isVerySmallScreen ? 3.0 : (isSmallScreen ? 4.0 : (isTablet ? 6.0 : 4.0))) * finalScale),
                   Text(
               label,
                     style: TextStyle(
-                fontSize: isTablet ? 12 : 10,
+                fontSize: (isLargeTablet ? 14.0 : (isTablet ? 12.0 : (isVerySmallScreen ? 8.0 : (isSmallScreen ? 9.0 : 10.0)))) * finalScale,
                 color: isSelected 
                   ? const Color.fromRGBO(8, 111, 222, 0.977)
                   : const Color(0xFF6B7280),
@@ -1089,12 +1166,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildQRScannerButton(bool isTablet) {
+  Widget _buildQRScannerButton(bool isTablet, bool isLargeTablet, bool isSmallScreen, bool isVerySmallScreen, double finalScale) {
     return GestureDetector(
       onTap: () => _onNavItemTapped(2),
       child: Container(
-        width: isTablet ? 80 : 70,
-        height: isTablet ? 80 : 70,
+        width: (isLargeTablet ? 90.0 : (isTablet ? 80.0 : (isVerySmallScreen ? 50.0 : (isSmallScreen ? 60.0 : 70.0)))) * finalScale,
+        height: (isLargeTablet ? 90.0 : (isTablet ? 80.0 : (isVerySmallScreen ? 50.0 : (isSmallScreen ? 60.0 : 70.0)))) * finalScale,
       decoration: BoxDecoration(
           gradient: const LinearGradient(
             begin: Alignment.topLeft,
@@ -1104,7 +1181,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               Color.fromRGBO(22, 127, 239, 0.976),
             ],
           ),
-          borderRadius: BorderRadius.circular(isTablet ? 40 : 35),
+          borderRadius: BorderRadius.circular((isLargeTablet ? 45.0 : (isTablet ? 40.0 : (isVerySmallScreen ? 25.0 : (isSmallScreen ? 30.0 : 35.0)))) * finalScale),
           boxShadow: [
           BoxShadow(
               color: const Color.fromRGBO(8, 111, 222, 0.3),
@@ -1120,14 +1197,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
             Icon(
               Icons.qr_code_scanner_rounded,
               color: Colors.white,
-                          size: isTablet ? 32 : 28,
+                          size: (isLargeTablet ? 36.0 : (isTablet ? 32.0 : (isVerySmallScreen ? 20.0 : (isSmallScreen ? 24.0 : 28.0)))) * finalScale,
                         ),
-            SizedBox(height: isTablet ? 4 : 2),
+            SizedBox(height: (isVerySmallScreen ? 2.0 : (isSmallScreen ? 3.0 : (isTablet ? 4.0 : 2.0))) * finalScale),
                 Text(
               'Scan',
                   style: TextStyle(
                 color: Colors.white,
-                      fontSize: isTablet ? 12 : 10,
+                      fontSize: (isLargeTablet ? 14.0 : (isTablet ? 12.0 : (isVerySmallScreen ? 8.0 : (isSmallScreen ? 9.0 : 10.0)))) * finalScale,
                 fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -1175,23 +1252,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildQuickStatsOverview(BuildContext context, bool isTablet) {
-    final screenSize = MediaQuery.of(context).size;
-    final screenWidth = screenSize.width;
-    final screenHeight = screenSize.height;
-    final orientation = MediaQuery.of(context).orientation;
-    
-    // Enhanced responsive breakpoints
-    final isLargeTablet = screenWidth > 900;
-    final isVerySmallScreen = screenHeight < 500;
-    final isLandscape = orientation == Orientation.landscape;
-    final isSmallPhone = screenWidth < 400;
-    
-    // Dynamic scaling
-    final double baseHeight = isLandscape ? 600.0 : 800.0;
-    final double scale = (screenHeight / baseHeight).clamp(0.6, 1.3);
-    final double smallScreenScale = isVerySmallScreen ? 0.8 : 1.0;
-    final double finalScale = scale * smallScreenScale;
+  Widget _buildQuickStatsOverview(BuildContext context, bool isTablet, bool isLargeTablet, bool isSmallScreen, bool isVerySmallScreen, double finalScale) {
     
     return Container(
       width: double.infinity,
@@ -1238,15 +1299,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
           
           // Stats Grid
           if (_statsLoading)
-            _buildStatsLoading(isTablet, isSmallPhone, isLandscape, finalScale)
+            _buildStatsLoading(isTablet, isLargeTablet, isSmallScreen, isVerySmallScreen, finalScale)
           else
-            _buildStatsGrid(isTablet, isSmallPhone, isLandscape, finalScale),
+            _buildStatsGrid(isTablet, isLargeTablet, isSmallScreen, isVerySmallScreen, finalScale),
         ],
       ),
     );
   }
 
-  Widget _buildStatsLoading(bool isTablet, bool isSmallPhone, bool isLandscape, double finalScale) {
+  Widget _buildStatsLoading(bool isTablet, bool isLargeTablet, bool isSmallScreen, bool isVerySmallScreen, double finalScale) {
     return Container(
       height: (isTablet ? 80 : 70) * finalScale,
       child: Row(
@@ -1277,18 +1338,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildStatsGrid(bool isTablet, bool isSmallPhone, bool isLandscape, double finalScale) {
+  Widget _buildStatsGrid(bool isTablet, bool isLargeTablet, bool isSmallScreen, bool isVerySmallScreen, double finalScale) {
+    print('Dashboard: Building stats grid with finalScale: $finalScale');
     // For very small phones or landscape mode, use 2x2 grid
-    if (isSmallPhone || (isLandscape && !isTablet)) {
+    if (isVerySmallScreen || (isSmallScreen && !isTablet)) {
       return Column(
         children: [
-          // First row
+          // First row - 2 items
           Row(
             children: [
               Expanded(
                 child: _buildOverviewStatCard(
                   'Today\'s\nInspections',
-                  _todayInspections.toString(),
+                  (_todayInspections ?? 0).toString(),
                   Icons.calendar_today_outlined,
                   const Color.fromRGBO(8, 111, 222, 0.977),
                   isTablet,
@@ -1298,10 +1360,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
               SizedBox(width: 8 * finalScale),
               Expanded(
                 child: _buildOverviewStatCard(
-                  'Pending\nAssignments',
-                  _pendingAssignments.toString(),
-                  Icons.pending_actions_outlined,
-                  const Color(0xFFF59E0B),
+                  'Pending\nInspections',
+                  (_pendingInspections ?? 0).toString(),
+                  Icons.hourglass_empty_outlined,
+                  const Color(0xFF8B5CF6),
                   isTablet,
                   finalScale,
                 ),
@@ -1309,13 +1371,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ],
           ),
           SizedBox(height: 8 * finalScale),
-          // Second row
+          // Second row - 2 items
           Row(
             children: [
               Expanded(
                 child: _buildOverviewStatCard(
                   'Completed\nThis Week',
-                  _weeklyCompleted.toString(),
+                  (_weeklyCompleted ?? 0).toString(),
                   Icons.check_circle_outline,
                   const Color(0xFF10B981),
                   isTablet,
@@ -1325,10 +1387,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
               SizedBox(width: 8 * finalScale),
               Expanded(
                 child: _buildOverviewStatCard(
-                  'Sync\nStatus',
-                  _hasOfflineData ? 'Online' : 'Offline',
-                  _hasOfflineData ? Icons.cloud_done_outlined : Icons.cloud_off_outlined,
-                  _hasOfflineData ? const Color(0xFF10B981) : const Color(0xFFEF4444),
+                  'In Progress',
+                  (_inProgressInspections ?? 0).toString(),
+                  Icons.timeline_outlined,
+                  const Color(0xFF06B6D4),
                   isTablet,
                   finalScale,
                 ),
@@ -1346,48 +1408,48 @@ class _DashboardScreenState extends State<DashboardScreen> {
         Expanded(
           child: _buildOverviewStatCard(
             'Today\'s\nInspections',
-            _todayInspections.toString(),
+            (_todayInspections ?? 0).toString(),
             Icons.calendar_today_outlined,
             const Color.fromRGBO(8, 111, 222, 0.977),
             isTablet,
             finalScale,
           ),
         ),
-        SizedBox(width: 8 * finalScale),
+        SizedBox(width: 6 * finalScale),
         
-        // Pending Assignments
+        // Pending Inspections
         Expanded(
           child: _buildOverviewStatCard(
-            'Pending\nAssignments',
-            _pendingAssignments.toString(),
-            Icons.pending_actions_outlined,
-            const Color(0xFFF59E0B),
+            'Pending\nInspections',
+            (_pendingInspections ?? 0).toString(),
+            Icons.hourglass_empty_outlined,
+            const Color(0xFF8B5CF6),
             isTablet,
             finalScale,
           ),
         ),
-        SizedBox(width: 8 * finalScale),
+        SizedBox(width: 6 * finalScale),
         
         // Weekly Completed
         Expanded(
           child: _buildOverviewStatCard(
             'Completed\nThis Week',
-            _weeklyCompleted.toString(),
+            (_weeklyCompleted ?? 0).toString(),
             Icons.check_circle_outline,
             const Color(0xFF10B981),
             isTablet,
             finalScale,
           ),
         ),
-        SizedBox(width: 8 * finalScale),
+        SizedBox(width: 6 * finalScale),
         
-        // Sync Status
+        // In Progress
         Expanded(
           child: _buildOverviewStatCard(
-            'Sync\nStatus',
-            _hasOfflineData ? 'Online' : 'Offline',
-            _hasOfflineData ? Icons.cloud_done_outlined : Icons.cloud_off_outlined,
-            _hasOfflineData ? const Color(0xFF10B981) : const Color(0xFFEF4444),
+            'In Progress',
+            (_inProgressInspections ?? 0).toString(),
+            Icons.timeline_outlined,
+            const Color(0xFF06B6D4),
             isTablet,
             finalScale,
           ),
@@ -1397,6 +1459,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildOverviewStatCard(String title, String value, IconData icon, Color color, bool isTablet, double finalScale) {
+    print('Dashboard: Building stat card - title: $title, value: "$value", finalScale: $finalScale');
     return Container(
       padding: EdgeInsets.all((isTablet ? 16 : 12) * finalScale),
       decoration: BoxDecoration(

@@ -68,6 +68,9 @@ dependencies:
   image_picker: ^1.0.4
   camera: ^0.10.5+5
   video_player: ^2.8.1
+  
+  # URL launcher for opening external apps
+  url_launcher: ^6.2.2
 
 dev_dependencies:
   flutter_test:

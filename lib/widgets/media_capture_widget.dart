@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:video_player/video_player.dart';
 import 'dart:io';
@@ -253,12 +254,28 @@ class _MediaCaptureWidgetState extends State<MediaCaptureWidget> {
                     ),
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(8),
-                      child: Image.file(
-                        File(widget.imagePaths[index]),
-                        fit: BoxFit.cover,
-                        width: double.infinity,
-                        height: double.infinity,
-                      ),
+                      child: kIsWeb 
+                        ? Image.network(
+                            widget.imagePaths[index],
+                            fit: BoxFit.cover,
+                            width: double.infinity,
+                            height: double.infinity,
+                            errorBuilder: (context, error, stackTrace) {
+                              return Container(
+                                color: Colors.grey[300],
+                                child: const Icon(
+                                  Icons.image_not_supported,
+                                  color: Colors.grey,
+                                ),
+                              );
+                            },
+                          )
+                        : Image.file(
+                            File(widget.imagePaths[index]),
+                            fit: BoxFit.cover,
+                            width: double.infinity,
+                            height: double.infinity,
+                          ),
                     ),
                   ),
                   Positioned(
@@ -428,7 +445,11 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
 
   Future<void> _initializeVideo() async {
     try {
-      _controller = VideoPlayerController.file(File(widget.videoPath));
+      if (kIsWeb) {
+        _controller = VideoPlayerController.network(widget.videoPath);
+      } else {
+        _controller = VideoPlayerController.file(File(widget.videoPath));
+      }
       
       // Add error listener
       _controller!.addListener(() {
