@@ -71,6 +71,12 @@ dependencies:
   
   # URL launcher for opening external apps
   url_launcher: ^6.2.2
+  
+  # Share functionality
+  share_plus: ^7.2.1
+  
+  # Email functionality
+  flutter_email_sender: ^8.0.0
 
 dev_dependencies:
   flutter_test:

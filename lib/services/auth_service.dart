@@ -11,14 +11,15 @@ class AuthService {
   static const String _tokenKey = 'auth_token';
   static const String _rememberKey = 'remember_me';
 
-  /// Login user with username and password
+  /// Enhanced login with connectivity and sync validation
   static Future<LoginResponse> login(String username, String password, {bool remember = false}) async {
     try {
       final connectivityService = ConnectivityService();
       
       // Check if online
       if (connectivityService.isConnected) {
-        // Online login
+        // Online login - allow login when connected to server
+        // User can sync data after logging in
         final request = LoginRequest(
           username: username,
           password: password,
@@ -33,7 +34,7 @@ class AuthService {
         if (loginResponse.success && loginResponse.data != null) {
           // Store user data and session
           await _storeUserSession(loginResponse.data!.user, remember);
-          // Save to offline storage
+          // Update offline storage with latest user data
           await OfflineStorage.saveUser(loginResponse.data!.user);
         }
         
@@ -193,4 +194,55 @@ class AuthService {
       return false;
     }
   }
+
+  /// Check connectivity and sync status for login validation
+  static Future<ConnectivitySyncStatus> checkConnectivityAndSyncStatus() async {
+    try {
+      final connectivityService = ConnectivityService();
+      final syncStatus = await OfflineSyncService.getSyncStatus();
+      
+      return ConnectivitySyncStatus(
+        isConnected: connectivityService.isConnected,
+        hasSyncedData: syncStatus.hasData,
+        lastSyncTime: syncStatus.lastSync,
+        syncSuccess: syncStatus.isSuccess,
+      );
+    } catch (e) {
+      return ConnectivitySyncStatus(
+        isConnected: false,
+        hasSyncedData: false,
+        lastSyncTime: null,
+        syncSuccess: false,
+      );
+    }
+  }
+
+  /// Get login status message based on connectivity and sync
+  static Future<String> getLoginStatusMessage() async {
+    final status = await checkConnectivityAndSyncStatus();
+    
+    if (status.isConnected && status.hasSyncedData) {
+      return 'Ready to login - Connected and data synced';
+    } else if (status.isConnected && !status.hasSyncedData) {
+      return 'Ready to login - Connected to server. You can sync data after logging in.';
+    } else if (!status.isConnected && status.hasSyncedData) {
+      return 'Offline mode - Using synced data';
+    } else {
+      return 'No internet connection and no synced data available. Please connect to internet first.';
+    }
+  }
+}
+
+class ConnectivitySyncStatus {
+  final bool isConnected;
+  final bool hasSyncedData;
+  final DateTime? lastSyncTime;
+  final bool syncSuccess;
+
+  ConnectivitySyncStatus({
+    required this.isConnected,
+    required this.hasSyncedData,
+    this.lastSyncTime,
+    required this.syncSuccess,
+  });
 }

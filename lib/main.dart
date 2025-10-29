@@ -173,7 +173,12 @@ class WelcomePage extends StatelessWidget {
     final descriptionFontSize = (isLargeTablet ? 22.0 : (isTablet ? 19.0 : (isVerySmallScreen ? 13.0 : (isSmallScreen ? 15.0 : 17.0)))) * finalScale;
     final buttonHeight = (isLargeTablet ? 80.0 : (isTablet ? 70.0 : (isVerySmallScreen ? 45.0 : (isSmallScreen ? 50.0 : 65.0)))) * finalScale;
     final secondaryButtonHeight = (isLargeTablet ? 70.0 : (isTablet ? 60.0 : (isVerySmallScreen ? 40.0 : (isSmallScreen ? 45.0 : 55.0)))) * finalScale;
-    final horizontalPadding = (isLargeTablet ? 80.0 : (isTablet ? 60.0 : (isVerySmallScreen ? 16.0 : (isSmallScreen ? 20.0 : 32.0)))) * finalScale;
+    // Improved responsive padding for better tablet centering
+    final horizontalPadding = isLargeTablet 
+        ? screenWidth * 0.08  // 8% of screen width for large tablets
+        : isTablet 
+            ? screenWidth * 0.12  // 12% of screen width for tablets
+            : (isVerySmallScreen ? 16.0 : (isSmallScreen ? 20.0 : 32.0)) * finalScale;
     final verticalSpacing = (isVerySmallScreen ? 15.0 : (isSmallScreen ? 20.0 : 30.0)) * finalScale;
     
     // Additional responsive dimensions for better control
@@ -212,52 +217,45 @@ class WelcomePage extends StatelessWidget {
               logoSize, logoFontSize, titleFontSize, descriptionFontSize,
               buttonHeight, secondaryButtonHeight, landscapeVerticalSpacing,
               isTablet, isLargeTablet, isSmallScreen, isVerySmallScreen
-            ) : SingleChildScrollView(
-              child: ConstrainedBox(
-                constraints: BoxConstraints(
-                  minHeight: screenHeight - MediaQuery.of(context).padding.top - MediaQuery.of(context).padding.bottom,
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    SizedBox(height: isSmallScreen ? 10 : 20),
-                    // Version number at the top right with neumorphism
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: Container(
-                        padding: EdgeInsets.symmetric(
-                          horizontal: (isLargeTablet ? 20.0 : (isTablet ? 16.0 : (isVerySmallScreen ? 8.0 : (isSmallScreen ? 10.0 : 12.0)))) * finalScale, 
-                          vertical: (isLargeTablet ? 12.0 : (isTablet ? 8.0 : (isVerySmallScreen ? 4.0 : (isSmallScreen ? 5.0 : 6.0)))) * finalScale
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular((isLargeTablet ? 20.0 : (isTablet ? 15.0 : (isVerySmallScreen ? 8.0 : (isSmallScreen ? 10.0 : 12.0)))) * finalScale),
-                          border: Border.all(color: const Color.fromRGBO(8, 111, 222, 0.977), width: 1),
-                          boxShadow: const [
-                            BoxShadow(
-                              color: Color(0xFFE2E8F0),
-                              offset: Offset(0, 2),
-                              blurRadius: 4,
-                              spreadRadius: 0,
-                            ),
-                          ],
-                        ),
-                        child: Text(
-                          'v0.2.1',
-                          style: TextStyle(
-                            fontSize: versionFontSize,
-                            color: const Color.fromRGBO(8, 111, 222, 0.977),
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
+            ) : Column(
+              children: [
+                // Fixed Ormoc Banner at top
+                Container(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: (isLargeTablet ? 16.0 : (isTablet ? 12.0 : (isVerySmallScreen ? 6.0 : (isSmallScreen ? 8.0 : 10.0)))) * finalScale, 
+                    vertical: (isLargeTablet ? 8.0 : (isTablet ? 6.0 : (isVerySmallScreen ? 3.0 : (isSmallScreen ? 4.0 : 5.0)))) * finalScale
+                  ),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: AssetHelper.loadOrmocBanner(
+                      width: (isLargeTablet ? 200.0 : (isTablet ? 160.0 : (isVerySmallScreen ? 100.0 : (isSmallScreen ? 120.0 : 140.0)))) * finalScale,
+                      height: (isLargeTablet ? 60.0 : (isTablet ? 50.0 : (isVerySmallScreen ? 30.0 : (isSmallScreen ? 35.0 : 40.0)))) * finalScale,
+                      fit: BoxFit.contain,
                     ),
-                    SizedBox(height: isSmallScreen ? 20 : 40),
+                  ),
+                ),
+                Expanded(
+                  child: Center(
+                    child: SingleChildScrollView(
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(
+                          minHeight: screenHeight - MediaQuery.of(context).padding.top - MediaQuery.of(context).padding.bottom - 120,
+                        ),
+                        child: ConstrainedBox(
+                          constraints: BoxConstraints(
+                            maxWidth: isTablet ? 600 : double.infinity,
+                          ),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                    SizedBox(height: isSmallScreen ? 10 : 20),
                     // Logo + BO text combined
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
+                    Center(
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
                         // Logo as the "O"
                         Container(
                           width: logoSize,
@@ -292,19 +290,22 @@ class WelcomePage extends StatelessWidget {
                             fontWeight: FontWeight.w900,
                             color: const Color.fromRGBO(8, 111, 222, 0.977),
                             letterSpacing: 2,
-                            height: 1.1,
+                            height: 1.5,
                           ),
                         ),
                       ],
                     ),
+                  ),
                     SizedBox(height: verticalSpacing),
                     // Simple subtitle without neumorphism
-                    Text(
-                      'Office of Building Official',
-                      style: TextStyle(
-                        fontSize: titleFontSize,
-                        color: const Color(0xFF1F2937),
-                        fontWeight: FontWeight.w600,
+                    Center(
+                      child: Text(
+                        'Office of Building Official',
+                        style: TextStyle(
+                          fontSize: titleFontSize,
+                          color: const Color(0xFF1F2937),
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ),
                     SizedBox(height: verticalSpacing),
@@ -524,9 +525,33 @@ class WelcomePage extends StatelessWidget {
                       ),
                     ),
                     SizedBox(height: (isLargeTablet ? 20.0 : (isTablet ? 16.0 : (isVerySmallScreen ? 12.0 : (isSmallScreen ? 14.0 : 18.0)))) * finalScale),
-                  ],
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
                 ),
-              ),
+                // Fixed version number at bottom
+                Container(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: (isLargeTablet ? 16.0 : (isTablet ? 12.0 : (isVerySmallScreen ? 6.0 : (isSmallScreen ? 8.0 : 10.0)))) * finalScale, 
+                    vertical: (isLargeTablet ? 8.0 : (isTablet ? 6.0 : (isVerySmallScreen ? 3.0 : (isSmallScreen ? 4.0 : 5.0)))) * finalScale
+                  ),
+                
+                  child: Align(
+                    alignment: Alignment.centerRight,
+                    child: Text(
+                      'v0.2.0',
+                      style: TextStyle(
+                        fontSize: versionFontSize,
+                        color: const Color.fromRGBO(8, 111, 222, 0.977),
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ),
@@ -551,204 +576,235 @@ class WelcomePage extends StatelessWidget {
     bool isSmallScreen,
     bool isVerySmallScreen,
   ) {
-    return SingleChildScrollView(
-      child: ConstrainedBox(
-        constraints: BoxConstraints(
-          minHeight: screenHeight - MediaQuery.of(context).padding.top - MediaQuery.of(context).padding.bottom,
+    return Column(
+      children: [
+        // Fixed Ormoc Banner at top for landscape
+        Container(
+          padding: EdgeInsets.symmetric(
+            horizontal: (isLargeTablet ? 16.0 : (isTablet ? 12.0 : (isVerySmallScreen ? 6.0 : (isSmallScreen ? 8.0 : 10.0)))) * scale, 
+            vertical: (isLargeTablet ? 8.0 : (isTablet ? 6.0 : (isVerySmallScreen ? 3.0 : (isSmallScreen ? 4.0 : 5.0)))) * scale
+          ),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: AssetHelper.loadOrmocBanner(
+              width: (isLargeTablet ? 200.0 : (isTablet ? 160.0 : (isVerySmallScreen ? 100.0 : (isSmallScreen ? 120.0 : 140.0)))) * scale,
+              height: (isLargeTablet ? 60.0 : (isTablet ? 50.0 : (isVerySmallScreen ? 30.0 : (isSmallScreen ? 35.0 : 40.0)))) * scale,
+              fit: BoxFit.contain,
+            ),
+          ),
         ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            // Left side - Logo and title
-            Expanded(
-              flex: 2,
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  SizedBox(height: verticalSpacing),
-                  // Logo + BO text
-                  Row(
+        Expanded(
+          child: Center(
+            child: SingleChildScrollView(
+              child: Padding(
+                padding: EdgeInsets.all(20 * scale),
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxWidth: isTablet ? 600 : double.infinity,
+                  ),
+                  child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Container(
-                        width: logoSize * 0.8,
-                        height: logoSize * 0.8,
-                        decoration: BoxDecoration(
-                          color: const Color.fromRGBO(8, 111, 222, 0.977),
-                          borderRadius: BorderRadius.circular(logoSize * 0.4),
-                          boxShadow: const [
-                            BoxShadow(
-                              color: Color(0xFFE2E8F0),
-                              offset: Offset(0, 4),
-                              blurRadius: 8,
-                              spreadRadius: 0,
-                            ),
-                          ],
-                        ),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(logoSize * 0.4),
-                          child: AssetHelper.loadOrmocSeal(
-                            width: logoSize * 0.5,
-                            height: logoSize * 0.5,
-                            fit: BoxFit.contain,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Text(
-                        'BO',
-                        style: TextStyle(
-                          fontSize: logoFontSize * 0.8,
-                          fontWeight: FontWeight.w900,
-                          color: const Color.fromRGBO(8, 111, 222, 0.977),
-                          letterSpacing: 2,
-                          height: 1.1,
-                        ),
+            // Logo + BO text
+            Center(
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                Container(
+                  width: logoSize * 0.8,
+                  height: logoSize * 0.8,
+                  decoration: BoxDecoration(
+                    color: const Color.fromRGBO(8, 111, 222, 0.977),
+                    borderRadius: BorderRadius.circular(logoSize * 0.4),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Color(0xFFE2E8F0),
+                        offset: Offset(0, 4),
+                        blurRadius: 8,
+                        spreadRadius: 0,
                       ),
                     ],
                   ),
-                  SizedBox(height: verticalSpacing * 0.5),
-                  Text(
-                    'Office of Building Official',
-                    style: TextStyle(
-                      fontSize: titleFontSize * 0.8,
-                      color: const Color(0xFF1F2937),
-                      fontWeight: FontWeight.w600,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(logoSize * 0.4),
+                    child: AssetHelper.loadOrmocSeal(
+                      width: logoSize * 0.5,
+                      height: logoSize * 0.5,
+                      fit: BoxFit.contain,
                     ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Text(
+                  'BO',
+                  style: TextStyle(
+                    fontSize: logoFontSize * 0.8,
+                    fontWeight: FontWeight.w900,
+                    color: const Color.fromRGBO(8, 111, 222, 0.977),
+                    letterSpacing: 2,
+                    height: 1.1,
+                  ),
+                ),
+              ],
+            ),
+          ),
+            SizedBox(height: verticalSpacing * 0.5),
+            Center(
+              child: Text(
+                'Office of Building Official',
+                style: TextStyle(
+                  fontSize: titleFontSize * 0.8,
+                  color: const Color(0xFF1F2937),
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            SizedBox(height: verticalSpacing),
+            Text(
+              'Mobile application for building inspectors to efficiently manage inspections, track compliance, and streamline official processes across the field and office.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: descriptionFontSize * 0.9,
+                color: const Color(0xFF6B7280),
+                height: 1.6,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            SizedBox(height: verticalSpacing),
+            // Buttons in landscape
+            Container(
+              width: double.infinity,
+              height: buttonHeight * 0.8,
+              decoration: BoxDecoration(
+                color: const Color.fromRGBO(8, 111, 222, 0.977),
+                borderRadius: BorderRadius.circular(buttonHeight * 0.4),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Color(0xFFE2E8F0),
+                    offset: Offset(0, 4),
+                    blurRadius: 8,
+                    spreadRadius: 0,
                   ),
                 ],
               ),
-            ),
-            // Right side - Description and buttons
-            Expanded(
-              flex: 3,
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    'Mobile application for building inspectors to efficiently manage inspections, track compliance, and streamline official processes across the field and office.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: descriptionFontSize * 0.9,
-                      color: const Color(0xFF6B7280),
-                      height: 1.6,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  SizedBox(height: verticalSpacing),
-                  // Buttons in landscape
-                  Container(
-                    width: double.infinity,
-                    height: buttonHeight * 0.8,
-                    decoration: BoxDecoration(
-                      color: const Color.fromRGBO(8, 111, 222, 0.977),
-                      borderRadius: BorderRadius.circular(buttonHeight * 0.4),
-                      boxShadow: const [
-                        BoxShadow(
-                          color: Color(0xFFE2E8F0),
-                          offset: Offset(0, 4),
-                          blurRadius: 8,
-                          spreadRadius: 0,
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(buttonHeight * 0.4),
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const LoginPage(),
+                      ),
+                    );
+                  },
+                  child: Center(
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          'Get Started',
+                          style: TextStyle(
+                            fontSize: titleFontSize * 0.6,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white,
+                            letterSpacing: 1,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Icon(
+                          Icons.arrow_forward_rounded,
+                          color: Colors.white,
+                          size: titleFontSize * 0.7,
                         ),
                       ],
                     ),
-                    child: Material(
-                      color: Colors.transparent,
-                      child: InkWell(
-                        borderRadius: BorderRadius.circular(buttonHeight * 0.4),
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => const LoginPage(),
-                            ),
-                          );
-                        },
-                        child: Center(
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Text(
-                                'Get Started',
-                                style: TextStyle(
-                                  fontSize: titleFontSize * 0.6,
-                                  fontWeight: FontWeight.w700,
-                                  color: Colors.white,
-                                  letterSpacing: 1,
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Icon(
-                                Icons.arrow_forward_rounded,
-                                color: Colors.white,
-                                size: titleFontSize * 0.7,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
                   ),
-                  SizedBox(height: verticalSpacing * 0.5),
-                  Container(
-                    width: double.infinity,
-                    height: secondaryButtonHeight * 0.8,
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(secondaryButtonHeight * 0.4),
-                      border: Border.all(color: const Color.fromRGBO(8, 111, 222, 0.977), width: 2),
-                      boxShadow: const [
-                        BoxShadow(
-                          color: Color(0xFFE2E8F0),
-                          offset: Offset(0, 2),
-                          blurRadius: 4,
-                          spreadRadius: 0,
-                        ),
-                      ],
-                    ),
-                    child: Material(
-                      color: Colors.transparent,
-                      child: InkWell(
-                        borderRadius: BorderRadius.circular(secondaryButtonHeight * 0.4),
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => const DebugScreen(),
-                            ),
-                          );
-                        },
-                        child: Center(
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                Icons.settings_outlined,
-                                color: const Color.fromRGBO(8, 111, 222, 0.977),
-                                size: titleFontSize * 0.6,
-                              ),
-                              const SizedBox(width: 8),
-                              Text(
-                                'Debug & Setup',
-                                style: TextStyle(
-                                  fontSize: titleFontSize * 0.5,
-                                  fontWeight: FontWeight.w600,
-                                  color: const Color.fromRGBO(8, 111, 222, 0.977),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  SizedBox(height: verticalSpacing),
-                ],
+                ),
               ),
             ),
-          ],
+            SizedBox(height: verticalSpacing * 0.5),
+            Container(
+              width: double.infinity,
+              height: secondaryButtonHeight * 0.8,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(secondaryButtonHeight * 0.4),
+                border: Border.all(color: const Color.fromRGBO(8, 111, 222, 0.977), width: 2),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Color(0xFFE2E8F0),
+                    offset: Offset(0, 2),
+                    blurRadius: 4,
+                    spreadRadius: 0,
+                  ),
+                ],
+              ),
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(secondaryButtonHeight * 0.4),
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const DebugScreen(),
+                      ),
+                    );
+                  },
+                  child: Center(
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.settings_outlined,
+                          color: const Color.fromRGBO(8, 111, 222, 0.977),
+                          size: titleFontSize * 0.6,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Debug & Setup',
+                          style: TextStyle(
+                            fontSize: titleFontSize * 0.5,
+                            fontWeight: FontWeight.w600,
+                            color: const Color.fromRGBO(8, 111, 222, 0.977),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            SizedBox(height: verticalSpacing),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
         ),
-      ),
+        // Fixed version number at bottom for landscape
+        Container(
+          padding: EdgeInsets.symmetric(
+            horizontal: (isLargeTablet ? 16.0 : (isTablet ? 12.0 : (isVerySmallScreen ? 6.0 : (isSmallScreen ? 8.0 : 10.0)))) * scale, 
+            vertical: (isLargeTablet ? 8.0 : (isTablet ? 6.0 : (isVerySmallScreen ? 3.0 : (isSmallScreen ? 4.0 : 5.0)))) * scale
+          ),
+       
+          child: Align(
+            alignment: Alignment.centerRight,
+            child: Text(
+              'v0.2.0',
+              style: TextStyle(
+                fontSize: (isLargeTablet ? 18.0 : (isTablet ? 16.0 : (isVerySmallScreen ? 10.0 : (isSmallScreen ? 12.0 : 14.0)))) * scale,
+                color: const Color.fromRGBO(8, 111, 222, 0.977),
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -767,12 +823,33 @@ class _LoginPageState extends State<LoginPage> {
   bool _obscurePassword = true;
   bool _rememberMe = false;
   bool _isLoading = false;
+  String _connectivityStatus = 'Checking connection...';
+  bool _isConnected = false;
+  bool _hasSyncedData = false;
 
   @override
-  void dispose() {
-    _usernameController.dispose();
-    _passwordController.dispose();
-    super.dispose();
+  void initState() {
+    super.initState();
+    _checkConnectivityStatus();
+  }
+
+  Future<void> _checkConnectivityStatus() async {
+    try {
+      final status = await AuthService.checkConnectivityAndSyncStatus();
+      final message = await AuthService.getLoginStatusMessage();
+      
+      setState(() {
+        _isConnected = status.isConnected;
+        _hasSyncedData = status.hasSyncedData;
+        _connectivityStatus = message;
+      });
+    } catch (e) {
+      setState(() {
+        _connectivityStatus = 'Error checking connection: $e';
+        _isConnected = false;
+        _hasSyncedData = false;
+      });
+    }
   }
 
   Future<void> _login() async {
@@ -920,7 +997,88 @@ class _LoginPageState extends State<LoginPage> {
                         ),
                       ),
                     ),
-                    SizedBox(height: isSmallScreen ? 30 : 50),
+                    SizedBox(height: isSmallScreen ? 20 : 30),
+                    // Connectivity Status Indicator
+                    Container(
+                      width: double.infinity,
+                      padding: EdgeInsets.all(12 * finalScale),
+                      decoration: BoxDecoration(
+                        color: _isConnected 
+                            ? Colors.green.shade50
+                            : _hasSyncedData
+                                ? Colors.blue.shade50
+                                : Colors.red.shade50,
+                        borderRadius: BorderRadius.circular(8 * finalScale),
+                        border: Border.all(
+                          color: _isConnected 
+                              ? Colors.green.shade300
+                              : _hasSyncedData
+                                  ? Colors.blue.shade300
+                                  : Colors.red.shade300,
+                          width: 1,
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            _isConnected 
+                                ? Icons.check_circle
+                                : _hasSyncedData
+                                    ? Icons.cloud_done
+                                    : Icons.error,
+                            color: _isConnected 
+                                ? Colors.green.shade600
+                                : _hasSyncedData
+                                    ? Colors.blue.shade600
+                                    : Colors.red.shade600,
+                            size: 20 * finalScale,
+                          ),
+                          SizedBox(width: 8 * finalScale),
+                          Expanded(
+                            child: Text(
+                              _connectivityStatus,
+                              style: TextStyle(
+                                fontSize: (isLargeTablet ? 16.0 : (isTablet ? 14.0 : (isVerySmallScreen ? 10.0 : (isSmallScreen ? 12.0 : 13.0)))) * finalScale,
+                                color: _isConnected 
+                                    ? Colors.green.shade700
+                                    : _hasSyncedData
+                                        ? Colors.blue.shade700
+                                        : Colors.red.shade700,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                          if (_isConnected && !_hasSyncedData)
+                            TextButton(
+                              onPressed: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => const DebugScreen(),
+                                  ),
+                                );
+                              },
+                              child: Text(
+                                'Sync After Login',
+                                style: TextStyle(
+                                  fontSize: (isLargeTablet ? 14.0 : (isTablet ? 12.0 : (isVerySmallScreen ? 9.0 : (isSmallScreen ? 10.0 : 11.0)))) * finalScale,
+                                  color: Colors.green.shade700,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          IconButton(
+                            onPressed: _checkConnectivityStatus,
+                            icon: Icon(
+                              Icons.refresh,
+                              size: 18 * finalScale,
+                              color: Colors.grey.shade600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    SizedBox(height: isSmallScreen ? 20 : 30),
                     // Clean Login title without neumorphism
                     Column(
                       children: [

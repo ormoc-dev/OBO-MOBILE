@@ -20,14 +20,13 @@ class _DebugScreenState extends State<DebugScreen> {
   bool _isLoading = false;
   String _connectionStatus = 'Not tested';
   String _localIp = 'Unknown';
-  String _wifiSSID = 'Unknown';
-  String _networkType = 'Unknown';
   String _connectionLatency = 'Not tested';
   SyncStatus? _offlineStatus;
   bool _hasOfflineCredentials = false;
   String _hiveDebugInfo = 'Not checked';
   String _currentBaseUrl = '';
   String _currentIp = '';
+  String _networkInterfacesInfo = 'Not loaded';
   final TextEditingController _ipController = TextEditingController();
   List<Map<String, dynamic>> _apiLogs = [];
   List<String> _errorLogs = [];
@@ -40,7 +39,7 @@ class _DebugScreenState extends State<DebugScreen> {
     _loadUserInfo();
     _loadHiveDebugInfo();
     _loadCustomIp();
-    _loadNetworkInfo();
+    _loadNetworkInterfaces();
   }
 
   @override
@@ -89,39 +88,49 @@ class _DebugScreenState extends State<DebugScreen> {
   }
 
   Future<void> _getLocalIp() async {
-    final ip = await NetworkUtils.getLocalIpAddress();
     setState(() {
-      _localIp = ip ?? 'Unknown';
+      _localIp = 'Loading...';
     });
-  }
-
-  Future<void> _loadNetworkInfo() async {
+    
     try {
-      // Get network interface information
-      final interfaces = await NetworkInterface.list();
-      String wifiSSID = 'Unknown';
-      String networkType = 'Unknown';
-      
-      for (var interface in interfaces) {
-        if (interface.name.toLowerCase().contains('wifi') || 
-            interface.name.toLowerCase().contains('wlan')) {
-          networkType = 'WiFi';
-          break;
-        } else if (interface.name.toLowerCase().contains('ethernet') ||
-                   interface.name.toLowerCase().contains('eth')) {
-          networkType = 'Ethernet';
-          break;
-        }
-      }
-      
+      final ip = await NetworkUtils.getLocalIpAddress();
       setState(() {
-        _wifiSSID = wifiSSID;
-        _networkType = networkType;
+        _localIp = ip ?? 'No IPv4 address found';
       });
     } catch (e) {
       setState(() {
-        _wifiSSID = 'Error: $e';
-        _networkType = 'Error: $e';
+        _localIp = 'Error: $e';
+      });
+    }
+  }
+
+
+  Future<void> _loadNetworkInterfaces() async {
+    try {
+      final interfaces = await NetworkInterface.list();
+      StringBuffer info = StringBuffer();
+      
+      info.writeln('Found ${interfaces.length} network interfaces:');
+      info.writeln();
+      
+      for (var interface in interfaces) {
+        info.writeln('Interface: ${interface.name}');
+        info.writeln('  Index: ${interface.index}');
+        info.writeln('  Addresses: ${interface.addresses.length}');
+        
+        for (var addr in interface.addresses) {
+          info.writeln('    - ${addr.address} (${addr.type})');
+          info.writeln('      Loopback: ${addr.isLoopback}');
+        }
+        info.writeln();
+      }
+      
+      setState(() {
+        _networkInterfacesInfo = info.toString();
+      });
+    } catch (e) {
+      setState(() {
+        _networkInterfacesInfo = 'Error loading interfaces: $e';
       });
     }
   }
@@ -258,10 +267,11 @@ class _DebugScreenState extends State<DebugScreen> {
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: () {
+              _getLocalIp();
               _loadOfflineStatus();
               _loadUserInfo();
               _loadHiveDebugInfo();
-              _loadNetworkInfo();
+              _loadNetworkInterfaces();
               _loadCustomIp();
             },
           ),
@@ -292,19 +302,91 @@ class _DebugScreenState extends State<DebugScreen> {
                 _buildSectionHeader('🌐 Network Status', Icons.wifi),
                 const SizedBox(height: 16),
                 
-                Row(
-                  children: [
-                    Expanded(
-                      child: _buildInfoCard('Local IP', _localIp, onTap: () => _copyToClipboard(_localIp)),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: _buildInfoCard('Network Type', _networkType),
-                    ),
-                  ],
-                ),
+                _buildInfoCard('Local IP', _localIp, onTap: () => _copyToClipboard(_localIp)),
                 
-                _buildInfoCard('WiFi SSID', _wifiSSID),
+                // IP Address Retry Button and Manual Input
+                if (_localIp == 'No IPv4 address found' || _localIp.startsWith('Error:'))
+                  Container(
+                    width: double.infinity,
+                    margin: const EdgeInsets.only(bottom: 16),
+                    child: Column(
+                      children: [
+                        ElevatedButton.icon(
+                          onPressed: _getLocalIp,
+                          icon: const Icon(Icons.refresh),
+                          label: const Text('Retry IP Detection'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color.fromRGBO(8, 111, 222, 0.977),
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: TextField(
+                                controller: TextEditingController(text: '192.168.0.115'),
+                                decoration: const InputDecoration(
+                                  labelText: 'Manual IP (from ipconfig)',
+                                  border: OutlineInputBorder(),
+                                  contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                ),
+                                onSubmitted: (value) {
+                                  if (value.isNotEmpty) {
+                                    setState(() {
+                                      _localIp = value;
+                                    });
+                                  }
+                                },
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            ElevatedButton(
+                              onPressed: () {
+                                final controller = TextEditingController(text: '192.168.0.115');
+                                showDialog(
+                                  context: context,
+                                  builder: (context) => AlertDialog(
+                                    title: const Text('Set Manual IP'),
+                                    content: TextField(
+                                      controller: controller,
+                                      decoration: const InputDecoration(
+                                        labelText: 'IP Address',
+                                        hintText: 'e.g., 192.168.0.115',
+                                      ),
+                                    ),
+                                    actions: [
+                                      TextButton(
+                                        onPressed: () => Navigator.pop(context),
+                                        child: const Text('Cancel'),
+                                      ),
+                                      TextButton(
+                                        onPressed: () {
+                                          setState(() {
+                                            _localIp = controller.text;
+                                          });
+                                          Navigator.pop(context);
+                                        },
+                                        child: const Text('Set'),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF10B981),
+                                foregroundColor: Colors.white,
+                              ),
+                              child: const Text('Set Manual'),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
                 _buildInfoCard('Connection Status', _connectionStatus),
                 _buildInfoCard('Latency', _connectionLatency),
                 
@@ -329,6 +411,14 @@ class _DebugScreenState extends State<DebugScreen> {
                 const SizedBox(height: 16),
                 
                 _buildOfflineDataSection(),
+                const SizedBox(height: 24),
+                
+                // Network Interfaces Debug Info
+                _buildSectionHeader('🔍 Network Interfaces Debug', Icons.network_check),
+                const SizedBox(height: 16),
+                
+                _buildInfoCard('All Network Interfaces', _networkInterfacesInfo),
+                
                 const SizedBox(height: 24),
                 
                 // Troubleshooting
@@ -821,13 +911,16 @@ class _DebugScreenState extends State<DebugScreen> {
           ),
           SizedBox(height: 12),
           Text(
+            '• IPv4 Address Not Showing: Use manual IP input (192.168.0.115)\n'
+            '• NetworkInterface.list() Unsupported: Use retry button or manual input\n'
             '• API Connection Failed: Check XAMPP is running\n'
             '• Wrong IP Address: Update baseUrl in app_config.dart\n'
             '• No Offline Data: Login online and sync first\n'
             '• Can\'t Login Offline: Check credentials were stored\n'
             '• Sync Failed: Check user has assignments in database\n'
             '• Network Issues: Try different IP or check firewall\n'
-            '• App Crashes: Clear app data and restart',
+            '• App Crashes: Clear app data and restart\n'
+            '• IP Detection Issues: Use manual IP from ipconfig command',
             style: TextStyle(
               fontSize: 14,
               color: Color(0xFF6B7280),

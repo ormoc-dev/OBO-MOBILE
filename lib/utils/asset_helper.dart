@@ -81,4 +81,23 @@ class AssetHelper {
       ),
     );
   }
+
+  /// Load Ormoc banner with fallback
+  static Widget loadOrmocBanner({
+    double? width,
+    double? height,
+    BoxFit fit = BoxFit.contain,
+  }) {
+    return loadImage(
+      assetName: 'ormoc_banner.png',
+      width: width,
+      height: height,
+      fit: fit,
+      fallback: Icon(
+        Icons.account_balance,
+        size: width ?? height ?? 60,
+        color: const Color(0xFF4A5568),
+      ),
+    );
+  }
 }

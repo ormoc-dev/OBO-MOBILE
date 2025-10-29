@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import '../models/inspection.dart';
@@ -8,6 +10,7 @@ import '../services/hive_offline_database.dart';
 import '../services/auth_service.dart';
 import '../models/user.dart';
 import 'inspection_form_screen.dart';
+import 'email_report_screen.dart';
 
 class InspectionReportsScreen extends StatefulWidget {
   const InspectionReportsScreen({super.key});
@@ -383,7 +386,7 @@ class _InspectionReportsScreenState extends State<InspectionReportsScreen> {
         color: Colors.transparent,
         child: InkWell(
           borderRadius: BorderRadius.circular(12),
-          onTap: () => _buildInspectionDetails(inspection, isTablet),
+          onTap: () => _showInspectionDetails(inspection, isTablet),
           child: Padding(
             padding: EdgeInsets.all(isTablet ? 20 : 16),
             child: Column(
@@ -574,7 +577,7 @@ class _InspectionReportsScreenState extends State<InspectionReportsScreen> {
     );
   }
 
-  void _buildInspectionDetails(Inspection inspection, bool isTablet) {
+  void _showInspectionDetails(Inspection inspection, bool isTablet) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -691,7 +694,7 @@ class _InspectionReportsScreenState extends State<InspectionReportsScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       // Export Button
-                      _buildExportButton(isTablet),
+                      _buildExportButton(inspection, isTablet),
                       const SizedBox(height: 20),
                       
                       // QR Code Data
@@ -1015,41 +1018,72 @@ class _InspectionReportsScreenState extends State<InspectionReportsScreen> {
     );
   }
 
-  Widget _buildExportButton(bool isTablet) {
-    return Container(
-      width: double.infinity,
-      child: ElevatedButton.icon(
-        onPressed: () {
-          // Export functionality will be implemented later
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Export functionality coming soon!'),
-              backgroundColor: Color(0xFF3B82F6),
-              duration: Duration(seconds: 2),
+  Widget _buildExportButton(Inspection inspection, bool isTablet) {
+    return Row(
+      children: [
+        // Export Report Button
+        Expanded(
+          child: ElevatedButton.icon(
+            onPressed: () {
+              // Export functionality will be implemented later
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Export functionality coming soon!'),
+                  backgroundColor: Color(0xFF3B82F6),
+                  duration: Duration(seconds: 2),
+                ),
+              );
+            },
+            icon: const Icon(Icons.download_rounded, color: Colors.white),
+            label: Text(
+              'Export Report',
+              style: TextStyle(
+                fontSize: isTablet ? 14 : 12,
+                fontWeight: FontWeight.w600,
+                color: Colors.white,
+              ),
             ),
-          );
-        },
-        icon: const Icon(Icons.download_rounded, color: Colors.white),
-        label: Text(
-          'Export Report',
-          style: TextStyle(
-            fontSize: isTablet ? 16 : 14,
-            fontWeight: FontWeight.w600,
-            color: Colors.white,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF10B981),
+              padding: EdgeInsets.symmetric(
+                vertical: isTablet ? 16 : 14,
+                horizontal: 16,
+              ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              elevation: 0,
+            ),
           ),
         ),
-        style: ElevatedButton.styleFrom(
-          backgroundColor: const Color(0xFF10B981),
-          padding: EdgeInsets.symmetric(
-            vertical: isTablet ? 16 : 14,
-            horizontal: 24,
+        const SizedBox(width: 12),
+        // Send Email Button
+        Expanded(
+          child: ElevatedButton.icon(
+            onPressed: () => _sendEmailReport(inspection, isTablet),
+            icon: const Icon(Icons.email_rounded, color: Colors.white),
+            label: Text(
+              'Send Email',
+              style: TextStyle(
+                fontSize: isTablet ? 14 : 12,
+                fontWeight: FontWeight.w600,
+                color: Colors.white,
+              ),
+            ),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF3B82F6),
+              padding: EdgeInsets.symmetric(
+                vertical: isTablet ? 16 : 14,
+                horizontal: 16,
+              ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              elevation: 0,
+            ),
           ),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-          elevation: 0,
         ),
-      ),
+      ],
     );
   }
 
@@ -2514,6 +2548,310 @@ class _InspectionReportsScreenState extends State<InspectionReportsScreen> {
       ),
     );
   }
+
+  void _sendEmailReport(Inspection inspection, bool isTablet) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFF3B82F6).withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(
+                Icons.email_rounded,
+                color: Color(0xFF3B82F6),
+                size: 20,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                'Email & Share Options',
+                style: TextStyle(
+                  fontSize: isTablet ? 18 : 16,
+                  fontWeight: FontWeight.bold,
+                  color: const Color(0xFF1F2937),
+                ),
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Choose how you want to share the inspection report:',
+              style: TextStyle(
+                fontSize: isTablet ? 16 : 14,
+                color: const Color(0xFF4B5563),
+              ),
+            ),
+            const SizedBox(height: 16),
+            
+            // Email Options
+            _buildEmailOption(
+              'Send Quick Summary',
+              'Fast email with inspection summary',
+              Icons.email_outlined,
+              () => _openEmailScreen(inspection, false, isTablet),
+              isTablet,
+            ),
+            const SizedBox(height: 12),
+            _buildEmailOption(
+              'Send Detailed Report',
+              'Complete inspection report with all details',
+              Icons.description_outlined,
+              () => _openEmailScreen(inspection, true, isTablet),
+              isTablet,
+            ),
+            const SizedBox(height: 12),
+            _buildEmailOption(
+              'Share Report',
+              'Share the report using your device\'s sharing options',
+              Icons.share_rounded,
+              () => _shareReport(inspection, isTablet),
+              isTablet,
+            ),
+            const SizedBox(height: 12),
+            _buildEmailOption(
+              'Copy Report Data',
+              'Copy inspection data to clipboard for manual sharing',
+              Icons.copy_rounded,
+              () => _copyReportData(inspection, isTablet),
+              isTablet,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            style: TextButton.styleFrom(
+              padding: EdgeInsets.symmetric(
+                horizontal: isTablet ? 20 : 16,
+                vertical: isTablet ? 12 : 10,
+              ),
+            ),
+            child: Text(
+              'Cancel',
+              style: TextStyle(
+                fontSize: isTablet ? 14 : 12,
+                color: const Color(0xFF6B7280),
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmailOption(String title, String description, IconData icon, VoidCallback onTap, bool isTablet) {
+    return InkWell(
+      onTap: () {
+        Navigator.of(context).pop(); // Close dialog first
+        onTap();
+      },
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: EdgeInsets.all(isTablet ? 12 : 10),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF9FAFB),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: const Color(0xFFE5E7EB), width: 1),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFF3B82F6).withOpacity(0.1),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Icon(
+                icon,
+                color: const Color(0xFF3B82F6),
+                size: isTablet ? 18 : 16,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: isTablet ? 14 : 12,
+                      fontWeight: FontWeight.w600,
+                      color: const Color(0xFF1F2937),
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    description,
+                    style: TextStyle(
+                      fontSize: isTablet ? 12 : 10,
+                      color: const Color(0xFF6B7280),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(
+              Icons.arrow_forward_ios_rounded,
+              color: const Color(0xFF6B7280),
+              size: isTablet ? 16 : 14,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _openEmailScreen(Inspection inspection, bool isDetailed, bool isTablet) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => EmailReportScreen(
+          inspection: inspection,
+          isDetailed: isDetailed,
+        ),
+      ),
+    );
+  }
+
+
+  void _shareReport(Inspection inspection, bool isTablet) async {
+    try {
+      // Show loading message
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Preparing to share...'),
+          backgroundColor: Color(0xFF3B82F6),
+          duration: Duration(seconds: 1),
+        ),
+      );
+
+      // Generate quick report content
+      final reportContent = _generateQuickEmailTemplate(inspection);
+      
+      // Share the report
+      await Share.share(
+        reportContent,
+        subject: 'Inspection Report #${inspection.id.substring(inspection.id.length - 8)}',
+      );
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Report shared!'),
+          backgroundColor: Color(0xFF10B981),
+          duration: Duration(seconds: 1),
+        ),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error sharing report: $e'),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
+  void _copyReportData(Inspection inspection, bool isTablet) async {
+    try {
+      // Show loading message
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Copying report...'),
+          backgroundColor: Color(0xFF3B82F6),
+          duration: Duration(milliseconds: 500),
+        ),
+      );
+
+      // Generate quick report
+      final reportData = _generateQuickEmailTemplate(inspection);
+      
+      // Copy to clipboard
+      await Clipboard.setData(ClipboardData(text: reportData));
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Report copied!'),
+          backgroundColor: Color(0xFF10B981),
+          duration: Duration(seconds: 1),
+        ),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error copying report: $e'),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
+  String _generateQuickEmailTemplate(Inspection inspection) {
+    final inspectorName = _currentUser?.name ?? 'Unknown Inspector';
+    final createdDate = _formatDateTime(inspection.createdAt);
+    
+    // Quick status check
+    final sectionStatuses = inspection.sectionStatus.values.toList();
+    final hasInProgress = sectionStatuses.contains('in_progress');
+    final hasPassed = sectionStatuses.contains('passed');
+    final hasNotPassed = sectionStatuses.contains('not_passed');
+    
+    String status = 'No sections';
+    if (sectionStatuses.isNotEmpty) {
+      if (hasInProgress) status = 'In Progress';
+      else if (hasPassed || hasNotPassed) status = 'Completed';
+    }
+    
+    // Count completed sections
+    int completedSections = 0;
+    if (inspection.mechanicalRemarks.isNotEmpty || inspection.mechanicalAssessment.isNotEmpty) completedSections++;
+    if (inspection.lineGradeRemarks.isNotEmpty || inspection.lineGradeAssessment.isNotEmpty) completedSections++;
+    if (inspection.architecturalRemarks.isNotEmpty || inspection.architecturalAssessment.isNotEmpty) completedSections++;
+    if (inspection.civilStructuralRemarks.isNotEmpty || inspection.civilStructuralAssessment.isNotEmpty) completedSections++;
+    if (inspection.sanitaryPlumbingRemarks.isNotEmpty || inspection.sanitaryPlumbingAssessment.isNotEmpty) completedSections++;
+    if (inspection.electricalElectronicsRemarks.isNotEmpty || inspection.electricalElectronicsAssessment.isNotEmpty) completedSections++;
+    
+    return '''INSPECTION REPORT SUMMARY
+
+Inspection ID: ${inspection.id.substring(inspection.id.length - 8)}
+Inspector: $inspectorName
+Date: $createdDate
+Status: $status
+Sections Completed: $completedSections/6
+Photos: ${inspection.imagePaths.length}
+Videos: ${inspection.videoPaths.length}
+Sync Status: ${inspection.isSynced ? 'Synced' : 'Pending'}
+
+QR Code Data:
+${inspection.scannedData}
+
+Location: ${inspection.latitude != null && inspection.longitude != null 
+  ? 'Lat: ${inspection.latitude!.toStringAsFixed(6)}, Lng: ${inspection.longitude!.toStringAsFixed(6)}' 
+  : 'Not available'}
+
+---
+Office of Building Official - Ormoc City
+Generated by OBO Mobile Inspector App
+
+For detailed inspection data, please refer to the mobile application.''';
+  }
+
 
   Future<void> _deleteInspection(Inspection inspection) async {
     try {
