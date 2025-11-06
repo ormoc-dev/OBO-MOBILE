@@ -4,6 +4,9 @@ This is the complete documentation for the OBO Mobile Flutter application that c
 
 ---
 
+run 
+flutter run -d chrome --web-hostname=192.168.0.115 --web-port=8080
+
 ## Table of Contents
 
 1. [Getting Started](#getting-started)

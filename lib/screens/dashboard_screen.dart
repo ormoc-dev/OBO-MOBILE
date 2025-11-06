@@ -4,7 +4,6 @@ import '../services/offline_sync_service.dart';
 import '../services/hive_offline_database.dart';
 import '../models/user.dart';
 import '../models/inspection.dart';
-import 'assignments_screen.dart';
 import 'qr_scanner_screen.dart';
 import 'profile_screen.dart';
 import 'inspection_reports_screen.dart';
@@ -337,7 +336,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ],
           ),
           content: const Text(
-            'Are you sure you want to logout? You will need to login again to access your assignments.',
+            'Are you sure you want to logout? You will need to login again to access the app.',
             style: TextStyle(
               fontSize: 16,
               color: Color(0xFF4A5568),
@@ -461,7 +460,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
         controller: _pageController,
         onPageChanged: (index) {
           setState(() {
-            _currentIndex = index;
+            // Map page indices to navigation indices
+            // Page 0 = Home (nav 0), Page 1 = Report (nav 1), Page 2 = Profile (nav 3)
+            _currentIndex = index == 0 ? 0 : (index == 1 ? 1 : 3);
           });
         },
         children: [
@@ -513,13 +514,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
       ),
           
-          // Page 1: Assignments
-          const AssignmentsScreen(),
-          
-          // Page 2: Reports
+          // Page 1: Reports
           const InspectionReportsScreen(),
           
-          // Page 3: Profile
+          // Page 2: Profile
           const ProfileScreen(),
         ],
         ),
@@ -528,77 +526,258 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildNeumorphicHeader(BuildContext context, bool isTablet, bool isLargeTablet, bool isSmallScreen, bool isVerySmallScreen, double finalScale) {
+    final avatarSize = (isLargeTablet ? 64.0 : (isTablet ? 56.0 : (isVerySmallScreen ? 40.0 : (isSmallScreen ? 44.0 : 52.0)))) * finalScale;
+    final statusIndicatorSize = (isLargeTablet ? 16.0 : (isTablet ? 14.0 : (isVerySmallScreen ? 10.0 : (isSmallScreen ? 11.0 : 12.0)))) * finalScale;
+    
     return Container(
-      padding: EdgeInsets.all((isLargeTablet ? 28.0 : (isTablet ? 24.0 : (isVerySmallScreen ? 16.0 : (isSmallScreen ? 18.0 : 20.0)))) * finalScale),
+      padding: EdgeInsets.all((isLargeTablet ? 24.0 : (isTablet ? 20.0 : (isVerySmallScreen ? 16.0 : (isSmallScreen ? 18.0 : 20.0)))) * finalScale),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular((isLargeTablet ? 20.0 : (isTablet ? 18.0 : (isVerySmallScreen ? 12.0 : (isSmallScreen ? 14.0 : 16.0)))) * finalScale),
-        border: Border.all(color: const Color(0xFFE2E8F0), width: 1),
-        boxShadow: const [
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Colors.white,
+            const Color(0xFFF8FAFC),
+          ],
+        ),
+        borderRadius: BorderRadius.circular((isLargeTablet ? 20.0 : (isTablet ? 18.0 : (isVerySmallScreen ? 14.0 : (isSmallScreen ? 16.0 : 18.0)))) * finalScale),
+        border: Border.all(
+          color: const Color(0xFFE2E8F0),
+          width: 1.5,
+        ),
+        boxShadow: [
           BoxShadow(
-            color: Color(0xFFE2E8F0),
-            offset: Offset(0, 4),
+            color: Colors.black.withOpacity(0.04),
+            offset: const Offset(0, 2),
             blurRadius: 8,
+            spreadRadius: 0,
+          ),
+          BoxShadow(
+            color: Colors.black.withOpacity(0.02),
+            offset: const Offset(0, 4),
+            blurRadius: 16,
             spreadRadius: 0,
           ),
         ],
       ),
       child: Row(
         children: [
+          // User Avatar with Status Indicator
+          Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Container(
+                width: avatarSize,
+                height: avatarSize,
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      Color.fromRGBO(8, 111, 222, 0.977),
+                      Color.fromRGBO(22, 127, 239, 0.976),
+                    ],
+                  ),
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color.fromRGBO(8, 111, 222, 0.25),
+                      offset: const Offset(0, 4),
+                      blurRadius: 12,
+                      spreadRadius: 0,
+                    ),
+                  ],
+                ),
+                child: Center(
+                  child: Text(
+                    (currentUser?.name != null && currentUser!.name.isNotEmpty)
+                        ? currentUser!.name.substring(0, 1).toUpperCase()
+                        : 'I',
+                    style: TextStyle(
+                      fontSize: (isLargeTablet ? 28.0 : (isTablet ? 24.0 : (isVerySmallScreen ? 18.0 : (isSmallScreen ? 20.0 : 22.0)))) * finalScale,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ),
+              ),
+              // Status Indicator
+              Positioned(
+                bottom: 0,
+                right: 0,
+                child: Container(
+                  width: statusIndicatorSize,
+                  height: statusIndicatorSize,
+                  decoration: BoxDecoration(
+                    color: _getStatusColor(currentUser?.status),
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: Colors.white,
+                      width: 2.5,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: _getStatusColor(currentUser?.status).withOpacity(0.4),
+                        offset: const Offset(0, 2),
+                        blurRadius: 4,
+                        spreadRadius: 0,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          SizedBox(width: (isLargeTablet ? 20.0 : (isTablet ? 16.0 : (isVerySmallScreen ? 12.0 : (isSmallScreen ? 14.0 : 16.0)))) * finalScale),
+          // User Info
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text(
-                  'Good ${_getGreeting()}',
-                  style: TextStyle(
-                    fontSize: (isLargeTablet ? 20.0 : (isTablet ? 18.0 : (isVerySmallScreen ? 12.0 : (isSmallScreen ? 14.0 : 16.0)))) * finalScale,
-                    color: const Color(0xFF6B7280),
-                    fontWeight: FontWeight.w500,
-                  ),
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        'Good ${_getGreeting()}',
+                        style: TextStyle(
+                          fontSize: (isLargeTablet ? 16.0 : (isTablet ? 14.0 : (isVerySmallScreen ? 11.0 : (isSmallScreen ? 12.0 : 13.0)))) * finalScale,
+                          color: const Color(0xFF6B7280),
+                          fontWeight: FontWeight.w500,
+                          letterSpacing: 0.3,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-                SizedBox(height: (isVerySmallScreen ? 2.0 : 4.0) * finalScale),
-                Text(
-                  currentUser?.name ?? 'Inspector',
-                  style: TextStyle(
-                    fontSize: (isLargeTablet ? 32.0 : (isTablet ? 28.0 : (isVerySmallScreen ? 18.0 : (isSmallScreen ? 20.0 : 24.0)))) * finalScale,
-                    fontWeight: FontWeight.bold,
-                    color: const Color(0xFF1F2937),
-                  ),
+                SizedBox(height: (isVerySmallScreen ? 4.0 : (isSmallScreen ? 5.0 : 6.0)) * finalScale),
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        currentUser?.name ?? 'Inspector',
+                        style: TextStyle(
+                          fontSize: (isLargeTablet ? 24.0 : (isTablet ? 22.0 : (isVerySmallScreen ? 16.0 : (isSmallScreen ? 18.0 : 20.0)))) * finalScale,
+                          fontWeight: FontWeight.w700,
+                          color: const Color(0xFF1F2937),
+                          letterSpacing: 0.2,
+                          height: 1.2,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
                 ),
-                SizedBox(height: (isVerySmallScreen ? 4.0 : 8.0) * finalScale),
-              
               ],
             ),
           ),
-          Container(
-            width: (isLargeTablet ? 70.0 : (isTablet ? 60.0 : (isVerySmallScreen ? 40.0 : (isSmallScreen ? 45.0 : 50.0)))) * finalScale,
-            height: (isLargeTablet ? 70.0 : (isTablet ? 60.0 : (isVerySmallScreen ? 40.0 : (isSmallScreen ? 45.0 : 50.0)))) * finalScale,
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular((isLargeTablet ? 35.0 : (isTablet ? 30.0 : (isVerySmallScreen ? 20.0 : (isSmallScreen ? 22.5 : 25.0)))) * finalScale),
-              border: Border.all(color: const Color(0xFFE2E8F0), width: 1),
-              boxShadow: const [
-                BoxShadow(
-                  color: Color(0xFFE2E8F0),
-                  offset: Offset(0, 2),
-                  blurRadius: 4,
-                  spreadRadius: 0,
+          SizedBox(width: (isLargeTablet ? 16.0 : (isTablet ? 12.0 : (isVerySmallScreen ? 8.0 : (isSmallScreen ? 10.0 : 12.0)))) * finalScale),
+          // Right Side - Role and Status Badges
+          Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              // Inspector Badge (Role)
+              Container(
+                padding: EdgeInsets.symmetric(
+                  horizontal: (isLargeTablet ? 14.0 : (isTablet ? 12.0 : (isVerySmallScreen ? 8.0 : (isSmallScreen ? 9.0 : 10.0)))) * finalScale,
+                  vertical: (isLargeTablet ? 8.0 : (isTablet ? 7.0 : (isVerySmallScreen ? 5.0 : (isSmallScreen ? 5.5 : 6.0)))) * finalScale,
                 ),
-              ],
-            ),
-            child: Material(
-              color: Colors.transparent,
-              child: InkWell(
-                borderRadius: BorderRadius.circular((isLargeTablet ? 35.0 : (isTablet ? 30.0 : (isVerySmallScreen ? 20.0 : (isSmallScreen ? 22.5 : 25.0)))) * finalScale),
-                onTap: _showLogoutConfirmation,
-                child: Icon(
-                  Icons.logout_rounded,
-                  color: const Color.fromRGBO(8, 111, 222, 0.977),
-                  size: (isLargeTablet ? 32.0 : (isTablet ? 28.0 : (isVerySmallScreen ? 18.0 : (isSmallScreen ? 20.0 : 24.0)))) * finalScale,
+                decoration: BoxDecoration(
+                  color: const Color.fromRGBO(8, 111, 222, 0.1),
+                  borderRadius: BorderRadius.circular((isLargeTablet ? 10.0 : (isTablet ? 9.0 : (isVerySmallScreen ? 7.0 : (isSmallScreen ? 8.0 : 9.0)))) * finalScale),
+                  border: Border.all(
+                    color: const Color.fromRGBO(8, 111, 222, 0.2),
+                    width: 1.5,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color.fromRGBO(8, 111, 222, 0.1),
+                      offset: const Offset(0, 2),
+                      blurRadius: 4,
+                      spreadRadius: 0,
+                    ),
+                  ],
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.badge_rounded,
+                      size: (isLargeTablet ? 16.0 : (isTablet ? 14.0 : (isVerySmallScreen ? 11.0 : (isSmallScreen ? 12.0 : 13.0)))) * finalScale,
+                      color: const Color.fromRGBO(8, 111, 222, 0.977),
+                    ),
+                    SizedBox(width: (isVerySmallScreen ? 4.0 : (isSmallScreen ? 5.0 : 6.0)) * finalScale),
+                    Text(
+                      currentUser?.role ?? 'Inspector',
+                      style: TextStyle(
+                        fontSize: (isLargeTablet ? 14.0 : (isTablet ? 13.0 : (isVerySmallScreen ? 10.0 : (isSmallScreen ? 11.0 : 12.0)))) * finalScale,
+                        fontWeight: FontWeight.w600,
+                        color: const Color.fromRGBO(8, 111, 222, 0.977),
+                        letterSpacing: 0.3,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ),
+              SizedBox(height: (isLargeTablet ? 10.0 : (isTablet ? 8.0 : (isVerySmallScreen ? 6.0 : (isSmallScreen ? 7.0 : 8.0)))) * finalScale),
+              // Active Badge (Status)
+              Container(
+                padding: EdgeInsets.symmetric(
+                  horizontal: (isLargeTablet ? 14.0 : (isTablet ? 12.0 : (isVerySmallScreen ? 8.0 : (isSmallScreen ? 9.0 : 10.0)))) * finalScale,
+                  vertical: (isLargeTablet ? 8.0 : (isTablet ? 7.0 : (isVerySmallScreen ? 5.0 : (isSmallScreen ? 5.5 : 6.0)))) * finalScale,
+                ),
+                decoration: BoxDecoration(
+                  color: _getStatusColor(currentUser?.status).withOpacity(0.1),
+                  borderRadius: BorderRadius.circular((isLargeTablet ? 10.0 : (isTablet ? 9.0 : (isVerySmallScreen ? 7.0 : (isSmallScreen ? 8.0 : 9.0)))) * finalScale),
+                  border: Border.all(
+                    color: _getStatusColor(currentUser?.status).withOpacity(0.3),
+                    width: 1.5,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: _getStatusColor(currentUser?.status).withOpacity(0.1),
+                      offset: const Offset(0, 2),
+                      blurRadius: 4,
+                      spreadRadius: 0,
+                    ),
+                  ],
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: (isLargeTablet ? 10.0 : (isTablet ? 9.0 : (isVerySmallScreen ? 7.0 : (isSmallScreen ? 7.5 : 8.0)))) * finalScale,
+                      height: (isLargeTablet ? 10.0 : (isTablet ? 9.0 : (isVerySmallScreen ? 7.0 : (isSmallScreen ? 7.5 : 8.0)))) * finalScale,
+                      decoration: BoxDecoration(
+                        color: _getStatusColor(currentUser?.status),
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color: _getStatusColor(currentUser?.status).withOpacity(0.4),
+                            offset: const Offset(0, 1),
+                            blurRadius: 3,
+                            spreadRadius: 0,
+                          ),
+                        ],
+                      ),
+                    ),
+                    SizedBox(width: (isVerySmallScreen ? 4.0 : (isSmallScreen ? 5.0 : 6.0)) * finalScale),
+                    Text(
+                      currentUser?.status?.toUpperCase() ?? 'ACTIVE',
+                      style: TextStyle(
+                        fontSize: (isLargeTablet ? 13.0 : (isTablet ? 12.0 : (isVerySmallScreen ? 10.0 : (isSmallScreen ? 11.0 : 12.0)))) * finalScale,
+                        fontWeight: FontWeight.w600,
+                        color: _getStatusColor(currentUser?.status),
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -832,7 +1011,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'Sync My Data',
+                              'Sync All Data',
                               style: TextStyle(
                                 fontSize: isTablet ? 16 : 14,
                                 fontWeight: FontWeight.bold,
@@ -841,7 +1020,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             ),
                             SizedBox(height: isTablet ? 2 : 1),
                             Text(
-                              _isSyncing ? 'Synchronizing your data...' : 'Keep your data up to date',
+                              _isSyncing ? 'Synchronizing all data...' : 'Sync all of your data',
                               style: TextStyle(
                                 fontSize: isTablet ? 12 : 10,
                                 color: const Color(0xFF6B7280),
@@ -1047,72 +1226,143 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
 
   Widget _buildBottomNavigationBar(BuildContext context, bool isTablet, bool isLargeTablet, bool isSmallScreen, bool isVerySmallScreen, double finalScale) {
+    final navHeight = (isLargeTablet ? 85.0 : (isTablet ? 80.0 : (isVerySmallScreen ? 72.0 : (isSmallScreen ? 75.0 : 78.0)))) * finalScale;
+    final qrButtonSize = (isLargeTablet ? 68.0 : (isTablet ? 64.0 : (isVerySmallScreen ? 52.0 : (isSmallScreen ? 56.0 : 60.0)))) * finalScale;
+    
     return Container(
+      height: navHeight + MediaQuery.of(context).padding.bottom,
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: const BorderRadius.only(
-          topLeft: Radius.circular(24),
-          topRight: Radius.circular(24),
+          topLeft: Radius.circular(28),
+          topRight: Radius.circular(28),
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            offset: const Offset(0, -4),
-            blurRadius: 20,
+            color: Colors.black.withOpacity(0.08),
+            offset: const Offset(0, -2),
+            blurRadius: 24,
+            spreadRadius: 0,
+          ),
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            offset: const Offset(0, -1),
+            blurRadius: 8,
             spreadRadius: 0,
           ),
         ],
       ),
       child: SafeArea(
+        top: false,
         child: Padding(
-          padding: EdgeInsets.symmetric(
-            horizontal: (isLargeTablet ? 28.0 : (isTablet ? 24.0 : (isVerySmallScreen ? 12.0 : (isSmallScreen ? 14.0 : 16.0)))) * finalScale,
-            vertical: (isLargeTablet ? 20.0 : (isTablet ? 16.0 : (isVerySmallScreen ? 8.0 : (isSmallScreen ? 10.0 : 12.0)))) * finalScale,
+          padding: EdgeInsets.only(
+            top: (isVerySmallScreen ? 6.0 : (isSmallScreen ? 8.0 : 10.0)) * finalScale,
+            bottom: (isVerySmallScreen ? 6.0 : (isSmallScreen ? 8.0 : 10.0)) * finalScale,
+            left: (isLargeTablet ? 16.0 : (isTablet ? 12.0 : (isVerySmallScreen ? 8.0 : (isSmallScreen ? 10.0 : 12.0)))) * finalScale,
+            right: (isLargeTablet ? 16.0 : (isTablet ? 12.0 : (isVerySmallScreen ? 8.0 : (isSmallScreen ? 10.0 : 12.0)))) * finalScale,
           ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-                  children: [
-              // Home/Dashboard
-              _buildNavItem(
-                icon: Icons.home_rounded,
-                label: 'Home',
-                isSelected: _currentIndex == 0,
-                onTap: () => _onNavItemTapped(0),
-                isTablet: isTablet, isLargeTablet: isLargeTablet, isSmallScreen: isSmallScreen, isVerySmallScreen: isVerySmallScreen, finalScale: finalScale,
+          child: Stack(
+            alignment: Alignment.center,
+            clipBehavior: Clip.none,
+            children: [
+              // Main navigation items row - with proper spacing
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  // Left side - Home, Report
+                  Expanded(
+                    child: Padding(
+                      padding: EdgeInsets.only(right: qrButtonSize * 0.35),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          // Home
+                          Expanded(
+                            child: _buildNavItem(
+                              icon: Icons.home_rounded,
+                              label: 'Home',
+                              isSelected: _currentIndex == 0,
+                              onTap: () => _onNavItemTapped(0),
+                              isTablet: isTablet, 
+                              isLargeTablet: isLargeTablet, 
+                              isSmallScreen: isSmallScreen, 
+                              isVerySmallScreen: isVerySmallScreen, 
+                              finalScale: finalScale,
+                            ),
+                          ),
+                          
+                          // Report
+                          Expanded(
+                            child: _buildNavItem(
+                              icon: Icons.assessment_rounded,
+                              label: 'Report',
+                              isSelected: _currentIndex == 1,
+                              onTap: () => _onNavItemTapped(1),
+                              isTablet: isTablet, 
+                              isLargeTablet: isLargeTablet, 
+                              isSmallScreen: isSmallScreen, 
+                              isVerySmallScreen: isVerySmallScreen, 
+                              finalScale: finalScale,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  
+                  // Right side - Profile, Logout (with spacing from QR button)
+                  Expanded(
+                    child: Padding(
+                      padding: EdgeInsets.only(left: qrButtonSize * 0.35),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          // Profile
+                          Expanded(
+                            child: _buildNavItem(
+                              icon: Icons.person_rounded,
+                              label: 'Profile',
+                              isSelected: _currentIndex == 3,
+                              onTap: () => _onNavItemTapped(3),
+                              isTablet: isTablet, 
+                              isLargeTablet: isLargeTablet, 
+                              isSmallScreen: isSmallScreen, 
+                              isVerySmallScreen: isVerySmallScreen, 
+                              finalScale: finalScale,
+                            ),
+                          ),
+                          
+                          // Logout
+                          Expanded(
+                            child: _buildLogoutNavItem(
+                              isTablet: isTablet, 
+                              isLargeTablet: isLargeTablet, 
+                              isSmallScreen: isSmallScreen, 
+                              isVerySmallScreen: isVerySmallScreen, 
+                              finalScale: finalScale,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
               ),
               
-              // Assignments
-              _buildNavItem(
-                icon: Icons.assignment_rounded,
-                label: 'Assignments',
-                isSelected: _currentIndex == 1,
-                onTap: () => _onNavItemTapped(1),
-                isTablet: isTablet, isLargeTablet: isLargeTablet, isSmallScreen: isSmallScreen, isVerySmallScreen: isVerySmallScreen, finalScale: finalScale,
-              ),
-              
-              // QR Scanner - Center Button
-              _buildQRScannerButton(isTablet, isLargeTablet, isSmallScreen, isVerySmallScreen, finalScale),
-              
-              // Reports
-              _buildNavItem(
-                icon: Icons.assessment_rounded,
-                label: 'Reports',
-                isSelected: _currentIndex == 3,
-                onTap: () => _onNavItemTapped(3),
-                isTablet: isTablet, isLargeTablet: isLargeTablet, isSmallScreen: isSmallScreen, isVerySmallScreen: isVerySmallScreen, finalScale: finalScale,
-              ),
-              
-              // Profile
-              _buildNavItem(
-                icon: Icons.person_rounded,
-                label: 'Profile',
-                isSelected: _currentIndex == 4,
-                onTap: () => _onNavItemTapped(4),
-                isTablet: isTablet, isLargeTablet: isLargeTablet, isSmallScreen: isSmallScreen, isVerySmallScreen: isVerySmallScreen, finalScale: finalScale,
-              ),
-                  ],
+              // QR Code Button - Positioned absolutely in center, elevated
+              Positioned(
+                top: -qrButtonSize / 3,
+                child: IgnorePointer(
+                  ignoring: false,
+                  child: _buildQRCodeButton(isTablet, isLargeTablet, isSmallScreen, isVerySmallScreen, finalScale, qrButtonSize),
                 ),
               ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -1128,87 +1378,168 @@ class _DashboardScreenState extends State<DashboardScreen> {
     required bool isVerySmallScreen,
     required double finalScale,
   }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-                padding: EdgeInsets.symmetric(
-          horizontal: (isLargeTablet ? 20.0 : (isTablet ? 16.0 : (isVerySmallScreen ? 8.0 : (isSmallScreen ? 10.0 : 12.0)))) * finalScale,
-          vertical: (isLargeTablet ? 16.0 : (isTablet ? 12.0 : (isVerySmallScreen ? 6.0 : (isSmallScreen ? 8.0 : 8.0)))) * finalScale,
-                ),
-        decoration: BoxDecoration(
-          color: isSelected ? const Color.fromRGBO(8, 111, 222, 0.1) : Colors.transparent,
-                  borderRadius: BorderRadius.circular((isLargeTablet ? 16.0 : (isTablet ? 12.0 : (isVerySmallScreen ? 6.0 : (isSmallScreen ? 8.0 : 10.0)))) * finalScale),
-                ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-                children: [
-            Icon(
-              icon,
-              color: isSelected 
-                ? const Color.fromRGBO(8, 111, 222, 0.977)
-                : const Color(0xFF6B7280),
-              size: (isLargeTablet ? 32.0 : (isTablet ? 28.0 : (isVerySmallScreen ? 18.0 : (isSmallScreen ? 20.0 : 24.0)))) * finalScale,
-            ),
-            SizedBox(height: (isVerySmallScreen ? 3.0 : (isSmallScreen ? 4.0 : (isTablet ? 6.0 : 4.0))) * finalScale),
-                  Text(
-              label,
-                    style: TextStyle(
-                fontSize: (isLargeTablet ? 14.0 : (isTablet ? 12.0 : (isVerySmallScreen ? 8.0 : (isSmallScreen ? 9.0 : 10.0)))) * finalScale,
+    final iconSize = (isLargeTablet ? 24.0 : (isTablet ? 22.0 : (isVerySmallScreen ? 18.0 : (isSmallScreen ? 20.0 : 22.0)))) * finalScale;
+    final fontSize = (isLargeTablet ? 11.0 : (isTablet ? 10.0 : (isVerySmallScreen ? 7.5 : (isSmallScreen ? 8.5 : 9.5)))) * finalScale;
+    
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12 * finalScale),
+        child: Container(
+          padding: EdgeInsets.symmetric(
+            horizontal: (isVerySmallScreen ? 2.0 : (isSmallScreen ? 4.0 : 6.0)) * finalScale,
+            vertical: (isVerySmallScreen ? 4.0 : (isSmallScreen ? 6.0 : 8.0)) * finalScale,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Icon(
+                icon,
                 color: isSelected 
                   ? const Color.fromRGBO(8, 111, 222, 0.977)
                   : const Color(0xFF6B7280),
-                fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
-                    ),
-                  ),
-                ],
+                size: iconSize,
               ),
+              SizedBox(height: (isVerySmallScreen ? 1.0 : (isSmallScreen ? 2.0 : 3.0)) * finalScale),
+              Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: fontSize,
+                  color: isSelected 
+                    ? const Color.fromRGBO(8, 111, 222, 0.977)
+                    : const Color(0xFF6B7280),
+                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                  letterSpacing: 0.1,
+                  height: 1.0,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
 
-  Widget _buildQRScannerButton(bool isTablet, bool isLargeTablet, bool isSmallScreen, bool isVerySmallScreen, double finalScale) {
-    return GestureDetector(
-      onTap: () => _onNavItemTapped(2),
-      child: Container(
-        width: (isLargeTablet ? 90.0 : (isTablet ? 80.0 : (isVerySmallScreen ? 50.0 : (isSmallScreen ? 60.0 : 70.0)))) * finalScale,
-        height: (isLargeTablet ? 90.0 : (isTablet ? 80.0 : (isVerySmallScreen ? 50.0 : (isSmallScreen ? 60.0 : 70.0)))) * finalScale,
-      decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              Color.fromRGBO(8, 111, 222, 0.977),
-              Color.fromRGBO(22, 127, 239, 0.976),
+  Widget _buildQRCodeButton(bool isTablet, bool isLargeTablet, bool isSmallScreen, bool isVerySmallScreen, double finalScale, double buttonSize) {
+    final iconSize = (isLargeTablet ? 28.0 : (isTablet ? 26.0 : (isVerySmallScreen ? 22.0 : (isSmallScreen ? 24.0 : 26.0)))) * finalScale;
+    final fontSize = (isLargeTablet ? 10.0 : (isTablet ? 9.0 : (isVerySmallScreen ? 7.0 : (isSmallScreen ? 8.0 : 9.0)))) * finalScale;
+    
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => _onNavItemTapped(2),
+        borderRadius: BorderRadius.circular(buttonSize / 2),
+        child: Container(
+          width: buttonSize,
+          height: buttonSize,
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                Color.fromRGBO(8, 111, 222, 0.977),
+                Color.fromRGBO(22, 127, 239, 0.976),
+              ],
+            ),
+            borderRadius: BorderRadius.circular(buttonSize / 2),
+            boxShadow: [
+              BoxShadow(
+                color: const Color.fromRGBO(8, 111, 222, 0.35),
+                offset: const Offset(0, 6),
+                blurRadius: 16,
+                spreadRadius: 0,
+              ),
+              BoxShadow(
+                color: const Color.fromRGBO(8, 111, 222, 0.2),
+                offset: const Offset(0, 2),
+                blurRadius: 8,
+                spreadRadius: 0,
+              ),
             ],
           ),
-          borderRadius: BorderRadius.circular((isLargeTablet ? 45.0 : (isTablet ? 40.0 : (isVerySmallScreen ? 25.0 : (isSmallScreen ? 30.0 : 35.0)))) * finalScale),
-          boxShadow: [
-          BoxShadow(
-              color: const Color.fromRGBO(8, 111, 222, 0.3),
-              offset: const Offset(0, 4),
-              blurRadius: 12,
-            spreadRadius: 0,
-          ),
-        ],
-      ),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-            Icon(
-              Icons.qr_code_scanner_rounded,
-              color: Colors.white,
-                          size: (isLargeTablet ? 36.0 : (isTablet ? 32.0 : (isVerySmallScreen ? 20.0 : (isSmallScreen ? 24.0 : 28.0)))) * finalScale,
-                        ),
-            SizedBox(height: (isVerySmallScreen ? 2.0 : (isSmallScreen ? 3.0 : (isTablet ? 4.0 : 2.0))) * finalScale),
-                Text(
-              'Scan',
-                  style: TextStyle(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.qr_code_scanner_rounded,
                 color: Colors.white,
-                      fontSize: (isLargeTablet ? 14.0 : (isTablet ? 12.0 : (isVerySmallScreen ? 8.0 : (isSmallScreen ? 9.0 : 10.0)))) * finalScale,
-                fontWeight: FontWeight.w600,
-                    ),
-                  ),
-              ],
+                size: iconSize,
+              ),
+              SizedBox(height: (isVerySmallScreen ? 1.0 : (isSmallScreen ? 1.0 : 2.0)) * finalScale),
+              Text(
+                'QR Code',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: fontSize,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.3,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLogoutNavItem({
+    required bool isTablet,
+    required bool isLargeTablet,
+    required bool isSmallScreen,
+    required bool isVerySmallScreen,
+    required double finalScale,
+  }) {
+    final iconSize = (isLargeTablet ? 24.0 : (isTablet ? 22.0 : (isVerySmallScreen ? 18.0 : (isSmallScreen ? 20.0 : 22.0)))) * finalScale;
+    final fontSize = (isLargeTablet ? 11.0 : (isTablet ? 10.0 : (isVerySmallScreen ? 7.5 : (isSmallScreen ? 8.5 : 9.5)))) * finalScale;
+    
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: _showLogoutConfirmation,
+        borderRadius: BorderRadius.circular(12 * finalScale),
+        child: Container(
+          padding: EdgeInsets.symmetric(
+            horizontal: (isVerySmallScreen ? 2.0 : (isSmallScreen ? 4.0 : 6.0)) * finalScale,
+            vertical: (isVerySmallScreen ? 4.0 : (isSmallScreen ? 6.0 : 8.0)) * finalScale,
+          ),
+          decoration: BoxDecoration(
+            color: Colors.transparent,
+            borderRadius: BorderRadius.circular(12 * finalScale),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.logout_rounded,
+                color: Colors.red.shade700,
+                size: iconSize,
+              ),
+              SizedBox(height: (isVerySmallScreen ? 1.0 : (isSmallScreen ? 2.0 : 3.0)) * finalScale),
+              Text(
+                'Logout',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: fontSize,
+                  color: Colors.red.shade700,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 0.1,
+                  height: 1.0,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -1221,7 +1552,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       case 0: // Home
         pageIndex = 0;
         break;
-      case 1: // Assignments
+      case 1: // Report
         pageIndex = 1;
         break;
       case 2: // QR Scanner - special case
@@ -1232,11 +1563,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ),
     );
         return;
-      case 3: // Reports
+      case 3: // Profile
         pageIndex = 2;
-        break;
-      case 4: // Profile
-        pageIndex = 3;
         break;
       default:
         pageIndex = 0;
@@ -1253,19 +1581,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildQuickStatsOverview(BuildContext context, bool isTablet, bool isLargeTablet, bool isSmallScreen, bool isVerySmallScreen, double finalScale) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 600;
     
     return Container(
       width: double.infinity,
-      padding: EdgeInsets.all((isLargeTablet ? 28.0 : (isTablet ? 24.0 : (isVerySmallScreen ? 16.0 : 20.0))) * finalScale),
+      padding: EdgeInsets.all((isLargeTablet ? 28.0 : (isTablet ? 24.0 : (isVerySmallScreen ? 12.0 : (isSmallScreen ? 14.0 : 16.0)))) * finalScale),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular((isTablet ? 20 : 16) * finalScale),
-        border: Border.all(color: const Color(0xFFE2E8F0), width: 1),
+        borderRadius: BorderRadius.circular((isLargeTablet ? 20.0 : (isTablet ? 18.0 : (isVerySmallScreen ? 12.0 : (isSmallScreen ? 14.0 : 16.0)))) * finalScale),
+        border: Border.all(
+          color: const Color(0xFFE2E8F0),
+          width: isMobile ? 1 : 1.5,
+        ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
+            color: Colors.black.withValues(alpha: isMobile ? 0.03 : 0.05),
             offset: const Offset(0, 2),
-            blurRadius: 8,
+            blurRadius: isMobile ? 6 : 8,
             spreadRadius: 0,
           ),
         ],
@@ -1279,50 +1612,120 @@ class _DashboardScreenState extends State<DashboardScreen> {
               Icon(
                 Icons.analytics_outlined,
                 color: const Color.fromRGBO(8, 111, 222, 0.977),
-                size: (isTablet ? 24 : 20) * finalScale,
+                size: (isLargeTablet ? 26.0 : (isTablet ? 24.0 : (isVerySmallScreen ? 18.0 : (isSmallScreen ? 20.0 : 22.0)))) * finalScale,
               ),
-              SizedBox(width: 8 * finalScale),
+              SizedBox(width: (isLargeTablet ? 10.0 : (isTablet ? 8.0 : (isVerySmallScreen ? 6.0 : (isSmallScreen ? 7.0 : 8.0)))) * finalScale),
               Expanded(
                 child: Text(
                   'Quick Stats Overview',
                   style: TextStyle(
-                    fontSize: (isTablet ? 20 : 18) * finalScale,
+                    fontSize: (isLargeTablet ? 22.0 : (isTablet ? 20.0 : (isVerySmallScreen ? 14.0 : (isSmallScreen ? 16.0 : 18.0)))) * finalScale,
                     fontWeight: FontWeight.w600,
                     color: const Color(0xFF1E293B),
+                    letterSpacing: isMobile ? 0.2 : 0.3,
                   ),
                 ),
               ),
             ],
           ),
           
-          SizedBox(height: 16 * finalScale),
+          SizedBox(height: (isLargeTablet ? 20.0 : (isTablet ? 18.0 : (isVerySmallScreen ? 12.0 : (isSmallScreen ? 14.0 : 16.0)))) * finalScale),
           
           // Stats Grid
           if (_statsLoading)
-            _buildStatsLoading(isTablet, isLargeTablet, isSmallScreen, isVerySmallScreen, finalScale)
+            _buildStatsLoading(context, isTablet, isLargeTablet, isSmallScreen, isVerySmallScreen, finalScale)
           else
-            _buildStatsGrid(isTablet, isLargeTablet, isSmallScreen, isVerySmallScreen, finalScale),
+            _buildStatsGrid(context, isTablet, isLargeTablet, isSmallScreen, isVerySmallScreen, finalScale),
         ],
       ),
     );
   }
 
-  Widget _buildStatsLoading(bool isTablet, bool isLargeTablet, bool isSmallScreen, bool isVerySmallScreen, double finalScale) {
+  Widget _buildStatsLoading(BuildContext context, bool isTablet, bool isLargeTablet, bool isSmallScreen, bool isVerySmallScreen, double finalScale) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 600;
+    
+    // For mobile, use 2x2 grid loading
+    if (isMobile && !isTablet) {
+      return Column(
+        children: [
+          Row(
+            children: List.generate(2, (index) => 
+              Expanded(
+                child: Container(
+                  margin: EdgeInsets.symmetric(
+                    horizontal: (isVerySmallScreen ? 3.0 : (isSmallScreen ? 3.5 : 4.0)) * finalScale,
+                  ),
+                  height: (isVerySmallScreen ? 60.0 : (isSmallScreen ? 65.0 : 70.0)) * finalScale,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade100,
+                    borderRadius: BorderRadius.circular((isVerySmallScreen ? 8.0 : (isSmallScreen ? 10.0 : 12.0)) * finalScale),
+                  ),
+                  child: Center(
+                    child: SizedBox(
+                      width: (isVerySmallScreen ? 18.0 : (isSmallScreen ? 20.0 : 22.0)) * finalScale,
+                      height: (isVerySmallScreen ? 18.0 : (isSmallScreen ? 20.0 : 22.0)) * finalScale,
+                      child: const CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          Color.fromRGBO(8, 111, 222, 0.977),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          SizedBox(height: (isVerySmallScreen ? 6.0 : (isSmallScreen ? 7.0 : 8.0)) * finalScale),
+          Row(
+            children: List.generate(2, (index) => 
+              Expanded(
+                child: Container(
+                  margin: EdgeInsets.symmetric(
+                    horizontal: (isVerySmallScreen ? 3.0 : (isSmallScreen ? 3.5 : 4.0)) * finalScale,
+                  ),
+                  height: (isVerySmallScreen ? 60.0 : (isSmallScreen ? 65.0 : 70.0)) * finalScale,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade100,
+                    borderRadius: BorderRadius.circular((isVerySmallScreen ? 8.0 : (isSmallScreen ? 10.0 : 12.0)) * finalScale),
+                  ),
+                  child: Center(
+                    child: SizedBox(
+                      width: (isVerySmallScreen ? 18.0 : (isSmallScreen ? 20.0 : 22.0)) * finalScale,
+                      height: (isVerySmallScreen ? 18.0 : (isSmallScreen ? 20.0 : 22.0)) * finalScale,
+                      child: const CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          Color.fromRGBO(8, 111, 222, 0.977),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+    
+    // For tablets, use horizontal layout
     return Container(
-      height: (isTablet ? 80 : 70) * finalScale,
+      height: (isLargeTablet ? 85.0 : (isTablet ? 80.0 : 70.0)) * finalScale,
       child: Row(
         children: List.generate(4, (index) => 
           Expanded(
             child: Container(
-              margin: EdgeInsets.symmetric(horizontal: 4 * finalScale),
+              margin: EdgeInsets.symmetric(horizontal: (isLargeTablet ? 4.0 : (isTablet ? 3.0 : 2.0)) * finalScale),
               decoration: BoxDecoration(
                 color: Colors.grey.shade100,
-                borderRadius: BorderRadius.circular(12 * finalScale),
+                borderRadius: BorderRadius.circular((isLargeTablet ? 14.0 : (isTablet ? 12.0 : 10.0)) * finalScale),
               ),
               child: Center(
                 child: SizedBox(
-                  width: (isTablet ? 24 : 20) * finalScale,
-                  height: (isTablet ? 24 : 20) * finalScale,
+                  width: (isLargeTablet ? 26.0 : (isTablet ? 24.0 : 20.0)) * finalScale,
+                  height: (isLargeTablet ? 26.0 : (isTablet ? 24.0 : 20.0)) * finalScale,
                   child: const CircularProgressIndicator(
                     strokeWidth: 2,
                     valueColor: AlwaysStoppedAnimation<Color>(
@@ -1338,10 +1741,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildStatsGrid(bool isTablet, bool isLargeTablet, bool isSmallScreen, bool isVerySmallScreen, double finalScale) {
-    print('Dashboard: Building stats grid with finalScale: $finalScale');
-    // For very small phones or landscape mode, use 2x2 grid
-    if (isVerySmallScreen || (isSmallScreen && !isTablet)) {
+  Widget _buildStatsGrid(BuildContext context, bool isTablet, bool isLargeTablet, bool isSmallScreen, bool isVerySmallScreen, double finalScale) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 600;
+    
+    // For mobile phones (not tablets), always use 2x2 grid for better readability
+    if (isMobile && !isTablet) {
       return Column(
         children: [
           // First row - 2 items
@@ -1354,10 +1759,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   Icons.calendar_today_outlined,
                   const Color.fromRGBO(8, 111, 222, 0.977),
                   isTablet,
+                  isLargeTablet,
+                  isSmallScreen,
+                  isVerySmallScreen,
                   finalScale,
                 ),
               ),
-              SizedBox(width: 8 * finalScale),
+              SizedBox(width: (isVerySmallScreen ? 6.0 : (isSmallScreen ? 7.0 : 8.0)) * finalScale),
               Expanded(
                 child: _buildOverviewStatCard(
                   'Pending\nInspections',
@@ -1365,12 +1773,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   Icons.hourglass_empty_outlined,
                   const Color(0xFF8B5CF6),
                   isTablet,
+                  isLargeTablet,
+                  isSmallScreen,
+                  isVerySmallScreen,
                   finalScale,
                 ),
               ),
             ],
           ),
-          SizedBox(height: 8 * finalScale),
+          SizedBox(height: (isVerySmallScreen ? 6.0 : (isSmallScreen ? 7.0 : 8.0)) * finalScale),
           // Second row - 2 items
           Row(
             children: [
@@ -1381,10 +1792,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   Icons.check_circle_outline,
                   const Color(0xFF10B981),
                   isTablet,
+                  isLargeTablet,
+                  isSmallScreen,
+                  isVerySmallScreen,
                   finalScale,
                 ),
               ),
-              SizedBox(width: 8 * finalScale),
+              SizedBox(width: (isVerySmallScreen ? 6.0 : (isSmallScreen ? 7.0 : 8.0)) * finalScale),
               Expanded(
                 child: _buildOverviewStatCard(
                   'In Progress',
@@ -1392,6 +1806,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   Icons.timeline_outlined,
                   const Color(0xFF06B6D4),
                   isTablet,
+                  isLargeTablet,
+                  isSmallScreen,
+                  isVerySmallScreen,
                   finalScale,
                 ),
               ),
@@ -1401,7 +1818,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       );
     }
     
-    // For tablets and larger phones, use horizontal layout
+    // For tablets and larger screens, use horizontal layout
     return Row(
       children: [
         // Today's Inspections
@@ -1412,10 +1829,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
             Icons.calendar_today_outlined,
             const Color.fromRGBO(8, 111, 222, 0.977),
             isTablet,
+            isLargeTablet,
+            isSmallScreen,
+            isVerySmallScreen,
             finalScale,
           ),
         ),
-        SizedBox(width: 6 * finalScale),
+        SizedBox(width: (isLargeTablet ? 8.0 : (isTablet ? 6.0 : 4.0)) * finalScale),
         
         // Pending Inspections
         Expanded(
@@ -1425,10 +1845,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
             Icons.hourglass_empty_outlined,
             const Color(0xFF8B5CF6),
             isTablet,
+            isLargeTablet,
+            isSmallScreen,
+            isVerySmallScreen,
             finalScale,
           ),
         ),
-        SizedBox(width: 6 * finalScale),
+        SizedBox(width: (isLargeTablet ? 8.0 : (isTablet ? 6.0 : 4.0)) * finalScale),
         
         // Weekly Completed
         Expanded(
@@ -1438,10 +1861,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
             Icons.check_circle_outline,
             const Color(0xFF10B981),
             isTablet,
+            isLargeTablet,
+            isSmallScreen,
+            isVerySmallScreen,
             finalScale,
           ),
         ),
-        SizedBox(width: 6 * finalScale),
+        SizedBox(width: (isLargeTablet ? 8.0 : (isTablet ? 6.0 : 4.0)) * finalScale),
         
         // In Progress
         Expanded(
@@ -1451,6 +1877,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
             Icons.timeline_outlined,
             const Color(0xFF06B6D4),
             isTablet,
+            isLargeTablet,
+            isSmallScreen,
+            isVerySmallScreen,
             finalScale,
           ),
         ),
@@ -1458,43 +1887,47 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildOverviewStatCard(String title, String value, IconData icon, Color color, bool isTablet, double finalScale) {
-    print('Dashboard: Building stat card - title: $title, value: "$value", finalScale: $finalScale');
+  Widget _buildOverviewStatCard(String title, String value, IconData icon, Color color, bool isTablet, bool isLargeTablet, bool isSmallScreen, bool isVerySmallScreen, double finalScale) {
     return Container(
-      padding: EdgeInsets.all((isTablet ? 16 : 12) * finalScale),
+      padding: EdgeInsets.all((isLargeTablet ? 18.0 : (isTablet ? 16.0 : (isVerySmallScreen ? 8.0 : (isSmallScreen ? 10.0 : 12.0)))) * finalScale),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.05),
-        borderRadius: BorderRadius.circular((isTablet ? 16 : 12) * finalScale),
+        borderRadius: BorderRadius.circular((isLargeTablet ? 16.0 : (isTablet ? 14.0 : (isVerySmallScreen ? 8.0 : (isSmallScreen ? 10.0 : 12.0)))) * finalScale),
         border: Border.all(
           color: color.withValues(alpha: 0.2),
-          width: 1,
+          width: isTablet ? 1.5 : 1,
         ),
       ),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
         children: [
           Icon(
             icon,
             color: color,
-            size: (isTablet ? 24 : 20) * finalScale,
+            size: (isLargeTablet ? 26.0 : (isTablet ? 24.0 : (isVerySmallScreen ? 16.0 : (isSmallScreen ? 18.0 : 20.0)))) * finalScale,
           ),
-          SizedBox(height: 8 * finalScale),
+          SizedBox(height: (isLargeTablet ? 10.0 : (isTablet ? 8.0 : (isVerySmallScreen ? 4.0 : (isSmallScreen ? 5.0 : 6.0)))) * finalScale),
           Text(
             value,
             style: TextStyle(
-              fontSize: (isTablet ? 20 : 18) * finalScale,
+              fontSize: (isLargeTablet ? 22.0 : (isTablet ? 20.0 : (isVerySmallScreen ? 14.0 : (isSmallScreen ? 16.0 : 18.0)))) * finalScale,
               fontWeight: FontWeight.bold,
               color: color,
+              height: 1.1,
             ),
           ),
-          SizedBox(height: 4 * finalScale),
+          SizedBox(height: (isLargeTablet ? 6.0 : (isTablet ? 5.0 : (isVerySmallScreen ? 2.0 : (isSmallScreen ? 3.0 : 4.0)))) * finalScale),
           Text(
             title,
             textAlign: TextAlign.center,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
             style: TextStyle(
-              fontSize: (isTablet ? 12 : 10) * finalScale,
+              fontSize: (isLargeTablet ? 13.0 : (isTablet ? 12.0 : (isVerySmallScreen ? 8.0 : (isSmallScreen ? 9.0 : 10.0)))) * finalScale,
               fontWeight: FontWeight.w500,
               color: const Color(0xFF64748B),
+              height: 1.2,
             ),
           ),
         ],

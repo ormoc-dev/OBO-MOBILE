@@ -3,6 +3,9 @@ import 'package:flutter/foundation.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:video_player/video_player.dart';
 import 'dart:io';
+import 'package:path_provider/path_provider.dart';
+import 'package:path/path.dart' as p;
+import 'package:permission_handler/permission_handler.dart';
 
 class MediaCaptureWidget extends StatefulWidget {
   final List<String> imagePaths;
@@ -34,6 +37,11 @@ class _MediaCaptureWidgetState extends State<MediaCaptureWidget> {
 
   Future<void> _pickImage(ImageSource source) async {
     try {
+      final ok = await _ensurePermissions(isVideo: false, source: source);
+      if (!ok) {
+        _showErrorDialog('Permission denied. Please grant camera/photos permission.');
+        return;
+      }
       final XFile? image = await _picker.pickImage(
         source: source,
         maxWidth: 1920,
@@ -42,8 +50,12 @@ class _MediaCaptureWidgetState extends State<MediaCaptureWidget> {
       );
       
       if (image != null) {
+        String finalPath = image.path;
+        if (!kIsWeb) {
+          finalPath = await _saveToInspectionsDir(image, subdir: 'photos');
+        }
         setState(() {
-          widget.imagePaths.add(image.path);
+          widget.imagePaths.add(finalPath);
         });
         widget.onImagesChanged(widget.imagePaths);
       }
@@ -54,30 +66,111 @@ class _MediaCaptureWidgetState extends State<MediaCaptureWidget> {
 
   Future<void> _pickVideo(ImageSource source) async {
     try {
+      final ok = await _ensurePermissions(isVideo: true, source: source);
+      if (!ok) {
+        _showErrorDialog('Permission denied. Please grant camera/videos permission.');
+        return;
+      }
       final XFile? video = await _picker.pickVideo(
         source: source,
         maxDuration: const Duration(minutes: 5), // Limit to 5 minutes
       );
       
       if (video != null) {
-        // Validate video file
-        final file = File(video.path);
-        if (await file.exists()) {
-          final fileSize = await file.length();
-          if (fileSize > 0) {
-            setState(() {
-              widget.videoPaths.add(video.path);
-            });
-            widget.onVideosChanged(widget.videoPaths);
-          } else {
-            _showErrorDialog('Video file is empty or corrupted.');
-          }
+        if (kIsWeb) {
+          // On web, use the blob/object URL directly (no dart:io validation)
+          setState(() {
+            widget.videoPaths.add(video.path);
+          });
+          widget.onVideosChanged(widget.videoPaths);
         } else {
-          _showErrorDialog('Video file not found.');
+          // Validate video file (mobile)
+          final file = File(video.path);
+          if (await file.exists()) {
+            final fileSize = await file.length();
+            if (fileSize > 0) {
+              String finalPath = await _saveToInspectionsDir(video, subdir: 'videos');
+              setState(() {
+                widget.videoPaths.add(finalPath);
+              });
+              widget.onVideosChanged(widget.videoPaths);
+            } else {
+              _showErrorDialog('Video file is empty or corrupted.');
+            }
+          } else {
+            _showErrorDialog('Video file not found.');
+          }
         }
       }
     } catch (e) {
       _showErrorDialog('Failed to pick video: $e');
+    }
+  }
+
+  Future<bool> _ensurePermissions({required bool isVideo, required ImageSource source}) async {
+    if (kIsWeb) return true; // Browser handles permissions
+    final List<Permission> toRequest = [];
+    if (source == ImageSource.camera) {
+      toRequest.add(Permission.camera);
+    }
+    // Storage/media library permissions on Android/iOS
+    if (Platform.isAndroid) {
+      // Android 13+ granular media permissions
+      if (isVideo) toRequest.add(Permission.videos);
+      if (!isVideo) toRequest.add(Permission.photos);
+      // Fallback for older Android
+      toRequest.add(Permission.storage);
+    } else if (Platform.isIOS) {
+      if (isVideo) toRequest.add(Permission.photos);
+      if (!isVideo) toRequest.add(Permission.photos);
+    }
+    if (toRequest.isEmpty) return true;
+    final statuses = await toRequest.request();
+    for (final entry in statuses.entries) {
+      if (entry.value.isPermanentlyDenied) {
+        await openAppSettings();
+        return false;
+      }
+      if (!entry.value.isGranted) return false;
+    }
+    return true;
+  }
+
+  Future<String> _saveToInspectionsDir(XFile xfile, {required String subdir}) async {
+    try {
+      final Directory baseDir = await getApplicationDocumentsDirectory();
+      final Directory inspectionsDir = Directory(p.join(baseDir.path, 'inspections', subdir));
+      if (!(await inspectionsDir.exists())) {
+        await inspectionsDir.create(recursive: true);
+      }
+
+      final String ext = p.extension(xfile.path);
+      final String fileName = '${DateTime.now().millisecondsSinceEpoch}_${p.basenameWithoutExtension(xfile.path)}$ext';
+      final String destPath = p.join(inspectionsDir.path, fileName);
+
+      // Copy to destination
+      final File destFile = File(destPath);
+      await destFile.writeAsBytes(await xfile.readAsBytes(), flush: true);
+      return destPath;
+    } catch (e) {
+      // Fallback: try temporary directory
+      try {
+        final Directory tmpDir = await getTemporaryDirectory();
+        final Directory inspectionsTmp = Directory(p.join(tmpDir.path, 'inspections', subdir));
+        if (!(await inspectionsTmp.exists())) {
+          await inspectionsTmp.create(recursive: true);
+        }
+        final String ext = p.extension(xfile.path);
+        final String fileName = '${DateTime.now().millisecondsSinceEpoch}_${p.basenameWithoutExtension(xfile.path)}$ext';
+        final String destPath = p.join(inspectionsTmp.path, fileName);
+        final File destFile = File(destPath);
+        await destFile.writeAsBytes(await xfile.readAsBytes(), flush: true);
+        return destPath;
+      } catch (e2) {
+        // As last resort return original path
+        debugPrint('Media save failed: $e | Fallback failed: $e2');
+        return xfile.path;
+      }
     }
   }
 

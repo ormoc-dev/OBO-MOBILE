@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter/foundation.dart';
+import 'dart:ui' as ui;
 import '../utils/location_service.dart';
 import 'fullscreen_map_dialog.dart';
 
@@ -16,6 +17,8 @@ class MapWidget extends StatefulWidget {
   final bool showSearchBar;
   final bool showAddressInfo;
   final double? height;
+  final IconData? customMarkerIcon;
+  final Color? customMarkerColor;
   
   const MapWidget({
     super.key,
@@ -26,6 +29,8 @@ class MapWidget extends StatefulWidget {
     this.showSearchBar = true,
     this.showAddressInfo = true,
     this.height,
+    this.customMarkerIcon,
+    this.customMarkerColor,
   });
 
   @override
@@ -398,6 +403,8 @@ class _MapWidgetState extends State<MapWidget> {
         enableLocationPicker: widget.enableLocationPicker,
         showSearchBar: widget.showSearchBar,
         showAddressInfo: widget.showAddressInfo,
+        customMarkerIcon: widget.customMarkerIcon,
+        customMarkerColor: widget.customMarkerColor,
       ),
     );
 
@@ -418,6 +425,140 @@ class _MapWidgetState extends State<MapWidget> {
       if (widget.showAddressInfo) {
         _getAddressForLocation(result);
       }
+    }
+  }
+
+  void _openStreetView(LatLng location) async {
+    final lat = location.latitude;
+    final lng = location.longitude;
+    
+    // Show loading message
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Opening Google Street View...'),
+          backgroundColor: Color(0xFF34A853),
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
+    
+    // Create Google Street View URL
+    final streetViewUrl = 'https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=$lat,$lng';
+    
+    try {
+      // Platform-specific handling
+      if (kIsWeb) {
+        // For web platform, use window.open equivalent
+        await launchUrl(
+          Uri.parse(streetViewUrl),
+          mode: LaunchMode.externalApplication,
+        );
+      } else {
+        // For mobile platforms, try different approaches
+        bool launched = false;
+        
+        // Try Android intent first
+        try {
+          final androidUrl = 'google.streetview:cbll=$lat,$lng';
+          if (await canLaunchUrl(Uri.parse(androidUrl))) {
+            await launchUrl(Uri.parse(androidUrl));
+            launched = true;
+          }
+        } catch (e) {
+          print('Android street view failed: $e');
+        }
+        
+        // Try iOS Google Maps app with street view
+        if (!launched) {
+          try {
+            final iosUrl = 'comgooglemaps://?q=$lat,$lng&views=streetview';
+            if (await canLaunchUrl(Uri.parse(iosUrl))) {
+              await launchUrl(Uri.parse(iosUrl));
+              launched = true;
+            }
+          } catch (e) {
+            print('iOS Google Maps street view failed: $e');
+          }
+        }
+        
+        // Fallback to web URL
+        if (!launched) {
+          if (await canLaunchUrl(Uri.parse(streetViewUrl))) {
+            await launchUrl(
+              Uri.parse(streetViewUrl),
+              mode: LaunchMode.externalApplication,
+            );
+            launched = true;
+          }
+        }
+        
+        // If all methods failed, show dialog
+        if (!launched) {
+          _showStreetViewDialog(streetViewUrl, lat, lng);
+        }
+      }
+    } catch (e) {
+      print('Street View error: $e');
+      // Show dialog as fallback
+      _showStreetViewDialog(streetViewUrl, lat, lng);
+    }
+  }
+  
+  void _showStreetViewDialog(String streetViewUrl, double lat, double lng) {
+    if (mounted) {
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.streetview, color: Color(0xFF34A853)),
+              SizedBox(width: 8),
+              Text('Open in Google Street View'),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Cannot open Google Street View automatically. Please copy this link:',
+                style: TextStyle(fontSize: 14),
+              ),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF5F5F5),
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(color: const Color(0xFFE0E0E0)),
+                ),
+                child: SelectableText(
+                  streetViewUrl,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontFamily: 'monospace',
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'Coordinates: $lat, $lng',
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: Color(0xFF666666),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Close'),
+            ),
+          ],
+        ),
+      );
     }
   }
 
@@ -658,26 +799,14 @@ class _MapWidgetState extends State<MapWidget> {
                     if (_selectedLocation != null)
                       Marker(
                         point: _selectedLocation!,
-                        width: 40,
+                        width: 30,
                         height: 40,
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF10B981),
-                            shape: BoxShape.circle,
-                            border: Border.all(color: Colors.white, width: 3),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withOpacity(0.3),
-                                blurRadius: 4,
-                                offset: const Offset(0, 2),
-                              ),
-                            ],
+                        alignment: Alignment.topCenter,
+                        child: CustomPaint(
+                          painter: PinMarkerPainter(
+                            color: widget.customMarkerColor ?? const Color(0xFF3B82F6),
                           ),
-                          child: const Icon(
-                            Icons.location_on,
-                            color: Colors.white,
-                            size: 20,
-                          ),
+                          child: Container(),
                         ),
                       ),
                   ],
@@ -967,32 +1096,62 @@ class _MapWidgetState extends State<MapWidget> {
                       
                       // Google Maps Button
                       const SizedBox(height: 8),
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton.icon(
-                          onPressed: () => _openGoogleMaps(_selectedLocation!),
-                          icon: const Icon(
-                            Icons.map,
-                            size: 16,
-                            color: Colors.white,
-                          ),
-                          label: const Text(
-                            'Open in Google Maps',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.white,
+                      Row(
+                        children: [
+                          Expanded(
+                            child: ElevatedButton.icon(
+                              onPressed: () => _openGoogleMaps(_selectedLocation!),
+                              icon: const Icon(
+                                Icons.map,
+                                size: 16,
+                                color: Colors.white,
+                              ),
+                              label: const Text(
+                                'Maps',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.white,
+                                ),
+                              ),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF4285F4), // Google Blue
+                                padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                elevation: 2,
+                              ),
                             ),
                           ),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF4285F4), // Google Blue
-                            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(6),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: ElevatedButton.icon(
+                              onPressed: () => _openStreetView(_selectedLocation!),
+                              icon: const Icon(
+                                Icons.streetview,
+                                size: 16,
+                                color: Colors.white,
+                              ),
+                              label: const Text(
+                                'Street View',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.white,
+                                ),
+                              ),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF34A853), // Google Green
+                                padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                elevation: 2,
+                              ),
                             ),
-                            elevation: 2,
                           ),
-                        ),
+                        ],
                       ),
                     ],
                   ),
@@ -1002,5 +1161,81 @@ class _MapWidgetState extends State<MapWidget> {
         ),
       ),
     );
+  }
+}
+
+// Custom painter for pin marker
+class PinMarkerPainter extends CustomPainter {
+  final Color color;
+
+  PinMarkerPainter({required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.fill;
+
+    final shadowPaint = Paint()
+      ..color = Colors.black.withOpacity(0.3)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3);
+
+    // Pin shape path (teardrop/pin shape) - using ui.Path from dart:ui
+    final path = ui.Path();
+    final width = size.width;
+    final height = size.height;
+    
+    // Pin point at bottom center
+    path.moveTo(width / 2, height);
+    
+    // Left curve of pin
+    path.quadraticBezierTo(
+      width * 0.2,
+      height * 0.7,
+      width * 0.3,
+      height * 0.5,
+    );
+    
+    // Top circle/head of pin
+    path.arcToPoint(
+      Offset(width * 0.7, height * 0.5),
+      radius: Radius.circular(width * 0.2),
+      clockwise: true,
+    );
+    
+    // Right curve of pin
+    path.quadraticBezierTo(
+      width * 0.8,
+      height * 0.7,
+      width / 2,
+      height,
+    );
+    
+    path.close();
+
+    // Draw shadow first
+    canvas.save();
+    canvas.translate(1, 2);
+    canvas.drawPath(path, shadowPaint);
+    canvas.restore();
+
+    // Draw pin
+    canvas.drawPath(path, paint);
+
+    // Optional: Add inner circle for detail (white circle to look like a hole)
+    final innerPaint = Paint()
+      ..color = Colors.white
+      ..style = PaintingStyle.fill;
+    
+    canvas.drawCircle(
+      Offset(width / 2, height * 0.5),
+      width * 0.15,
+      innerPaint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(PinMarkerPainter oldDelegate) {
+    return oldDelegate.color != color;
   }
 }

@@ -3,6 +3,9 @@ import 'dart:math';
 import '../models/inspection.dart';
 import '../services/hive_offline_database.dart';
 import '../services/auth_service.dart';
+import '../services/connectivity_service.dart';
+import '../services/inspection_service.dart';
+import '../utils/location_service.dart';
 import '../widgets/map_widget.dart';
 import '../widgets/media_capture_widget.dart';
 import 'package:latlong2/latlong.dart';
@@ -596,18 +599,51 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
     );
   }
 
+  Future<bool> _showPermissionModal(BuildContext context, bool isTablet) async {
+    // Check current permissions and connectivity
+    final hasLocationPermission = await LocationService.hasLocationPermission();
+    final connectivityService = ConnectivityService();
+    final isConnected = connectivityService.isConnected;
+    
+    // If already have permissions and connectivity, proceed without showing modal
+    if (hasLocationPermission && isConnected) {
+      return true;
+    }
+
+    // Show permission modal
+    return await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return _PermissionModalDialog(
+          isTablet: isTablet,
+          hasLocationPermission: hasLocationPermission,
+          isConnected: isConnected,
+        );
+      },
+    ) ?? false;
+  }
+
   Widget _buildSectionChip(String section, bool isTablet) {
     final isSelected = _selectedSections[section] ?? false;
     final sectionData = _getSectionData(section);
     
     return GestureDetector(
-      onTap: () {
+      onTap: () async {
+        // If selecting Civil/Structural section, show permission modal first
+        if (!isSelected && section == 'Civil/Structural') {
+          final shouldProceed = await _showPermissionModal(context, isTablet);
+          if (!shouldProceed) {
+            return; // User cancelled or denied permissions
+          }
+        }
+        
         setState(() {
           _selectedSections[section] = !isSelected;
-          // Initialize media paths for newly selected sections
+          // Initialize media paths only if absent; do not overwrite existing media
           if (!isSelected) {
-            _sectionImagePaths[section] = [];
-            _sectionVideoPaths[section] = [];
+            _sectionImagePaths.putIfAbsent(section, () => []);
+            _sectionVideoPaths.putIfAbsent(section, () => []);
           }
         });
       },
@@ -1097,6 +1133,7 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
           showSearchBar: true,
           showAddressInfo: true,
           height: 450,
+          customMarkerColor: const Color(0xFF3B82F6), // Blue color for pin pointer
           onLocationSelected: (location) {
             setState(() {
               _civilStructuralLocation = location;
@@ -1288,11 +1325,8 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
                 sectionStatus: _sectionStatus,
               );
 
-        // Save to Hive database
+        // Save to Hive database first (offline-first approach)
         await HiveOfflineDatabase.saveInspection(inspection);
-        
-        // Mark as synced since it's saved locally (offline-first approach)
-        await HiveOfflineDatabase.markInspectionAsSynced(inspection.id);
         
         print('Inspection saved to Hive: ${inspection.id}');
         print('Scanned data: ${inspection.scannedData}');
@@ -1301,13 +1335,81 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
         print('Videos captured: ${allVideoPaths.length}');
         print('Inspection duration: ${_calculateDuration()}');
 
+        // Try to sync to server if online
+        bool syncedToServer = false;
+        String syncMessage = '';
+        final connectivityService = ConnectivityService();
+        
+        if (connectivityService.isConnected) {
+          try {
+            if (widget.isEditing && widget.existingInspection != null) {
+              // Update existing inspection
+              final result = await InspectionService.updateInspection(inspection);
+              if (result['success'] == true) {
+                syncedToServer = true;
+                await HiveOfflineDatabase.markInspectionAsSynced(inspection.id);
+                syncMessage = 'Synced to server successfully.';
+              }
+            } else {
+              // Create new inspection
+              final result = await InspectionService.createInspection(inspection);
+              if (result['success'] == true) {
+                syncedToServer = true;
+                final serverId = result['server_inspection_id'];
+                if (serverId != null) {
+                  // Store old ID and update with server ID
+                  final oldId = inspection.id;
+                  inspection.id = 'inspection_$serverId';
+                  // Delete old entry and save with new ID
+                  await HiveOfflineDatabase.deleteInspection(oldId);
+                  await HiveOfflineDatabase.saveInspection(inspection);
+                }
+                await HiveOfflineDatabase.markInspectionAsSynced(inspection.id);
+                syncMessage = 'Synced to server successfully.';
+              }
+            }
+          } catch (e) {
+            print('Error syncing to server: $e');
+            syncMessage = 'Saved locally. Will sync when online.';
+          }
+        } else {
+          syncMessage = 'Saved locally. Will sync when online.';
+        }
+
         // Show success dialog
         if (mounted) {
           showDialog(
             context: context,
             builder: (context) => AlertDialog(
               title: Text(widget.isEditing ? 'Inspection Updated' : 'Inspection Submitted'),
-              content: Text('Your inspection for ${selectedSections.length} section(s) has been ${widget.isEditing ? 'updated' : 'saved'} successfully${allImagePaths.isNotEmpty || allVideoPaths.isNotEmpty ? ' with ${allImagePaths.length} photo(s) and ${allVideoPaths.length} video(s)' : ''}${_inspectionStartTime != null && _inspectionEndTime != null ? ' (Duration: ${_calculateDuration()})' : ''} and will be synced when online.'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Your inspection for ${selectedSections.length} section(s) has been ${widget.isEditing ? 'updated' : 'saved'} successfully${allImagePaths.isNotEmpty || allVideoPaths.isNotEmpty ? ' with ${allImagePaths.length} photo(s) and ${allVideoPaths.length} video(s)' : ''}${_inspectionStartTime != null && _inspectionEndTime != null ? ' (Duration: ${_calculateDuration()})' : ''}.'),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Icon(
+                        syncedToServer ? Icons.cloud_done : Icons.cloud_off,
+                        color: syncedToServer ? Colors.green : Colors.orange,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          syncMessage,
+                          style: TextStyle(
+                            color: syncedToServer ? Colors.green : Colors.orange,
+                            fontWeight: FontWeight.w500,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
               actions: [
                 TextButton(
                   onPressed: () {
@@ -1368,6 +1470,373 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
   }
 }
 
+class _PermissionModalDialog extends StatefulWidget {
+  final bool isTablet;
+  final bool hasLocationPermission;
+  final bool isConnected;
+
+  const _PermissionModalDialog({
+    required this.isTablet,
+    required this.hasLocationPermission,
+    required this.isConnected,
+  });
+
+  @override
+  State<_PermissionModalDialog> createState() => _PermissionModalDialogState();
+}
+
+class _PermissionModalDialogState extends State<_PermissionModalDialog> {
+  bool _isRequestingLocation = false;
+  bool _isCheckingConnectivity = false;
+  bool _hasLocationPermission = false;
+  bool _isConnected = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _hasLocationPermission = widget.hasLocationPermission;
+    _isConnected = widget.isConnected;
+  }
+
+  Future<void> _requestLocationPermission() async {
+    setState(() {
+      _isRequestingLocation = true;
+    });
+
+    try {
+      final granted = await LocationService.requestLocationPermission();
+      setState(() {
+        _hasLocationPermission = granted;
+        _isRequestingLocation = false;
+      });
+
+      if (!granted) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Location permission is required for Civil/Structural inspection. Please enable it in app settings.'),
+              backgroundColor: Colors.orange,
+              duration: Duration(seconds: 3),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      setState(() {
+        _isRequestingLocation = false;
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error requesting location permission: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _checkConnectivity() async {
+    setState(() {
+      _isCheckingConnectivity = true;
+    });
+
+    try {
+      final connectivityService = ConnectivityService();
+      // Check connectivity status (service should already be initialized in main.dart)
+      await Future.delayed(const Duration(milliseconds: 500)); // Give time to check
+      
+      setState(() {
+        _isConnected = connectivityService.isConnected;
+        _isCheckingConnectivity = false;
+      });
+
+      if (!_isConnected) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Internet connection is required for map features. Please connect to the internet.'),
+              backgroundColor: Colors.orange,
+              duration: Duration(seconds: 3),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      setState(() {
+        _isCheckingConnectivity = false;
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error checking connectivity: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  bool get _canProceed => _hasLocationPermission && _isConnected;
+
+  @override
+  Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isLargeTablet = screenWidth > 900;
+
+    return Dialog(
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Container(
+        width: widget.isTablet ? (isLargeTablet ? 500 : 450) : 350,
+        padding: EdgeInsets.all(widget.isTablet ? 28 : 24),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        Color(0xFFF59E0B),
+                        Color(0xFFF97316),
+                      ],
+                    ),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(
+                    Icons.construction_rounded,
+                    color: Colors.white,
+                    size: 24,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Civil/Structural Inspection',
+                        style: TextStyle(
+                          fontSize: widget.isTablet ? 20 : 18,
+                          fontWeight: FontWeight.bold,
+                          color: const Color(0xFF1F2937),
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Permissions Required',
+                        style: TextStyle(
+                          fontSize: widget.isTablet ? 14 : 12,
+                          color: const Color(0xFF6B7280),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 24),
+            
+            // Description
+            Text(
+              'The Civil/Structural inspection section requires location and internet access to use map features and location mapping.',
+              style: TextStyle(
+                fontSize: widget.isTablet ? 15 : 13,
+                color: const Color(0xFF374151),
+                height: 1.5,
+              ),
+            ),
+            const SizedBox(height: 24),
+
+            // Location Permission Section
+            _buildPermissionSection(
+              icon: Icons.location_on_rounded,
+              title: 'Location Permission',
+              description: 'Required to mark inspection location on map',
+              isGranted: _hasLocationPermission,
+              isLoading: _isRequestingLocation,
+              onTap: _hasLocationPermission ? null : _requestLocationPermission,
+              color: const Color(0xFF3B82F6),
+            ),
+            
+            const SizedBox(height: 16),
+
+            // Internet Connection Section
+            _buildPermissionSection(
+              icon: Icons.wifi_rounded,
+              title: 'Internet Connection',
+              description: 'Required for map tiles and location services',
+              isGranted: _isConnected,
+              isLoading: _isCheckingConnectivity,
+              onTap: _isConnected ? null : _checkConnectivity,
+              color: const Color(0xFF10B981),
+            ),
+
+            const SizedBox(height: 24),
+
+            // Action Buttons
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.of(context).pop(false),
+                    style: OutlinedButton.styleFrom(
+                      padding: EdgeInsets.symmetric(vertical: widget.isTablet ? 14 : 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      side: const BorderSide(color: Color(0xFF6B7280)),
+                    ),
+                    child: Text(
+                      'Cancel',
+                      style: TextStyle(
+                        fontSize: widget.isTablet ? 15 : 14,
+                        fontWeight: FontWeight.w600,
+                        color: const Color(0xFF6B7280),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: _canProceed
+                        ? () => Navigator.of(context).pop(true)
+                        : null,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color.fromRGBO(8, 111, 222, 0.977),
+                      padding: EdgeInsets.symmetric(vertical: widget.isTablet ? 14 : 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      elevation: 0,
+                    ),
+                    child: Text(
+                      'Continue',
+                      style: TextStyle(
+                        fontSize: widget.isTablet ? 15 : 14,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPermissionSection({
+    required IconData icon,
+    required String title,
+    required String description,
+    required bool isGranted,
+    required bool isLoading,
+    required VoidCallback? onTap,
+    required Color color,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: EdgeInsets.all(widget.isTablet ? 16 : 14),
+        decoration: BoxDecoration(
+          color: isGranted ? color.withOpacity(0.1) : const Color(0xFFF9FAFB),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isGranted ? color : const Color(0xFFE2E8F0),
+            width: isGranted ? 2 : 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: isGranted ? color : color.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(
+                icon,
+                color: isGranted ? Colors.white : color,
+                size: widget.isTablet ? 22 : 20,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: widget.isTablet ? 15 : 14,
+                      fontWeight: FontWeight.w600,
+                      color: const Color(0xFF1F2937),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    description,
+                    style: TextStyle(
+                      fontSize: widget.isTablet ? 12 : 11,
+                      color: const Color(0xFF6B7280),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            if (isLoading)
+              const SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF3B82F6)),
+                ),
+              )
+            else if (isGranted)
+              Container(
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  color: color,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.check,
+                  color: Colors.white,
+                  size: 16,
+                ),
+              )
+            else
+              Icon(
+                Icons.arrow_forward_ios,
+                color: color,
+                size: widget.isTablet ? 16 : 14,
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class CalculatorDialog extends StatefulWidget {
   final bool isTablet;
   
@@ -1400,14 +1869,42 @@ class _CalculatorDialogState extends State<CalculatorDialog> with TickerProvider
 
   @override
   Widget build(BuildContext context) {
+    final screenSize = MediaQuery.of(context).size;
+    final screenWidth = screenSize.width;
+    final screenHeight = screenSize.height;
+    final isTablet = screenWidth > 600;
+    final isLargeTablet = screenWidth > 900;
+    final isSmallScreen = screenHeight < 600;
+    
+    // Responsive sizing
+    final dialogWidth = isLargeTablet 
+        ? screenWidth * 0.5 
+        : isTablet 
+            ? screenWidth * 0.7 
+            : screenWidth * 0.9;
+    final dialogHeight = isSmallScreen 
+        ? screenHeight * 0.85 
+        : isLargeTablet 
+            ? screenHeight * 0.75 
+            : isTablet 
+                ? screenHeight * 0.8 
+                : screenHeight * 0.85;
+    
+    final headerPadding = isTablet ? 24.0 : 16.0;
+    final buttonSpacing = isTablet ? 8.0 : 6.0;
+    
     return Dialog(
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(20),
       ),
       child: Container(
-        width: widget.isTablet ? 450 : 350,
-        height: widget.isTablet ? 650 : 550,
-        padding: const EdgeInsets.all(20),
+        width: dialogWidth,
+        height: dialogHeight,
+        constraints: BoxConstraints(
+          maxWidth: isTablet ? 600 : double.infinity,
+          maxHeight: screenHeight * 0.9,
+        ),
+        padding: EdgeInsets.all(headerPadding),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(20),
@@ -1418,94 +1915,141 @@ class _CalculatorDialogState extends State<CalculatorDialog> with TickerProvider
             Row(
               children: [
                 Container(
-                  padding: const EdgeInsets.all(8),
+                  padding: EdgeInsets.all(isTablet ? 10 : 8),
                   decoration: BoxDecoration(
                     color: const Color.fromRGBO(8, 111, 222, 0.977),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: const Icon(
+                  child: Icon(
                     Icons.calculate_rounded,
                     color: Colors.white,
-                    size: 20,
+                    size: isTablet ? 24 : 20,
                   ),
                 ),
-                const SizedBox(width: 12),
-                Text(
-                  'Professional Calculator',
-                  style: TextStyle(
-                    fontSize: widget.isTablet ? 18 : 16,
-                    fontWeight: FontWeight.bold,
-                    color: const Color(0xFF2D3748),
+                SizedBox(width: isTablet ? 12 : 10),
+                Expanded(
+                  child: Text(
+                    'Professional Calculator',
+                    style: TextStyle(
+                      fontSize: isTablet ? 20 : 16,
+                      fontWeight: FontWeight.bold,
+                      color: const Color(0xFF2D3748),
+                    ),
                   ),
                 ),
-                const Spacer(),
                 if (_memoryIndicator)
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    padding: EdgeInsets.symmetric(
+                      horizontal: isTablet ? 10 : 8,
+                      vertical: isTablet ? 6 : 4,
+                    ),
                     decoration: BoxDecoration(
                       color: const Color(0xFF10B981),
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: const Text(
+                    child: Text(
                       'M',
                       style: TextStyle(
                         color: Colors.white,
-                        fontSize: 12,
+                        fontSize: isTablet ? 13 : 11,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
                   ),
-                const SizedBox(width: 8),
+                SizedBox(width: isTablet ? 10 : 8),
                 IconButton(
                   onPressed: () => Navigator.of(context).pop(),
-                  icon: const Icon(Icons.close_rounded),
+                  icon: Icon(
+                    Icons.close_rounded,
+                    size: isTablet ? 24 : 20,
+                  ),
                   style: IconButton.styleFrom(
                     backgroundColor: const Color(0xFFF8FAFC),
                     foregroundColor: const Color(0xFF6B7280),
+                    padding: EdgeInsets.all(isTablet ? 12 : 8),
                   ),
                 ),
               ],
             ),
             
-            const SizedBox(height: 16),
+            SizedBox(height: isTablet ? 20 : 16),
             
-            // Display
+            // Realistic Calculator Display (LCD-style)
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.all(16),
+              padding: EdgeInsets.symmetric(
+                horizontal: isTablet ? 20 : 16,
+                vertical: isTablet ? 24 : 20,
+              ),
               decoration: BoxDecoration(
-                color: const Color(0xFFF8FAFC),
-                borderRadius: BorderRadius.circular(12),
+                gradient: const LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    Color(0xFF1E293B), // Dark slate
+                    Color(0xFF0F172A), // Darker slate
+                  ],
+                ),
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.3),
+                    blurRadius: 8,
+                    offset: const Offset(0, 4),
+                  ),
+                  const BoxShadow(
+                    color: Color(0xFF1E293B),
+                    blurRadius: 2,
+                    offset: Offset(0, -1),
+                  ),
+                ],
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
+                  // Operation display (smaller, secondary)
                   if (_operation.isNotEmpty)
-                    Text(
-                      '$_firstNumber $_operation',
-                      style: TextStyle(
-                        fontSize: widget.isTablet ? 16 : 14,
-                        color: const Color(0xFF6B7280),
+                    Padding(
+                      padding: EdgeInsets.only(bottom: isTablet ? 8 : 6),
+                      child: Text(
+                        _formatOperation(_firstNumber, _operation),
+                        style: TextStyle(
+                          fontSize: isTablet ? 18 : 14,
+                          color: const Color(0xFF94A3B8),
+                          fontFamily: 'monospace',
+                          fontWeight: FontWeight.w400,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                  Text(
-                    _display,
-                    style: TextStyle(
-                      fontSize: widget.isTablet ? 32 : 28,
-                      fontWeight: FontWeight.bold,
-                      color: const Color(0xFF1F2937),
+                  // Main display
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerRight,
+                    child: Text(
+                      _formatDisplay(_display),
+                      style: TextStyle(
+                        fontSize: isTablet ? 48 : 36,
+                        fontWeight: FontWeight.w300,
+                        color: const Color(0xFFE2E8F0), // Light text on dark background
+                        fontFamily: 'monospace',
+                        letterSpacing: 1,
+                      ),
+                      textAlign: TextAlign.right,
                     ),
                   ),
                 ],
               ),
             ),
             
-            const SizedBox(height: 16),
+            SizedBox(height: isTablet ? 20 : 16),
             
             // Calculator Content
             Expanded(
               child: SingleChildScrollView(
-                child: _buildUnifiedCalculator(),
+                physics: const BouncingScrollPhysics(),
+                child: _buildUnifiedCalculator(isTablet, buttonSpacing),
               ),
             ),
           ],
@@ -1513,70 +2057,138 @@ class _CalculatorDialogState extends State<CalculatorDialog> with TickerProvider
       ),
     );
   }
+  
+  String _formatDisplay(String display) {
+    // Format large numbers with commas for readability
+    if (display == 'Error' || display == 'Infinity' || display == 'NaN') {
+      return display;
+    }
+    
+    // Handle scientific notation
+    if (display.contains('e') || display.contains('E')) {
+      return display;
+    }
+    
+    try {
+      final num = double.parse(display);
+      if (num.isInfinite || num.isNaN) {
+        return 'Error';
+      }
+      
+      if (num % 1 == 0) {
+        // Integer - format with commas
+        final intValue = num.toInt();
+        if (intValue.abs() > 999) {
+          return intValue.toString().replaceAllMapped(
+            RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
+            (Match m) => '${m[1]},',
+          );
+        }
+        return intValue.toString();
+      } else {
+        // Decimal - format with appropriate precision
+        final parts = display.split('.');
+        if (parts.length == 2) {
+          // Remove trailing zeros
+          final decimalPart = parts[1].replaceAll(RegExp(r'0+$'), '');
+          final integerPart = int.tryParse(parts[0]) ?? 0;
+          
+          if (integerPart.abs() > 999) {
+            final formattedInt = integerPart.toString().replaceAllMapped(
+              RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
+              (Match m) => '${m[1]},',
+            );
+            return decimalPart.isEmpty ? formattedInt : '$formattedInt.$decimalPart';
+          }
+          
+          return decimalPart.isEmpty ? integerPart.toString() : '$integerPart.$decimalPart';
+        }
+      }
+    } catch (e) {
+      // If parsing fails, return as is
+    }
+    return display;
+  }
+  
+  String _formatOperation(double number, String operation) {
+    final formatted = number % 1 == 0 
+        ? number.toInt().toString()
+        : number.toString();
+    return '$formatted ${_getOperationSymbol(operation)}';
+  }
+  
+  String _getOperationSymbol(String operation) {
+    switch (operation) {
+      case '+':
+        return '+';
+      case '-':
+        return '−';
+      case '×':
+        return '×';
+      case '÷':
+        return '÷';
+      case '^':
+        return '^';
+      default:
+        return operation;
+    }
+  }
 
   // Unified Calculator
-  Widget _buildUnifiedCalculator() {
+  Widget _buildUnifiedCalculator(bool isTablet, double buttonSpacing) {
     return Column(
       children: [
         // Memory functions row
-        _buildButtonRow(['MC', 'MR', 'M+', 'M-']),
-        const SizedBox(height: 6),
+        _buildButtonRow(['MC', 'MR', 'M+', 'M-'], isTablet, isLastRow: false),
+        SizedBox(height: buttonSpacing),
         
         // Scientific functions row 1
-        _buildButtonRow(['π', 'e', '√', 'x²']),
-        const SizedBox(height: 6),
+        _buildButtonRow(['π', 'e', '√', 'x²'], isTablet, isLastRow: false),
+        SizedBox(height: buttonSpacing),
         
         // Scientific functions row 2
-        _buildButtonRow(['sin', 'cos', 'tan', 'log']),
-        const SizedBox(height: 6),
+        _buildButtonRow(['sin', 'cos', 'tan', 'log'], isTablet, isLastRow: false),
+        SizedBox(height: buttonSpacing),
         
         // Scientific functions row 3
-        _buildButtonRow(['ln', '1/x', 'x!', '^']),
-        const SizedBox(height: 6),
+        _buildButtonRow(['ln', '1/x', 'x!', '^'], isTablet, isLastRow: false),
+        SizedBox(height: buttonSpacing),
         
         // Basic operations row 1
-        _buildButtonRow(['(', ')', 'C', '÷']),
-        const SizedBox(height: 6),
+        _buildButtonRow(['(', ')', 'C', '÷'], isTablet, isLastRow: false),
+        SizedBox(height: buttonSpacing),
         
         // Basic operations row 2
-        _buildButtonRow(['7', '8', '9', '×']),
-        const SizedBox(height: 6),
+        _buildButtonRow(['7', '8', '9', '×'], isTablet, isLastRow: false),
+        SizedBox(height: buttonSpacing),
         
         // Basic operations row 3
-        _buildButtonRow(['4', '5', '6', '-']),
-        const SizedBox(height: 6),
+        _buildButtonRow(['4', '5', '6', '-'], isTablet, isLastRow: false),
+        SizedBox(height: buttonSpacing),
         
         // Basic operations row 4
-        _buildButtonRow(['1', '2', '3', '+']),
-        const SizedBox(height: 6),
+        _buildButtonRow(['1', '2', '3', '+'], isTablet, isLastRow: false),
+        SizedBox(height: buttonSpacing),
         
         // Basic operations row 5
-        _buildButtonRow(['±', '0', '.', '='], isLastRow: true),
+        _buildButtonRow(['±', '0', '.', '='], isTablet, isLastRow: true),
       ],
     );
   }
 
 
-  Widget _buildButtonRow(List<String> buttons, {bool isLastRow = false}) {
+  Widget _buildButtonRow(List<String> buttons, bool isTablet, {bool isLastRow = false}) {
     return Row(
       children: buttons.map((button) {
         if (isLastRow && button == '0') {
           // Make 0 button wider
           return Expanded(
             flex: 2,
-            child: _buildCalculatorButton(button),
-          );
-        } else if (isLastRow && button == '.') {
-          return Expanded(
-            child: _buildCalculatorButton(button),
-          );
-        } else if (isLastRow && button == '=') {
-          return Expanded(
-            child: _buildCalculatorButton(button),
+            child: _buildCalculatorButton(button, isTablet),
           );
         } else {
           return Expanded(
-            child: _buildCalculatorButton(button),
+            child: _buildCalculatorButton(button, isTablet),
           );
         }
       }).toList(),
@@ -1584,7 +2196,7 @@ class _CalculatorDialogState extends State<CalculatorDialog> with TickerProvider
   }
 
 
-  Widget _buildCalculatorButton(String text) {
+  Widget _buildCalculatorButton(String text, bool isTablet) {
     final bool isNumber = RegExp(r'[0-9]').hasMatch(text);
     final bool isOperator = ['+', '-', '×', '÷', '='].contains(text);
     final bool isMemory = ['MC', 'MR', 'M+', 'M-'].contains(text);
@@ -1615,27 +2227,40 @@ class _CalculatorDialogState extends State<CalculatorDialog> with TickerProvider
       textColor = const Color(0xFF1F2937);
     }
 
+    // Responsive button sizing
+    final buttonHeight = isTablet ? 56.0 : 48.0;
+    final buttonMargin = isTablet ? 6.0 : 4.0;
+    final fontSize = isTablet ? 18.0 : 16.0;
+    final minFontSize = isTablet ? 14.0 : 12.0;
+
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 4),
+      margin: EdgeInsets.symmetric(horizontal: buttonMargin),
+      height: buttonHeight,
       child: ElevatedButton(
         onPressed: () => _onButtonPressed(text),
         style: ElevatedButton.styleFrom(
           backgroundColor: backgroundColor,
           foregroundColor: textColor,
-          elevation: 0,
+          elevation: 2,
+          shadowColor: Colors.black.withOpacity(0.1),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),
           padding: EdgeInsets.symmetric(
-            vertical: widget.isTablet ? 12 : 10,
-            horizontal: 6,
+            vertical: isTablet ? 14 : 12,
+            horizontal: isTablet ? 8 : 6,
           ),
         ),
-        child: Text(
-          text,
-          style: TextStyle(
-            fontSize: widget.isTablet ? 18 : 16,
-            fontWeight: FontWeight.w600,
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(
+            text,
+            style: TextStyle(
+              fontSize: fontSize,
+              fontWeight: FontWeight.w600,
+            ),
+            maxLines: 1,
+            textScaleFactor: 1.0,
           ),
         ),
       ),
@@ -1720,9 +2345,27 @@ class _CalculatorDialogState extends State<CalculatorDialog> with TickerProvider
           return;
         }
         break;
+      case '^':
+        result = pow(_firstNumber, _secondNumber).toDouble();
+        break;
     }
 
-    _display = result % 1 == 0 ? result.toInt().toString() : result.toString();
+    // Format result appropriately
+    if (result.isInfinite || result.isNaN) {
+      _display = 'Error';
+    } else {
+      // Limit decimal places for very large numbers
+      if (result.abs() > 1000000) {
+        _display = result.toStringAsExponential(6);
+      } else if (result.abs() < 0.000001 && result != 0) {
+        _display = result.toStringAsExponential(6);
+      } else {
+        // Format with appropriate decimal places
+        final formatted = result.toStringAsFixed(10).replaceAll(RegExp(r'0*$'), '').replaceAll(RegExp(r'\.$'), '');
+        _display = formatted;
+      }
+    }
+    
     _operation = '';
     _waitingForOperand = true;
   }

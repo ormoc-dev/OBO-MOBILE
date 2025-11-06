@@ -36,6 +36,10 @@ class AppConfig {
   static const String logoutEndpoint = '/mobile/logout.php';
   static const String checkSessionEndpoint = '/mobile/check_session.php';
   static const String getAssignmentsEndpoint = '/mobile/get_assignments.php';
+  static const String createInspectionEndpoint = '/mobile/create_inspection.php';
+  static const String updateInspectionEndpoint = '/mobile/update_inspection.php';
+  static const String getInspectionEndpoint = '/mobile/get_inspection.php';
+  static const String getInspectionsEndpoint = '/mobile/get_inspections.php';
   
   // App Configuration
   static const String appName = 'OBO Inspector Mobile';

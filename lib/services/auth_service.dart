@@ -36,6 +36,19 @@ class AuthService {
           await _storeUserSession(loginResponse.data!.user, remember);
           // Update offline storage with latest user data
           await OfflineStorage.saveUser(loginResponse.data!.user);
+          
+          // Extract and save session cookie from response
+          // Try to get session_id from response data first
+          final sessionId = responseData['data']?['session_id'];
+          if (sessionId != null && sessionId is String) {
+            // Manually construct PHPSESSID cookie
+            await ApiService.setSessionCookie('PHPSESSID=$sessionId');
+            print('Session cookie set from login response: PHPSESSID=$sessionId');
+          } else {
+            // Fallback: try to extract from response headers
+            print('No session_id in response, checking headers...');
+            print('Response headers: ${response.headers}');
+          }
         }
         
         return loginResponse;
@@ -85,6 +98,9 @@ class AuthService {
       await prefs.remove(_userKey);
       await prefs.remove(_tokenKey);
       await prefs.remove(_rememberKey);
+      
+      // Clear session cookie
+      await ApiService.clearSessionCookie();
       
       // Don't clear offline data - keep synced assignments and credentials for offline use
       // Only clear the current session data

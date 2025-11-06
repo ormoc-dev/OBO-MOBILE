@@ -6,8 +6,12 @@ import 'package:share_plus/share_plus.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import '../models/inspection.dart';
+import '../widgets/media_capture_widget.dart';
+import 'dart:io';
 import '../services/hive_offline_database.dart';
 import '../services/auth_service.dart';
+import '../services/inspection_service.dart';
+import '../services/connectivity_service.dart';
 import '../models/user.dart';
 import 'inspection_form_screen.dart';
 import 'email_report_screen.dart';
@@ -156,71 +160,199 @@ class _InspectionReportsScreenState extends State<InspectionReportsScreen> {
   }
 
   Widget _buildHeader(BuildContext context, bool isTablet) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final screenHeight = MediaQuery.of(context).size.height;
+    final orientation = MediaQuery.of(context).orientation;
+    
+    final isLargeTablet = screenWidth > 900;
+    final isSmallScreen = screenHeight < 600;
+    final isVerySmallScreen = screenHeight < 500;
+    final isLandscape = orientation == Orientation.landscape;
+    
+    final double baseHeight = isLandscape ? 600.0 : 800.0;
+    final double scale = (screenHeight / baseHeight).clamp(0.6, 1.3);
+    final double smallScreenScale = isVerySmallScreen ? 0.8 : 1.0;
+    final double finalScale = scale * smallScreenScale;
+    
     return Container(
-      padding: EdgeInsets.all(isTablet ? 24 : 20),
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        border: Border(
-          bottom: BorderSide(color: Color(0xFFE2E8F0), width: 1),
+      padding: EdgeInsets.all((isLargeTablet ? 24.0 : (isTablet ? 20.0 : (isVerySmallScreen ? 16.0 : (isSmallScreen ? 18.0 : 20.0)))) * finalScale),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Colors.white,
+            const Color(0xFFF8FAFC),
+          ],
         ),
+        border: Border(
+          bottom: BorderSide(
+            color: const Color(0xFFE2E8F0),
+            width: 1.5,
+          ),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.03),
+            offset: const Offset(0, 2),
+            blurRadius: 8,
+            spreadRadius: 0,
+          ),
+        ],
       ),
       child: Row(
         children: [
+          // Icon Section
+          Container(
+            width: (isLargeTablet ? 56.0 : (isTablet ? 52.0 : (isVerySmallScreen ? 44.0 : (isSmallScreen ? 46.0 : 50.0)))) * finalScale,
+            height: (isLargeTablet ? 56.0 : (isTablet ? 52.0 : (isVerySmallScreen ? 44.0 : (isSmallScreen ? 46.0 : 50.0)))) * finalScale,
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Color.fromRGBO(8, 111, 222, 0.977),
+                  Color.fromRGBO(22, 127, 239, 0.976),
+                ],
+              ),
+              borderRadius: BorderRadius.circular((isLargeTablet ? 16.0 : (isTablet ? 14.0 : (isVerySmallScreen ? 12.0 : (isSmallScreen ? 13.0 : 14.0)))) * finalScale),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color.fromRGBO(8, 111, 222, 0.25),
+                  offset: const Offset(0, 4),
+                  blurRadius: 12,
+                  spreadRadius: 0,
+                ),
+              ],
+            ),
+            child: Icon(
+              Icons.assessment_rounded,
+              color: Colors.white,
+              size: (isLargeTablet ? 28.0 : (isTablet ? 26.0 : (isVerySmallScreen ? 22.0 : (isSmallScreen ? 23.0 : 25.0)))) * finalScale,
+            ),
+          ),
+          SizedBox(width: (isLargeTablet ? 16.0 : (isTablet ? 14.0 : (isVerySmallScreen ? 12.0 : (isSmallScreen ? 13.0 : 14.0)))) * finalScale),
           
-          const SizedBox(width: 16),
+          // Title and Subtitle Section
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Text(
                   'Inspection Reports',
                   style: TextStyle(
-                    fontSize: isTablet ? 28 : 24,
-                    fontWeight: FontWeight.bold,
-                    color: const Color(0xFF2D3748),
+                    fontSize: (isLargeTablet ? 26.0 : (isTablet ? 24.0 : (isVerySmallScreen ? 18.0 : (isSmallScreen ? 20.0 : 22.0)))) * finalScale,
+                    fontWeight: FontWeight.w700,
+                    color: const Color(0xFF1F2937),
+                    letterSpacing: 0.3,
+                    height: 1.2,
                   ),
                 ),
-                const SizedBox(height: 4),
-            Text(
-              _currentUser != null 
-                  ? 'View your submitted inspections'
-                  : 'View all submitted inspections',
-              style: TextStyle(
-                fontSize: isTablet ? 16 : 14,
-                color: const Color(0xFF6B7280),
-              ),
-            ),
+                SizedBox(height: (isVerySmallScreen ? 2.0 : (isSmallScreen ? 3.0 : 4.0)) * finalScale),
+                Text(
+                  _currentUser != null 
+                      ? 'View your submitted inspections'
+                      : 'View all submitted inspections',
+                  style: TextStyle(
+                    fontSize: (isLargeTablet ? 15.0 : (isTablet ? 14.0 : (isVerySmallScreen ? 11.0 : (isSmallScreen ? 12.0 : 13.0)))) * finalScale,
+                    color: const Color(0xFF6B7280),
+                    fontWeight: FontWeight.w500,
+                    letterSpacing: 0.2,
+                  ),
+                ),
               ],
             ),
           ),
-          Row(
+          
+          SizedBox(width: (isLargeTablet ? 16.0 : (isTablet ? 12.0 : (isVerySmallScreen ? 8.0 : (isSmallScreen ? 10.0 : 12.0)))) * finalScale),
+          
+          // Count Badge and Refresh Button
+          Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.end,
             children: [
+              // Count Badge
               Container(
-                padding: EdgeInsets.all(isTablet ? 12 : 8),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF0F9FF),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: const Color(0xFF0EA5E9), width: 1),
+                padding: EdgeInsets.symmetric(
+                  horizontal: (isLargeTablet ? 14.0 : (isTablet ? 12.0 : (isVerySmallScreen ? 8.0 : (isSmallScreen ? 9.0 : 10.0)))) * finalScale,
+                  vertical: (isLargeTablet ? 8.0 : (isTablet ? 7.0 : (isVerySmallScreen ? 5.0 : (isSmallScreen ? 5.5 : 6.0)))) * finalScale,
                 ),
-                child: Text(
-                  '${_inspections.length}',
-                  style: TextStyle(
-                    fontSize: isTablet ? 18 : 16,
-                    fontWeight: FontWeight.bold,
-                    color: const Color(0xFF0EA5E9),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      Color.fromRGBO(8, 111, 222, 0.977),
+                      Color.fromRGBO(22, 127, 239, 0.976),
+                    ],
                   ),
+                  borderRadius: BorderRadius.circular((isLargeTablet ? 12.0 : (isTablet ? 10.0 : (isVerySmallScreen ? 8.0 : (isSmallScreen ? 9.0 : 10.0)))) * finalScale),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color.fromRGBO(8, 111, 222, 0.3),
+                      offset: const Offset(0, 3),
+                      blurRadius: 8,
+                      spreadRadius: 0,
+                    ),
+                  ],
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.description_rounded,
+                      color: Colors.white,
+                      size: (isLargeTablet ? 18.0 : (isTablet ? 16.0 : (isVerySmallScreen ? 12.0 : (isSmallScreen ? 13.0 : 14.0)))) * finalScale,
+                    ),
+                    SizedBox(width: (isVerySmallScreen ? 4.0 : (isSmallScreen ? 5.0 : 6.0)) * finalScale),
+                    Text(
+                      '${_inspections.length}',
+                      style: TextStyle(
+                        fontSize: (isLargeTablet ? 18.0 : (isTablet ? 16.0 : (isVerySmallScreen ? 12.0 : (isSmallScreen ? 13.0 : 14.0)))) * finalScale,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(width: 12),
-              IconButton(
-                onPressed: _loadInspections,
-                icon: const Icon(Icons.refresh_rounded),
-                style: IconButton.styleFrom(
-                  backgroundColor: const Color(0xFFF0F9FF),
-                  foregroundColor: const Color(0xFF0EA5E9),
-                  side: const BorderSide(color: Color(0xFF0EA5E9), width: 1),
+              SizedBox(height: (isLargeTablet ? 10.0 : (isTablet ? 8.0 : (isVerySmallScreen ? 6.0 : (isSmallScreen ? 7.0 : 8.0)))) * finalScale),
+              // Refresh Button
+              Container(
+                width: (isLargeTablet ? 48.0 : (isTablet ? 44.0 : (isVerySmallScreen ? 36.0 : (isSmallScreen ? 38.0 : 42.0)))) * finalScale,
+                height: (isLargeTablet ? 48.0 : (isTablet ? 44.0 : (isVerySmallScreen ? 36.0 : (isSmallScreen ? 38.0 : 42.0)))) * finalScale,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular((isLargeTablet ? 14.0 : (isTablet ? 12.0 : (isVerySmallScreen ? 10.0 : (isSmallScreen ? 11.0 : 12.0)))) * finalScale),
+                  border: Border.all(
+                    color: const Color(0xFFE2E8F0),
+                    width: 1.5,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.03),
+                      offset: const Offset(0, 2),
+                      blurRadius: 4,
+                      spreadRadius: 0,
+                    ),
+                  ],
                 ),
-                tooltip: 'Refresh',
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular((isLargeTablet ? 14.0 : (isTablet ? 12.0 : (isVerySmallScreen ? 10.0 : (isSmallScreen ? 11.0 : 12.0)))) * finalScale),
+                    onTap: _loadInspections,
+                    child: Center(
+                      child: Icon(
+                        Icons.refresh_rounded,
+                        color: const Color.fromRGBO(8, 111, 222, 0.977),
+                        size: (isLargeTablet ? 24.0 : (isTablet ? 22.0 : (isVerySmallScreen ? 18.0 : (isSmallScreen ? 19.0 : 21.0)))) * finalScale,
+                      ),
+                    ),
+                  ),
+                ),
               ),
             ],
           ),
@@ -1024,16 +1156,7 @@ class _InspectionReportsScreenState extends State<InspectionReportsScreen> {
         // Export Report Button
         Expanded(
           child: ElevatedButton.icon(
-            onPressed: () {
-              // Export functionality will be implemented later
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Export functionality coming soon!'),
-                  backgroundColor: Color(0xFF3B82F6),
-                  duration: Duration(seconds: 2),
-                ),
-              );
-            },
+            onPressed: () => _showExportOptions(inspection, isTablet),
             icon: const Icon(Icons.download_rounded, color: Colors.white),
             label: Text(
               'Export Report',
@@ -1084,6 +1207,592 @@ class _InspectionReportsScreenState extends State<InspectionReportsScreen> {
           ),
         ),
       ],
+    );
+  }
+
+  void _showExportOptions(Inspection inspection, bool isTablet) {
+    final connectivityService = ConnectivityService();
+    final isConnected = connectivityService.isConnected;
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFF10B981).withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(
+                Icons.download_rounded,
+                color: Color(0xFF10B981),
+                size: 20,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                'Export Options',
+                style: TextStyle(
+                  fontSize: isTablet ? 18 : 16,
+                  fontWeight: FontWeight.bold,
+                  color: const Color(0xFF1F2937),
+                ),
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Choose how you want to export this inspection:',
+              style: TextStyle(
+                fontSize: isTablet ? 16 : 14,
+                color: const Color(0xFF4B5563),
+              ),
+            ),
+            const SizedBox(height: 16),
+            
+            // Export Directly Option
+            _buildExportOption(
+              'Export Directly',
+              isConnected 
+                  ? 'Sync inspection to server when connected'
+                  : 'Requires internet connection',
+              Icons.cloud_upload_rounded,
+              isConnected ? const Color(0xFF10B981) : const Color(0xFF6B7280),
+              isConnected,
+              () => _exportDirectly(inspection, isTablet),
+              isTablet,
+            ),
+            const SizedBox(height: 12),
+            
+            // Scan QR Code Option (Coming Soon)
+            _buildExportOption(
+              'Scan QR Code',
+              'Coming soon: Share via QR code',
+              Icons.qr_code_scanner_rounded,
+              const Color(0xFFF59E0B),
+              false,
+              () => _showQRCodeComingSoon(isTablet),
+              isTablet,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            style: TextButton.styleFrom(
+              padding: EdgeInsets.symmetric(
+                horizontal: isTablet ? 20 : 16,
+                vertical: isTablet ? 12 : 10,
+              ),
+            ),
+            child: Text(
+              'Cancel',
+              style: TextStyle(
+                fontSize: isTablet ? 14 : 12,
+                color: const Color(0xFF6B7280),
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildExportOption(
+    String title,
+    String description,
+    IconData icon,
+    Color color,
+    bool isEnabled,
+    VoidCallback onTap,
+    bool isTablet,
+  ) {
+    return InkWell(
+      onTap: isEnabled ? () {
+        Navigator.of(context).pop(); // Close dialog first
+        onTap();
+      } : null,
+      borderRadius: BorderRadius.circular(8),
+      child: Opacity(
+        opacity: isEnabled ? 1.0 : 0.6,
+        child: Container(
+          padding: EdgeInsets.all(isTablet ? 12 : 10),
+          decoration: BoxDecoration(
+            color: isEnabled ? color.withOpacity(0.1) : const Color(0xFFF9FAFB),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: isEnabled ? color : const Color(0xFFE5E7EB),
+              width: 1,
+            ),
+          ),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: isEnabled ? color.withOpacity(0.2) : color.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Icon(
+                  icon,
+                  color: color,
+                  size: isTablet ? 18 : 16,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            title,
+                            style: TextStyle(
+                              fontSize: isTablet ? 14 : 12,
+                              fontWeight: FontWeight.w600,
+                              color: const Color(0xFF1F2937),
+                            ),
+                          ),
+                        ),
+                        if (!isEnabled)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF59E0B),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              'SOON',
+                              style: TextStyle(
+                                fontSize: isTablet ? 8 : 7,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      description,
+                      style: TextStyle(
+                        fontSize: isTablet ? 12 : 10,
+                        color: const Color(0xFF6B7280),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(
+                Icons.arrow_forward_ios_rounded,
+                color: isEnabled ? color : const Color(0xFF6B7280),
+                size: isTablet ? 16 : 14,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _exportDirectly(Inspection inspection, bool isTablet) async {
+    // Show loading dialog
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const CircularProgressIndicator(),
+            SizedBox(height: isTablet ? 20 : 16),
+            Text(
+              'Exporting inspection to server...',
+              style: TextStyle(
+                fontSize: isTablet ? 14 : 12,
+                color: const Color(0xFF374151),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    try {
+      // Check connectivity
+      final connectivityService = ConnectivityService();
+      if (!connectivityService.isConnected) {
+        if (mounted) {
+          Navigator.of(context).pop(); // Close loading dialog
+          showDialog(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: const Row(
+                children: [
+                  Icon(Icons.cloud_off_rounded, color: Color(0xFFEF4444)),
+                  SizedBox(width: 8),
+                  Text('No Internet Connection'),
+                ],
+              ),
+              content: const Text(
+                'Please connect to the internet to export the inspection to the server.',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('OK'),
+                ),
+              ],
+            ),
+          );
+        }
+        return;
+      }
+
+      // Determine if inspection should be created or updated
+      // Always try to create first if not synced, or update if synced and has server ID
+      int? serverInspectionId;
+      if (inspection.id.startsWith('inspection_')) {
+        final idParts = inspection.id.split('_');
+        if (idParts.length > 1) {
+          // Try to parse the numeric part as server ID
+          // If it's a timestamp (very long number), it's a local ID
+          final numericPart = idParts.last;
+          final parsedId = int.tryParse(numericPart);
+          // If parsed ID is reasonable (less than 10 digits), treat as server ID
+          // Timestamps are usually 13 digits, server IDs are usually smaller
+          if (parsedId != null && numericPart.length < 10) {
+            serverInspectionId = parsedId;
+          }
+        }
+      } else {
+        serverInspectionId = int.tryParse(inspection.id);
+      }
+
+      print('Export inspection - ID: ${inspection.id}, IsSynced: ${inspection.isSynced}, ServerID: $serverInspectionId');
+
+      bool wasUpdate = inspection.isSynced && serverInspectionId != null;
+      Map<String, dynamic> result;
+      if (wasUpdate) {
+        // Update existing inspection
+        print('Updating existing inspection with server ID: $serverInspectionId');
+        result = await InspectionService.updateInspection(inspection);
+        print('Update result: $result');
+      } else {
+        // Create new inspection
+        print('Creating new inspection');
+        result = await InspectionService.createInspection(inspection);
+        print('Create result: $result');
+        
+        // Update local inspection with server ID if returned
+        if (result['success'] == true && result['server_inspection_id'] != null) {
+          final oldId = inspection.id;
+          final serverId = result['server_inspection_id'];
+          print('Updating local inspection: oldId=$oldId, newServerId=$serverId');
+          inspection.id = 'inspection_$serverId';
+          await HiveOfflineDatabase.deleteInspection(oldId);
+          await HiveOfflineDatabase.saveInspection(inspection);
+        }
+      }
+
+      // Verify result
+      if (result['success'] != true) {
+        final errorMsg = result['message'] ?? result['data']?['message'] ?? 'Unknown error occurred';
+        throw Exception(errorMsg);
+      }
+
+      // Mark as synced
+      await HiveOfflineDatabase.markInspectionAsSynced(inspection.id);
+
+      // Close loading dialog
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+
+      // Show success dialog
+      if (mounted) {
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            title: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF10B981).withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(
+                    Icons.check_circle_rounded,
+                    color: Color(0xFF10B981),
+                    size: 24,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Export Successful',
+                    style: TextStyle(
+                      fontSize: isTablet ? 18 : 16,
+                      fontWeight: FontWeight.bold,
+                      color: const Color(0xFF1F2937),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Your inspection has been successfully exported to the server.',
+                  style: TextStyle(
+                    fontSize: isTablet ? 14 : 12,
+                    color: const Color(0xFF374151),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF0FDF4),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: const Color(0xFF10B981), width: 1),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.info_outline_rounded, color: Color(0xFF10B981), size: 16),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Inspection Details:',
+                            style: TextStyle(
+                              fontSize: isTablet ? 12 : 10,
+                              fontWeight: FontWeight.w600,
+                              color: const Color(0xFF10B981),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        'ID: ${inspection.id.substring(inspection.id.length - 8)}',
+                        style: TextStyle(
+                          fontSize: isTablet ? 11 : 9,
+                          color: const Color(0xFF10B981),
+                          fontFamily: 'monospace',
+                        ),
+                      ),
+                      Text(
+                        'Status: ${wasUpdate ? 'Updated' : 'Created'}',
+                        style: TextStyle(
+                          fontSize: isTablet ? 11 : 9,
+                          color: const Color(0xFF10B981),
+                        ),
+                      ),
+                      Text(
+                        'Synced: Yes',
+                        style: TextStyle(
+                          fontSize: isTablet ? 11 : 9,
+                          color: const Color(0xFF10B981),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.of(context).pop();
+                  // Refresh the inspection list
+                  _loadInspections();
+                },
+                style: TextButton.styleFrom(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: isTablet ? 20 : 16,
+                    vertical: isTablet ? 12 : 10,
+                  ),
+                ),
+                child: Text(
+                  'OK',
+                  style: TextStyle(
+                    fontSize: isTablet ? 14 : 12,
+                    fontWeight: FontWeight.w600,
+                    color: const Color(0xFF10B981),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      }
+    } catch (e) {
+      // Close loading dialog
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+
+      // Show error dialog
+      if (mounted) {
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            title: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEF4444).withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(
+                    Icons.error_outline_rounded,
+                    color: Color(0xFFEF4444),
+                    size: 24,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Export Failed',
+                    style: TextStyle(
+                      fontSize: isTablet ? 18 : 16,
+                      fontWeight: FontWeight.bold,
+                      color: const Color(0xFF1F2937),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Failed to export inspection to server.',
+                  style: TextStyle(
+                    fontSize: isTablet ? 14 : 12,
+                    color: const Color(0xFF374151),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFEF2F2),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: const Color(0xFFFECACA), width: 1),
+                  ),
+                  child: Text(
+                    'Error: ${e.toString().replaceAll('Exception: ', '')}',
+                    style: TextStyle(
+                      fontSize: isTablet ? 11 : 9,
+                      color: const Color(0xFFDC2626),
+                      fontFamily: 'monospace',
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF0F9FF),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: const Color(0xFF0EA5E9), width: 1),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.info_outline_rounded, color: Color(0xFF0EA5E9), size: 16),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'The inspection is still saved locally and will sync automatically when online.',
+                          style: TextStyle(
+                            fontSize: isTablet ? 11 : 9,
+                            color: const Color(0xFF0EA5E9),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                style: TextButton.styleFrom(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: isTablet ? 20 : 16,
+                    vertical: isTablet ? 12 : 10,
+                  ),
+                ),
+                child: Text(
+                  'OK',
+                  style: TextStyle(
+                    fontSize: isTablet ? 14 : 12,
+                    fontWeight: FontWeight.w500,
+                    color: const Color(0xFF6B7280),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      }
+    }
+  }
+
+  void _showQRCodeComingSoon(bool isTablet) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const Icon(Icons.qr_code_scanner_rounded, color: Colors.white),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                'QR Code export feature coming soon!',
+                style: TextStyle(
+                  fontSize: isTablet ? 14 : 12,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+          ],
+        ),
+        backgroundColor: const Color(0xFFF59E0B),
+        duration: const Duration(seconds: 3),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+        ),
+        margin: const EdgeInsets.all(16),
+      ),
     );
   }
 
@@ -1974,6 +2683,7 @@ class _InspectionReportsScreenState extends State<InspectionReportsScreen> {
             ],
           ),
           const SizedBox(height: 8),
+          // Overall media (legacy)
           if (inspection.imagePaths.isNotEmpty) ...[
             Container(
               width: double.infinity,
@@ -2053,7 +2763,174 @@ class _InspectionReportsScreenState extends State<InspectionReportsScreen> {
               ),
             ),
           ],
+
+          const SizedBox(height: 12),
+          // Per-section media
+          if ((inspection.sectionImagePaths != null && inspection.sectionImagePaths!.isNotEmpty) ||
+              (inspection.sectionVideoPaths != null && inspection.sectionVideoPaths!.isNotEmpty)) ...[
+            Row(
+              children: [
+                Icon(Icons.collections_rounded, color: const Color(0xFF3B82F6), size: isTablet ? 18 : 16),
+                const SizedBox(width: 6),
+                Text(
+                  'Section Media',
+                  style: TextStyle(
+                    fontSize: isTablet ? 12 : 10,
+                    fontWeight: FontWeight.w600,
+                    color: const Color(0xFF3B82F6),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            ..._buildSectionMediaCards(inspection, isTablet),
+          ],
         ],
+      ),
+    );
+  }
+
+  List<Widget> _buildSectionMediaCards(Inspection inspection, bool isTablet) {
+    final List<Widget> widgets = [];
+    final imagesMap = inspection.sectionImagePaths ?? {};
+    final videosMap = inspection.sectionVideoPaths ?? {};
+
+    Set<String> sections = {
+      ...imagesMap.keys,
+      ...videosMap.keys,
+    };
+
+    for (final section in sections) {
+      final images = List<String>.from(imagesMap[section] ?? const []);
+      final videos = List<String>.from(videosMap[section] ?? const []);
+      if (images.isEmpty && videos.isEmpty) continue;
+
+      widgets.add(Container(
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF9FAFB),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: const Color(0xFFE5E7EB), width: 1),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              section,
+              style: TextStyle(
+                fontSize: isTablet ? 12 : 10,
+                fontWeight: FontWeight.w600,
+                color: const Color(0xFF374151),
+              ),
+            ),
+            const SizedBox(height: 6),
+            if (images.isNotEmpty) ...[
+              GridView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: isTablet ? 4 : 3,
+                  crossAxisSpacing: 8,
+                  mainAxisSpacing: 8,
+                  childAspectRatio: 1,
+                ),
+                itemCount: images.length,
+                itemBuilder: (context, index) {
+                  final path = images[index];
+                  return GestureDetector(
+                    onTap: () => _previewImage(path),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: const Color(0xFFE2E8F0)),
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: kIsWeb
+                            ? Image.network(path, fit: BoxFit.cover)
+                            : Image.file(File(path), fit: BoxFit.cover),
+                      ),
+                    ),
+                  );
+                },
+              ),
+              const SizedBox(height: 6),
+            ],
+            if (videos.isNotEmpty) ...[
+              ...videos.asMap().entries.map((e) {
+                final idx = e.key;
+                final vpath = e.value;
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 6),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: const Color(0xFFE2E8F0)),
+                  ),
+                  child: ListTile(
+                    leading: Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF3B82F6),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Icon(Icons.play_arrow, color: Colors.white),
+                    ),
+                    title: Text(
+                      'Video ${idx + 1}',
+                      style: TextStyle(fontSize: isTablet ? 12 : 10),
+                    ),
+                    subtitle: Text(
+                      'Tap to play',
+                      style: TextStyle(fontSize: isTablet ? 10 : 9, color: const Color(0xFF6B7280)),
+                    ),
+                    onTap: () => _previewVideo(vpath),
+                  ),
+                );
+              }).toList(),
+            ],
+          ],
+        ),
+      ));
+    }
+    return widgets;
+  }
+
+  void _previewImage(String path) {
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
+        child: GestureDetector(
+          onTap: () => Navigator.of(context).pop(),
+          child: InteractiveViewer(
+            child: kIsWeb ? Image.network(path) : Image.file(File(path)),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _previewVideo(String path) {
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
+        child: Container(
+          width: MediaQuery.of(context).size.width * 0.9,
+          height: MediaQuery.of(context).size.height * 0.7,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            color: Colors.black,
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: VideoPlayerWidget(videoPath: path),
+          ),
+        ),
       ),
     );
   }

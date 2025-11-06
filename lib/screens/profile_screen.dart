@@ -144,19 +144,110 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Widget _buildHeader(BuildContext context, bool isTablet) {
-    return Row(
-      children: [
-        
-        const SizedBox(width: 16),
-        Text(
-          'Profile & Settings',
-          style: TextStyle(
-            fontSize: isTablet ? 28 : 24,
-            fontWeight: FontWeight.bold,
-            color: const Color(0xFF1F2937),
+    final screenWidth = MediaQuery.of(context).size.width;
+    final screenHeight = MediaQuery.of(context).size.height;
+    final orientation = MediaQuery.of(context).orientation;
+    
+    final isLargeTablet = screenWidth > 900;
+    final isSmallScreen = screenHeight < 600;
+    final isVerySmallScreen = screenHeight < 500;
+    final isLandscape = orientation == Orientation.landscape;
+    
+    final double baseHeight = isLandscape ? 600.0 : 800.0;
+    final double scale = (screenHeight / baseHeight).clamp(0.6, 1.3);
+    final double smallScreenScale = isVerySmallScreen ? 0.8 : 1.0;
+    final double finalScale = scale * smallScreenScale;
+    
+    return Container(
+      padding: EdgeInsets.all((isLargeTablet ? 24.0 : (isTablet ? 20.0 : (isVerySmallScreen ? 16.0 : (isSmallScreen ? 18.0 : 20.0)))) * finalScale),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Colors.white,
+            const Color(0xFFF8FAFC),
+          ],
+        ),
+        border: Border(
+          bottom: BorderSide(
+            color: const Color(0xFFE2E8F0),
+            width: 1.5,
           ),
         ),
-      ],
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.03),
+            offset: const Offset(0, 2),
+            blurRadius: 8,
+            spreadRadius: 0,
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          // Icon Section
+          Container(
+            width: (isLargeTablet ? 56.0 : (isTablet ? 52.0 : (isVerySmallScreen ? 44.0 : (isSmallScreen ? 46.0 : 50.0)))) * finalScale,
+            height: (isLargeTablet ? 56.0 : (isTablet ? 52.0 : (isVerySmallScreen ? 44.0 : (isSmallScreen ? 46.0 : 50.0)))) * finalScale,
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Color.fromRGBO(8, 111, 222, 0.977),
+                  Color.fromRGBO(22, 127, 239, 0.976),
+                ],
+              ),
+              borderRadius: BorderRadius.circular((isLargeTablet ? 16.0 : (isTablet ? 14.0 : (isVerySmallScreen ? 12.0 : (isSmallScreen ? 13.0 : 14.0)))) * finalScale),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color.fromRGBO(8, 111, 222, 0.25),
+                  offset: const Offset(0, 4),
+                  blurRadius: 12,
+                  spreadRadius: 0,
+                ),
+              ],
+            ),
+            child: Icon(
+              Icons.person_rounded,
+              color: Colors.white,
+              size: (isLargeTablet ? 28.0 : (isTablet ? 26.0 : (isVerySmallScreen ? 22.0 : (isSmallScreen ? 23.0 : 25.0)))) * finalScale,
+            ),
+          ),
+          SizedBox(width: (isLargeTablet ? 16.0 : (isTablet ? 14.0 : (isVerySmallScreen ? 12.0 : (isSmallScreen ? 13.0 : 14.0)))) * finalScale),
+          
+          // Title and Subtitle Section
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  'Profile & Settings',
+                  style: TextStyle(
+                    fontSize: (isLargeTablet ? 26.0 : (isTablet ? 24.0 : (isVerySmallScreen ? 18.0 : (isSmallScreen ? 20.0 : 22.0)))) * finalScale,
+                    fontWeight: FontWeight.w700,
+                    color: const Color(0xFF1F2937),
+                    letterSpacing: 0.3,
+                    height: 1.2,
+                  ),
+                ),
+                SizedBox(height: (isVerySmallScreen ? 2.0 : (isSmallScreen ? 3.0 : 4.0)) * finalScale),
+                Text(
+                  'Manage your account and preferences',
+                  style: TextStyle(
+                    fontSize: (isLargeTablet ? 15.0 : (isTablet ? 14.0 : (isVerySmallScreen ? 11.0 : (isSmallScreen ? 12.0 : 13.0)))) * finalScale,
+                    color: const Color(0xFF6B7280),
+                    fontWeight: FontWeight.w500,
+                    letterSpacing: 0.2,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
