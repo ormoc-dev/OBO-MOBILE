@@ -12,78 +12,94 @@ class AuthService {
   static const String _rememberKey = 'remember_me';
 
   /// Enhanced login with connectivity and sync validation
+  /// Tries online login first, falls back to offline if server is unreachable
   static Future<LoginResponse> login(String username, String password, {bool remember = false}) async {
     try {
       final connectivityService = ConnectivityService();
       
-      // Check if online
+      // Try online login first if internet is available
       if (connectivityService.isConnected) {
-        // Online login - allow login when connected to server
-        // User can sync data after logging in
-        final request = LoginRequest(
-          username: username,
-          password: password,
-          remember: remember,
-        );
+        try {
+          // Attempt online login - set a timeout to detect unreachable servers
+          final request = LoginRequest(
+            username: username,
+            password: password,
+            remember: remember,
+          );
 
-        final response = await ApiService.post('/mobile/login.php', request.toJson());
-        final responseData = ApiService.handleResponse(response);
-        
-        final loginResponse = LoginResponse.fromJson(responseData);
-        
-        if (loginResponse.success && loginResponse.data != null) {
-          // Store user data and session
-          await _storeUserSession(loginResponse.data!.user, remember);
-          // Update offline storage with latest user data
-          await OfflineStorage.saveUser(loginResponse.data!.user);
+          final response = await ApiService.post('/mobile/login.php', request.toJson());
           
-          // Extract and save session cookie from response
-          // Try to get session_id from response data first
-          final sessionId = responseData['data']?['session_id'];
-          if (sessionId != null && sessionId is String) {
-            // Manually construct PHPSESSID cookie
-            await ApiService.setSessionCookie('PHPSESSID=$sessionId');
-            print('Session cookie set from login response: PHPSESSID=$sessionId');
-          } else {
-            // Fallback: try to extract from response headers
-            print('No session_id in response, checking headers...');
-            print('Response headers: ${response.headers}');
+          final responseData = ApiService.handleResponse(response);
+          final loginResponse = LoginResponse.fromJson(responseData);
+          
+          if (loginResponse.success && loginResponse.data != null) {
+            // Store user data and session
+            await _storeUserSession(loginResponse.data!.user, remember);
+            // Update offline storage with latest user data
+            await OfflineStorage.saveUser(loginResponse.data!.user);
+            
+            // Extract and save session cookie from response
+            final sessionId = responseData['data']?['session_id'];
+            if (sessionId != null && sessionId is String) {
+              await ApiService.setSessionCookie('PHPSESSID=$sessionId');
+              print('Session cookie set from login response: PHPSESSID=$sessionId');
+            } else {
+              print('No session_id in response, checking headers...');
+              print('Response headers: ${response.headers}');
+            }
           }
+          
+          return loginResponse;
+        } catch (e) {
+          // Online login failed - check if server is unreachable
+          print('Online login failed: $e');
+          print('Attempting offline login fallback...');
+          
+          // Fall through to offline login attempt
+          // Don't throw error yet - try offline login first
         }
-        
-        return loginResponse;
+      }
+      
+      // Offline login - check if user exists in offline sync data
+      // This handles:
+      // 1. No internet connection
+      // 2. Internet available but server unreachable (e.g., mobile data can't reach local server)
+      final offlineUser = await OfflineSyncService.authenticateOffline(username, password);
+      if (offlineUser != null) {
+        // User found in offline sync data
+        await _storeUserSession(offlineUser, remember);
+        return LoginResponse(
+          success: true,
+          message: connectivityService.isConnected 
+              ? 'Logged in offline - Server unreachable, using synced data'
+              : 'Logged in offline',
+          data: LoginData(
+            user: offlineUser,
+            sessionId: 'offline_session',
+            mobileApp: true,
+          ),
+        );
       } else {
-        // Offline login - check if user exists in offline sync data
-        final offlineUser = await OfflineSyncService.authenticateOffline(username, password);
-        if (offlineUser != null) {
-          // User found in offline sync data
-          await _storeUserSession(offlineUser, remember);
+        // Fallback to old offline storage
+        final oldOfflineUser = await OfflineStorage.getCurrentUser();
+        if (oldOfflineUser != null && oldOfflineUser.name == username) {
+          await _storeUserSession(oldOfflineUser, remember);
           return LoginResponse(
             success: true,
-            message: 'Logged in offline',
+            message: connectivityService.isConnected 
+                ? 'Logged in offline (cached) - Server unreachable'
+                : 'Logged in offline (cached)',
             data: LoginData(
-              user: offlineUser,
+              user: oldOfflineUser,
               sessionId: 'offline_session',
               mobileApp: true,
             ),
           );
         } else {
-          // Fallback to old offline storage
-          final oldOfflineUser = await OfflineStorage.getCurrentUser();
-          if (oldOfflineUser != null && oldOfflineUser.name == username) {
-            await _storeUserSession(oldOfflineUser, remember);
-            return LoginResponse(
-              success: true,
-              message: 'Logged in offline (cached)',
-              data: LoginData(
-                user: oldOfflineUser,
-                sessionId: 'offline_session',
-                mobileApp: true,
-              ),
-            );
-          } else {
-            throw Exception('No offline data available. Please connect to internet and sync data first.');
-          }
+          // No offline data available
+          throw Exception(connectivityService.isConnected
+              ? 'Server unreachable and no offline data available. Please connect to WiFi/server network or sync data first.'
+              : 'No offline data available. Please connect to internet and sync data first.');
         }
       }
     } catch (e) {

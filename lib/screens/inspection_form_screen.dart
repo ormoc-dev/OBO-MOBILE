@@ -9,6 +9,7 @@ import '../utils/location_service.dart';
 import '../widgets/map_widget.dart';
 import '../widgets/media_capture_widget.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:geolocator/geolocator.dart';
 
 class InspectionFormScreen extends StatefulWidget {
   final String? scannedData;
@@ -1083,6 +1084,7 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
             });
           },
           isTablet: isTablet,
+          sectionName: title,
         ),
       ],
     );
@@ -1504,19 +1506,73 @@ class _PermissionModalDialogState extends State<_PermissionModalDialog> {
     });
 
     try {
+      // First check if location services are enabled
+      bool serviceEnabled = await LocationService.isLocationServiceEnabled();
+      
+      if (!serviceEnabled) {
+        // Open location settings to enable location services
+        if (mounted) {
+          final shouldOpenSettings = await showDialog<bool>(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: const Text('Location Services Disabled'),
+              content: const Text('Location services are disabled. Would you like to open settings to enable them?'),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(false),
+                  child: const Text('Cancel'),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(true),
+                  child: const Text('Open Settings'),
+                ),
+              ],
+            ),
+          );
+          
+          if (shouldOpenSettings == true) {
+            // Open location settings
+            await Geolocator.openLocationSettings();
+            // Wait a bit for user to enable
+            await Future.delayed(const Duration(seconds: 1));
+            // Recheck
+            serviceEnabled = await LocationService.isLocationServiceEnabled();
+          }
+        }
+      }
+      
+      // Request permission
       final granted = await LocationService.requestLocationPermission();
+      
+      // If permission granted but service still disabled, try to enable it
+      if (granted && !serviceEnabled) {
+        serviceEnabled = await LocationService.isLocationServiceEnabled();
+        if (!serviceEnabled && mounted) {
+          await Geolocator.openLocationSettings();
+        }
+      }
+      
       setState(() {
-        _hasLocationPermission = granted;
+        _hasLocationPermission = granted && serviceEnabled;
         _isRequestingLocation = false;
       });
 
-      if (!granted) {
+      if (!granted || !serviceEnabled) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Location permission is required for Civil/Structural inspection. Please enable it in app settings.'),
+            SnackBar(
+              content: Text(granted 
+                ? 'Location services are disabled. Please enable location services in your device settings.'
+                : 'Location permission is required for Civil/Structural inspection. Please enable it in app settings.'),
               backgroundColor: Colors.orange,
-              duration: Duration(seconds: 3),
+              duration: const Duration(seconds: 3),
+              action: SnackBarAction(
+                label: 'Open Settings',
+                textColor: Colors.white,
+                onPressed: () async {
+                  await Geolocator.openLocationSettings();
+                },
+              ),
             ),
           );
         }

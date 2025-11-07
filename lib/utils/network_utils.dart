@@ -6,8 +6,10 @@ class NetworkUtils {
   /// Test if the API server is reachable
   static Future<bool> testApiConnection() async {
     try {
+      // Await the base URL since it's a Future
+      final baseUrl = await AppConfig.baseUrl;
       final response = await http.get(
-        Uri.parse('${AppConfig.baseUrl}/auth/login.php'),
+        Uri.parse('$baseUrl/auth/login.php'),
         headers: {'Content-Type': 'application/json'},
       ).timeout(const Duration(seconds: 5));
       
@@ -150,8 +152,10 @@ class NetworkUtils {
   static Future<bool> hasInternetConnection() async {
     try {
       // Try to connect to our own API server first
+      // Await the base URL since it's a Future
+      final baseUrl = await AppConfig.baseUrl;
       final response = await http.get(
-        Uri.parse('${AppConfig.baseUrl}/auth/login.php'),
+        Uri.parse('$baseUrl/auth/login.php'),
       ).timeout(const Duration(seconds: 5));
       // We expect 405 Method Not Allowed for GET request, which means server is reachable
       return response.statusCode == 405 || response.statusCode == 200;

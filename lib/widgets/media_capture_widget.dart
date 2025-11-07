@@ -6,6 +6,7 @@ import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 import 'package:permission_handler/permission_handler.dart';
+import '../services/inspection_service.dart';
 
 class MediaCaptureWidget extends StatefulWidget {
   final List<String> imagePaths;
@@ -13,6 +14,7 @@ class MediaCaptureWidget extends StatefulWidget {
   final Function(List<String>) onImagesChanged;
   final Function(List<String>) onVideosChanged;
   final bool isTablet;
+  final String? sectionName;
 
   const MediaCaptureWidget({
     super.key,
@@ -21,6 +23,7 @@ class MediaCaptureWidget extends StatefulWidget {
     required this.onImagesChanged,
     required this.onVideosChanged,
     required this.isTablet,
+    this.sectionName,
   });
 
   @override
@@ -37,11 +40,16 @@ class _MediaCaptureWidgetState extends State<MediaCaptureWidget> {
 
   Future<void> _pickImage(ImageSource source) async {
     try {
-      final ok = await _ensurePermissions(isVideo: false, source: source);
-      if (!ok) {
-        _showErrorDialog('Permission denied. Please grant camera/photos permission.');
-        return;
+      // Show permission modal first
+      final hasPermissions = await _showPermissionModal(
+        isVideo: false,
+        source: source,
+      );
+      
+      if (!hasPermissions) {
+        return; // User cancelled or denied permissions
       }
+      
       final XFile? image = await _picker.pickImage(
         source: source,
         maxWidth: 1920,
@@ -54,8 +62,17 @@ class _MediaCaptureWidgetState extends State<MediaCaptureWidget> {
         if (!kIsWeb) {
           finalPath = await _saveToInspectionsDir(image, subdir: 'photos');
         }
+        // Try to upload to server to get web-accessible path
+        String serverPath = finalPath;
+        try {
+          serverPath = await InspectionService.uploadMediaFile(
+            finalPath,
+            section: widget.sectionName ?? 'Unknown',
+            type: 'image',
+          );
+        } catch (_) {}
         setState(() {
-          widget.imagePaths.add(finalPath);
+          widget.imagePaths.add(serverPath);
         });
         widget.onImagesChanged(widget.imagePaths);
       }
@@ -66,11 +83,16 @@ class _MediaCaptureWidgetState extends State<MediaCaptureWidget> {
 
   Future<void> _pickVideo(ImageSource source) async {
     try {
-      final ok = await _ensurePermissions(isVideo: true, source: source);
-      if (!ok) {
-        _showErrorDialog('Permission denied. Please grant camera/videos permission.');
-        return;
+      // Show permission modal first
+      final hasPermissions = await _showPermissionModal(
+        isVideo: true,
+        source: source,
+      );
+      
+      if (!hasPermissions) {
+        return; // User cancelled or denied permissions
       }
+      
       final XFile? video = await _picker.pickVideo(
         source: source,
         maxDuration: const Duration(minutes: 5), // Limit to 5 minutes
@@ -90,8 +112,17 @@ class _MediaCaptureWidgetState extends State<MediaCaptureWidget> {
             final fileSize = await file.length();
             if (fileSize > 0) {
               String finalPath = await _saveToInspectionsDir(video, subdir: 'videos');
+              // Try to upload to server to get web-accessible path
+              String serverPath = finalPath;
+              try {
+                serverPath = await InspectionService.uploadMediaFile(
+                  finalPath,
+                  section: widget.sectionName ?? 'Unknown',
+                  type: 'video',
+                );
+              } catch (_) {}
               setState(() {
-                widget.videoPaths.add(finalPath);
+                widget.videoPaths.add(serverPath);
               });
               widget.onVideosChanged(widget.videoPaths);
             } else {
@@ -107,33 +138,127 @@ class _MediaCaptureWidgetState extends State<MediaCaptureWidget> {
     }
   }
 
+  Future<bool> _showPermissionModal({required bool isVideo, required ImageSource source}) async {
+    if (kIsWeb) return true; // Browser handles permissions
+    
+    // Check current permissions first
+    final permissions = _getRequiredPermissions(isVideo: isVideo, source: source);
+    final currentStatuses = <Permission, PermissionStatus>{};
+    
+    for (final permission in permissions) {
+      currentStatuses[permission] = await permission.status;
+    }
+    
+    // If all permissions are already granted, proceed without showing modal
+    bool allGranted = currentStatuses.values.every((status) => status.isGranted);
+    if (allGranted) {
+      return true;
+    }
+    
+    // Show permission modal
+    return await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => _MediaPermissionModal(
+        isVideo: isVideo,
+        source: source,
+        requiredPermissions: permissions,
+        initialStatuses: currentStatuses,
+      ),
+    ) ?? false;
+  }
+
+  List<Permission> _getRequiredPermissions({required bool isVideo, required ImageSource source}) {
+    final List<Permission> permissions = [];
+    
+    if (source == ImageSource.camera) {
+      // Camera source - need camera permission
+      permissions.add(Permission.camera);
+    } else {
+      // Gallery/Photo library source - need photos/videos permission
+      if (Platform.isAndroid) {
+        // Android 13+ granular media permissions
+        if (isVideo) {
+          permissions.add(Permission.videos);
+        } else {
+          permissions.add(Permission.photos);
+        }
+        // Also request storage for older Android versions
+        permissions.add(Permission.storage);
+      } else if (Platform.isIOS) {
+        // iOS needs photos permission for photo library access
+        permissions.add(Permission.photos);
+      }
+    }
+    
+    return permissions;
+  }
+
   Future<bool> _ensurePermissions({required bool isVideo, required ImageSource source}) async {
     if (kIsWeb) return true; // Browser handles permissions
-    final List<Permission> toRequest = [];
-    if (source == ImageSource.camera) {
-      toRequest.add(Permission.camera);
-    }
-    // Storage/media library permissions on Android/iOS
-    if (Platform.isAndroid) {
-      // Android 13+ granular media permissions
-      if (isVideo) toRequest.add(Permission.videos);
-      if (!isVideo) toRequest.add(Permission.photos);
-      // Fallback for older Android
-      toRequest.add(Permission.storage);
-    } else if (Platform.isIOS) {
-      if (isVideo) toRequest.add(Permission.photos);
-      if (!isVideo) toRequest.add(Permission.photos);
-    }
+    
+    // Get all required permissions
+    final List<Permission> toRequest = _getRequiredPermissions(isVideo: isVideo, source: source);
+    
     if (toRequest.isEmpty) return true;
-    final statuses = await toRequest.request();
+    
+    // Request all permissions at once
+    final Map<Permission, PermissionStatus> statuses = await toRequest.request();
+    
+    // Check if any permission is permanently denied
     for (final entry in statuses.entries) {
       if (entry.value.isPermanentlyDenied) {
-        await openAppSettings();
+        // Show dialog to open settings
+        if (mounted) {
+          final shouldOpen = await showDialog<bool>(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: const Text('Permission Required'),
+              content: Text(
+                '${_getPermissionName(entry.key)} permission is permanently denied. Please enable it in app settings.',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(false),
+                  child: const Text('Cancel'),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(true),
+                  child: const Text('Open Settings'),
+                ),
+              ],
+            ),
+          );
+          
+          if (shouldOpen == true) {
+            await openAppSettings();
+          }
+        }
         return false;
       }
-      if (!entry.value.isGranted) return false;
+      
+      // Check if permission is denied (not granted)
+      if (!entry.value.isGranted) {
+        return false;
+      }
     }
+    
     return true;
+  }
+
+  String _getPermissionName(Permission permission) {
+    switch (permission) {
+      case Permission.camera:
+        return 'Camera';
+      case Permission.photos:
+        return 'Photos';
+      case Permission.videos:
+        return 'Videos';
+      case Permission.storage:
+        return 'Storage';
+      default:
+        return 'Media Access';
+    }
   }
 
   Future<String> _saveToInspectionsDir(XFile xfile, {required String subdir}) async {
@@ -758,6 +883,447 @@ class _VideoControlsState extends State<VideoControls> {
             ],
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _MediaPermissionModal extends StatefulWidget {
+  final bool isVideo;
+  final ImageSource source;
+  final List<Permission> requiredPermissions;
+  final Map<Permission, PermissionStatus> initialStatuses;
+
+  const _MediaPermissionModal({
+    required this.isVideo,
+    required this.source,
+    required this.requiredPermissions,
+    required this.initialStatuses,
+  });
+
+  @override
+  State<_MediaPermissionModal> createState() => _MediaPermissionModalState();
+}
+
+class _MediaPermissionModalState extends State<_MediaPermissionModal> {
+  late Map<Permission, PermissionStatus> _permissionStatuses;
+  final Map<Permission, bool> _isRequesting = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _permissionStatuses = Map.from(widget.initialStatuses);
+    // Initialize requesting states
+    for (final permission in widget.requiredPermissions) {
+      _isRequesting[permission] = false;
+    }
+    // Automatically request all permissions that are not granted
+    _requestAllPermissions();
+  }
+
+  Future<void> _requestAllPermissions() async {
+    // Request all permissions that are not already granted
+    for (final permission in widget.requiredPermissions) {
+      final currentStatus = _permissionStatuses[permission] ?? PermissionStatus.denied;
+      if (!currentStatus.isGranted && !currentStatus.isPermanentlyDenied) {
+        await _requestPermission(permission);
+      }
+    }
+  }
+
+  Future<void> _requestPermission(Permission permission) async {
+    setState(() {
+      _isRequesting[permission] = true;
+    });
+
+    try {
+      final status = await permission.request();
+      setState(() {
+        _permissionStatuses[permission] = status;
+        _isRequesting[permission] = false;
+      });
+
+      if (status.isPermanentlyDenied) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Permission permanently denied. Please enable it in app settings.',
+              ),
+              backgroundColor: Colors.orange,
+              duration: const Duration(seconds: 3),
+              action: SnackBarAction(
+                label: 'Open Settings',
+                textColor: Colors.white,
+                onPressed: () => openAppSettings(),
+              ),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      setState(() {
+        _isRequesting[permission] = false;
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error requesting permission: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  String _getPermissionName(Permission permission) {
+    switch (permission) {
+      case Permission.camera:
+        return 'Camera';
+      case Permission.photos:
+        return 'Photos';
+      case Permission.videos:
+        return 'Videos';
+      case Permission.storage:
+        return 'Storage';
+      default:
+        return 'Media Access';
+    }
+  }
+
+  String _getPermissionDescription(Permission permission) {
+    switch (permission) {
+      case Permission.camera:
+        return widget.isVideo 
+            ? 'Required to record videos'
+            : 'Required to take photos';
+      case Permission.photos:
+        return 'Required to access photo library';
+      case Permission.videos:
+        return 'Required to access video library';
+      case Permission.storage:
+        return 'Required to save media files';
+      default:
+        return 'Required for media access';
+    }
+  }
+
+  IconData _getPermissionIcon(Permission permission) {
+    switch (permission) {
+      case Permission.camera:
+        return widget.isVideo ? Icons.videocam : Icons.camera_alt;
+      case Permission.photos:
+        return Icons.photo_library;
+      case Permission.videos:
+        return Icons.video_library;
+      case Permission.storage:
+        return Icons.storage;
+      default:
+        return Icons.perm_media;
+    }
+  }
+
+  Color _getPermissionColor(Permission permission) {
+    switch (permission) {
+      case Permission.camera:
+        return widget.isVideo ? const Color(0xFF3B82F6) : const Color(0xFF10B981);
+      case Permission.photos:
+        return const Color(0xFF8B5CF6);
+      case Permission.videos:
+        return const Color(0xFF3B82F6);
+      case Permission.storage:
+        return const Color(0xFFF59E0B);
+      default:
+        return const Color(0xFF6B7280);
+    }
+  }
+
+  bool get _canProceed {
+    return _permissionStatuses.values.every((status) => status.isGranted);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isTablet = screenWidth > 600;
+    final isLargeTablet = screenWidth > 900;
+
+    return Dialog(
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Container(
+        width: isTablet ? (isLargeTablet ? 500 : 450) : 350,
+        padding: EdgeInsets.all(isTablet ? 28 : 24),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: widget.isVideo
+                          ? [const Color(0xFF3B82F6), const Color(0xFF2563EB)]
+                          : [const Color(0xFF10B981), const Color(0xFF059669)],
+                    ),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(
+                    widget.isVideo ? Icons.videocam : Icons.camera_alt,
+                    color: Colors.white,
+                    size: 24,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        widget.isVideo ? 'Video Capture' : 'Photo Capture',
+                        style: TextStyle(
+                          fontSize: isTablet ? 20 : 18,
+                          fontWeight: FontWeight.bold,
+                          color: const Color(0xFF1F2937),
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Permissions Required',
+                        style: TextStyle(
+                          fontSize: isTablet ? 14 : 12,
+                          color: const Color(0xFF6B7280),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 24),
+
+            // Description
+            Text(
+              widget.isVideo
+                  ? 'To capture or select videos, the app needs access to your camera and video library.'
+                  : 'To capture or select photos, the app needs access to your camera and photo library.',
+              style: TextStyle(
+                fontSize: isTablet ? 15 : 13,
+                color: const Color(0xFF374151),
+                height: 1.5,
+              ),
+            ),
+            const SizedBox(height: 24),
+
+            // Permission sections
+            ...widget.requiredPermissions.map((permission) {
+              final status = _permissionStatuses[permission] ?? PermissionStatus.denied;
+              final isGranted = status.isGranted;
+              final isDenied = status.isDenied;
+              final isPermanentlyDenied = status.isPermanentlyDenied;
+              final isRequesting = _isRequesting[permission] ?? false;
+
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 16),
+                child: _buildPermissionSection(
+                  icon: _getPermissionIcon(permission),
+                  title: _getPermissionName(permission),
+                  description: _getPermissionDescription(permission),
+                  isGranted: isGranted,
+                  isDenied: isDenied,
+                  isPermanentlyDenied: isPermanentlyDenied,
+                  isLoading: isRequesting,
+                  onTap: isGranted 
+                      ? null 
+                      : () => _requestPermission(permission),
+                  color: _getPermissionColor(permission),
+                  isTablet: isTablet,
+                ),
+              );
+            }).toList(),
+
+            const SizedBox(height: 8),
+
+            // Action Buttons
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.of(context).pop(false),
+                    style: OutlinedButton.styleFrom(
+                      padding: EdgeInsets.symmetric(vertical: isTablet ? 14 : 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      side: const BorderSide(color: Color(0xFF6B7280)),
+                    ),
+                    child: Text(
+                      'Cancel',
+                      style: TextStyle(
+                        fontSize: isTablet ? 15 : 14,
+                        fontWeight: FontWeight.w600,
+                        color: const Color(0xFF6B7280),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: _canProceed
+                        ? () => Navigator.of(context).pop(true)
+                        : null,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color.fromRGBO(8, 111, 222, 0.977),
+                      padding: EdgeInsets.symmetric(vertical: isTablet ? 14 : 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      elevation: 0,
+                    ),
+                    child: Text(
+                      'Continue',
+                      style: TextStyle(
+                        fontSize: isTablet ? 15 : 14,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPermissionSection({
+    required IconData icon,
+    required String title,
+    required String description,
+    required bool isGranted,
+    required bool isDenied,
+    required bool isPermanentlyDenied,
+    required bool isLoading,
+    required VoidCallback? onTap,
+    required Color color,
+    required bool isTablet,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: EdgeInsets.all(isTablet ? 16 : 14),
+        decoration: BoxDecoration(
+          color: isGranted ? color.withOpacity(0.1) : const Color(0xFFF9FAFB),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isGranted ? color : const Color(0xFFE2E8F0),
+            width: isGranted ? 2 : 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: isGranted ? color : color.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(
+                icon,
+                color: isGranted ? Colors.white : color,
+                size: isTablet ? 22 : 20,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: isTablet ? 15 : 14,
+                      fontWeight: FontWeight.w600,
+                      color: const Color(0xFF1F2937),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    description,
+                    style: TextStyle(
+                      fontSize: isTablet ? 12 : 11,
+                      color: const Color(0xFF6B7280),
+                    ),
+                  ),
+                  if (isPermanentlyDenied) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      'Please enable in app settings',
+                      style: TextStyle(
+                        fontSize: isTablet ? 11 : 10,
+                        color: Colors.orange,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            if (isLoading)
+              const SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF3B82F6)),
+                ),
+              )
+            else if (isGranted)
+              Container(
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  color: color,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.check,
+                  color: Colors.white,
+                  size: 16,
+                ),
+              )
+            else if (isPermanentlyDenied)
+              IconButton(
+                onPressed: () => openAppSettings(),
+                icon: const Icon(
+                  Icons.settings,
+                  color: Colors.orange,
+                  size: 20,
+                ),
+                tooltip: 'Open Settings',
+              )
+            else
+              Icon(
+                Icons.arrow_forward_ios,
+                color: color,
+                size: isTablet ? 16 : 14,
+              ),
+          ],
+        ),
       ),
     );
   }

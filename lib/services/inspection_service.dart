@@ -6,6 +6,42 @@ import '../services/api_service.dart';
 import '../services/connectivity_service.dart';
 
 class InspectionService {
+  // Upload a single media file and return server web path
+  static Future<String> uploadMediaFile(String filePath, {required String section, required String type}) async {
+    try {
+      final connectivityService = ConnectivityService();
+      if (!connectivityService.isConnected) {
+        // Offline: return original path (will not be visible on web)
+        return filePath;
+      }
+
+      final baseUrl = await AppConfig.baseUrl;
+      final uri = Uri.parse('$baseUrl/mobile/upload_media.php');
+
+      final request = http.MultipartRequest('POST', uri);
+      request.fields['section'] = section;
+      request.fields['media_type'] = type; // image|video
+
+      request.files.add(await http.MultipartFile.fromPath('file', filePath));
+
+      final streamed = await request.send();
+      final response = await http.Response.fromStream(streamed);
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        if (data['success'] == true) {
+          final path = data['data']?['path'] as String?;
+          if (path != null && path.isNotEmpty) return path;
+        }
+        throw Exception(data['message'] ?? 'Failed to upload media');
+      } else {
+        throw Exception('Upload failed: ${response.statusCode} ${response.body}');
+      }
+    } catch (e) {
+      // On failure, return original local path so the app still functions
+      return filePath;
+    }
+  }
   // Create a new inspection on the server
   static Future<Map<String, dynamic>> createInspection(Inspection inspection) async {
     try {

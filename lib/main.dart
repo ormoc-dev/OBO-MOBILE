@@ -826,6 +826,7 @@ class _LoginPageState extends State<LoginPage> {
   String _connectivityStatus = 'Checking connection...';
   bool _isConnected = false;
   bool _hasSyncedData = false;
+  bool _notificationDismissed = false;
 
   @override
   void initState() {
@@ -842,12 +843,19 @@ class _LoginPageState extends State<LoginPage> {
         _isConnected = status.isConnected;
         _hasSyncedData = status.hasSyncedData;
         _connectivityStatus = message;
+        // Auto-show notification if there's an issue, auto-hide if connected successfully
+        if (status.isConnected && status.hasSyncedData) {
+          _notificationDismissed = true;
+        } else {
+          _notificationDismissed = false;
+        }
       });
     } catch (e) {
       setState(() {
         _connectivityStatus = 'Error checking connection: $e';
         _isConnected = false;
         _hasSyncedData = false;
+        _notificationDismissed = false;
       });
     }
   }
@@ -997,87 +1005,119 @@ class _LoginPageState extends State<LoginPage> {
                         ),
                       ),
                     ),
-                    SizedBox(height: isSmallScreen ? 20 : 30),
-                    // Connectivity Status Indicator
-                    Container(
-                      width: double.infinity,
-                      padding: EdgeInsets.all(12 * finalScale),
-                      decoration: BoxDecoration(
-                        color: _isConnected 
-                            ? Colors.green.shade50
-                            : _hasSyncedData
-                                ? Colors.blue.shade50
-                                : Colors.red.shade50,
-                        borderRadius: BorderRadius.circular(8 * finalScale),
-                        border: Border.all(
-                          color: _isConnected 
-                              ? Colors.green.shade300
-                              : _hasSyncedData
-                                  ? Colors.blue.shade300
-                                  : Colors.red.shade300,
-                          width: 1,
-                        ),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            _isConnected 
-                                ? Icons.check_circle
-                                : _hasSyncedData
-                                    ? Icons.cloud_done
-                                    : Icons.error,
-                            color: _isConnected 
-                                ? Colors.green.shade600
-                                : _hasSyncedData
-                                    ? Colors.blue.shade600
-                                    : Colors.red.shade600,
-                            size: 20 * finalScale,
+                    SizedBox(height: isSmallScreen ? 10 : 15),
+                    // Compact Connectivity Status Indicator (dismissible)
+                    if (!_notificationDismissed)
+                      Align(
+                        alignment: Alignment.center,
+                        child: Container(
+                          constraints: BoxConstraints(
+                            maxWidth: isTablet ? 600 : double.infinity,
                           ),
-                          SizedBox(width: 8 * finalScale),
-                          Expanded(
-                            child: Text(
-                              _connectivityStatus,
-                              style: TextStyle(
-                                fontSize: (isLargeTablet ? 16.0 : (isTablet ? 14.0 : (isVerySmallScreen ? 10.0 : (isSmallScreen ? 12.0 : 13.0)))) * finalScale,
-                                color: _isConnected 
-                                    ? Colors.green.shade700
-                                    : _hasSyncedData
-                                        ? Colors.blue.shade700
-                                        : Colors.red.shade700,
-                                fontWeight: FontWeight.w500,
-                              ),
+                          margin: EdgeInsets.only(bottom: isSmallScreen ? 10 : 15),
+                          padding: EdgeInsets.symmetric(
+                            horizontal: (isVerySmallScreen ? 8.0 : (isSmallScreen ? 10.0 : 12.0)) * finalScale,
+                            vertical: (isVerySmallScreen ? 6.0 : (isSmallScreen ? 8.0 : 10.0)) * finalScale,
+                          ),
+                          decoration: BoxDecoration(
+                            color: _isConnected 
+                                ? Colors.green.shade50
+                                : _hasSyncedData
+                                    ? Colors.blue.shade50
+                                    : Colors.red.shade50,
+                            borderRadius: BorderRadius.circular(6 * finalScale),
+                            border: Border.all(
+                              color: _isConnected 
+                                  ? Colors.green.shade200
+                                  : _hasSyncedData
+                                      ? Colors.blue.shade200
+                                      : Colors.red.shade200,
+                              width: 0.5,
                             ),
                           ),
-                          if (_isConnected && !_hasSyncedData)
-                            TextButton(
-                              onPressed: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) => const DebugScreen(),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                _isConnected 
+                                    ? Icons.check_circle
+                                    : _hasSyncedData
+                                        ? Icons.cloud_done
+                                        : Icons.error_outline,
+                                color: _isConnected 
+                                    ? Colors.green.shade600
+                                    : _hasSyncedData
+                                        ? Colors.blue.shade600
+                                        : Colors.red.shade600,
+                                size: (isVerySmallScreen ? 14.0 : (isSmallScreen ? 16.0 : 18.0)) * finalScale,
+                              ),
+                              SizedBox(width: 6 * finalScale),
+                              Flexible(
+                                child: Text(
+                                  _connectivityStatus.length > 40 
+                                      ? '${_connectivityStatus.substring(0, 40)}...'
+                                      : _connectivityStatus,
+                                  style: TextStyle(
+                                    fontSize: (isLargeTablet ? 13.0 : (isTablet ? 12.0 : (isVerySmallScreen ? 9.0 : (isSmallScreen ? 10.0 : 11.0)))) * finalScale,
+                                    color: _isConnected 
+                                        ? Colors.green.shade700
+                                        : _hasSyncedData
+                                            ? Colors.blue.shade700
+                                            : Colors.red.shade700,
+                                    fontWeight: FontWeight.w500,
                                   ),
-                                );
-                              },
-                              child: Text(
-                                'Sync After Login',
-                                style: TextStyle(
-                                  fontSize: (isLargeTablet ? 14.0 : (isTablet ? 12.0 : (isVerySmallScreen ? 9.0 : (isSmallScreen ? 10.0 : 11.0)))) * finalScale,
-                                  color: Colors.green.shade700,
-                                  fontWeight: FontWeight.w600,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
                               ),
-                            ),
-                          IconButton(
-                            onPressed: _checkConnectivityStatus,
-                            icon: Icon(
-                              Icons.refresh,
-                              size: 18 * finalScale,
-                              color: Colors.grey.shade600,
-                            ),
+                              SizedBox(width: 4 * finalScale),
+                              if (_isConnected && !_hasSyncedData)
+                                Padding(
+                                  padding: EdgeInsets.only(right: 4 * finalScale),
+                                  child: InkWell(
+                                    onTap: () {
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (context) => const DebugScreen(),
+                                        ),
+                                      );
+                                    },
+                                    child: Text(
+                                      'Sync',
+                                      style: TextStyle(
+                                        fontSize: (isVerySmallScreen ? 9.0 : (isSmallScreen ? 10.0 : 11.0)) * finalScale,
+                                        color: Colors.green.shade700,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              InkWell(
+                                onTap: () {
+                                  setState(() {
+                                    _notificationDismissed = true;
+                                  });
+                                },
+                                child: Icon(
+                                  Icons.close,
+                                  size: (isVerySmallScreen ? 14.0 : (isSmallScreen ? 16.0 : 18.0)) * finalScale,
+                                  color: Colors.grey.shade600,
+                                ),
+                              ),
+                              SizedBox(width: 2 * finalScale),
+                              InkWell(
+                                onTap: _checkConnectivityStatus,
+                                child: Icon(
+                                  Icons.refresh,
+                                  size: (isVerySmallScreen ? 14.0 : (isSmallScreen ? 16.0 : 18.0)) * finalScale,
+                                  color: Colors.grey.shade600,
+                                ),
+                              ),
+                            ],
                           ),
-                        ],
+                        ),
                       ),
-                    ),
                     SizedBox(height: isSmallScreen ? 20 : 30),
                     // Clean Login title without neumorphism
                     Column(
