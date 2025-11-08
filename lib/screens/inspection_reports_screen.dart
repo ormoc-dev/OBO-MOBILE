@@ -8,11 +8,13 @@ import 'dart:convert';
 import '../models/inspection.dart';
 import '../widgets/media_capture_widget.dart';
 import 'dart:io';
+import 'package:path_provider/path_provider.dart';
 import '../services/hive_offline_database.dart';
 import '../services/auth_service.dart';
 import '../services/inspection_service.dart';
 import '../services/connectivity_service.dart';
 import '../models/user.dart';
+import '../config/app_config.dart';
 import 'inspection_form_screen.dart';
 import 'email_report_screen.dart';
 
@@ -29,6 +31,65 @@ class _InspectionReportsScreenState extends State<InspectionReportsScreen> {
   User? _currentUser;
   String _searchQuery = '';
   String _selectedStatus = 'All';
+
+  // Helper function to check if a path is a network URL or server path
+  bool _isNetworkPath(String path) {
+    if (path.isEmpty) return false;
+    // Check for full URLs
+    if (path.startsWith('http://') || path.startsWith('https://')) {
+      return true;
+    }
+    // Check for server relative paths
+    if (path.startsWith('uploads/') || path.startsWith('/uploads/')) {
+      return true;
+    }
+    // Check for blob URLs
+    if (path.startsWith('blob:')) {
+      return true;
+    }
+    return false;
+  }
+
+  // Helper function to normalize and get full URL for images
+  Future<String> _getFullImageUrl(String path) async {
+    if (path.isEmpty) return path;
+    
+    // If already a full URL, validate and return
+    if (path.startsWith('http://') || path.startsWith('https://')) {
+      try {
+        // Validate URL format
+        final uri = Uri.parse(path);
+        // Reconstruct to ensure proper format (handles spaces and special chars)
+        final reconstructed = uri.toString();
+        print('Using full URL: $reconstructed');
+        return reconstructed;
+      } catch (e) {
+        print('Error parsing URL, using original: $path - $e');
+        return path;
+      }
+    }
+    
+    // If it's a relative server path, construct full URL
+    if (path.startsWith('uploads/') || path.startsWith('/uploads/')) {
+      try {
+        final baseUrl = await AppConfig.baseUrl;
+        // baseUrl is like "http://192.168.0.115/OBO-LGU/api"
+        // Convert to web root: "http://192.168.0.115/OBO-LGU"
+        final webBaseUrl = baseUrl.replaceAll('/api', '');
+        final cleanPath = path.startsWith('/') ? path.substring(1) : path;
+        // Build URI to handle encoding properly
+        final fullUrl = Uri.parse('$webBaseUrl/$cleanPath').toString();
+        print('Constructed URL from relative path: $fullUrl');
+        return fullUrl;
+      } catch (e) {
+        print('Error getting base URL: $e');
+        return path.startsWith('/') ? path : '/$path';
+      }
+    }
+    
+    // Return as-is for local paths
+    return path;
+  }
 
   @override
   void initState() {
@@ -2082,27 +2143,28 @@ class _InspectionReportsScreenState extends State<InspectionReportsScreen> {
             Wrap(
               spacing: 8,
               runSpacing: 8,
-              children: images.map((imagePath) => Container(
-                width: isTablet ? 60 : 50,
-                height: isTablet ? 60 : 50,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: const Color(0xFF0EA5E9), width: 1),
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(6),
-                  child: Image.network(
-                    imagePath,
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) {
-                      return Container(
-                        color: Colors.grey[300],
-                        child: const Icon(Icons.image_not_supported, color: Colors.grey, size: 20),
-                      );
-                    },
+              children: images.map((imagePath) {
+                print('Building section image widget for path: $imagePath');
+                return GestureDetector(
+                  onTap: () => _previewImage(imagePath),
+                  child: Container(
+                    width: isTablet ? 60 : 50,
+                    height: isTablet ? 60 : 50,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: const Color(0xFF0EA5E9), width: 1),
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(6),
+                      child: SizedBox(
+                        width: double.infinity,
+                        height: double.infinity,
+                        child: _buildImageWidget(imagePath, fit: BoxFit.cover),
+                      ),
+                    ),
                   ),
-                ),
-              )).toList(),
+                );
+              }).toList(),
             ),
           ],
           if (videos.isNotEmpty) ...[
@@ -2838,6 +2900,7 @@ class _InspectionReportsScreenState extends State<InspectionReportsScreen> {
                 itemCount: images.length,
                 itemBuilder: (context, index) {
                   final path = images[index];
+                  print('Building section media image widget for path: $path');
                   return GestureDetector(
                     onTap: () => _previewImage(path),
                     child: Container(
@@ -2847,9 +2910,11 @@ class _InspectionReportsScreenState extends State<InspectionReportsScreen> {
                       ),
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(8),
-                        child: kIsWeb
-                            ? Image.network(path, fit: BoxFit.cover)
-                            : Image.file(File(path), fit: BoxFit.cover),
+                        child: SizedBox(
+                          width: double.infinity,
+                          height: double.infinity,
+                          child: _buildImageWidget(path, fit: BoxFit.cover),
+                        ),
                       ),
                     ),
                   );
@@ -2906,9 +2971,341 @@ class _InspectionReportsScreenState extends State<InspectionReportsScreen> {
         child: GestureDetector(
           onTap: () => Navigator.of(context).pop(),
           child: InteractiveViewer(
-            child: kIsWeb ? Image.network(path) : Image.file(File(path)),
+            child: _buildImageWidget(path, fit: BoxFit.contain),
           ),
         ),
+      ),
+    );
+  }
+
+  // Dynamic image widget that handles both web and mobile
+  Widget _buildImageWidget(String path, {BoxFit fit = BoxFit.cover}) {
+    if (path.isEmpty) {
+      return _buildErrorWidget('Empty path');
+    }
+
+    // On mobile, always try to find local file first (even for network paths)
+    // This ensures offline viewing works with files stored in Hive
+    if (!kIsWeb) {
+      // Check if it looks like a local file path first
+      if (!_isNetworkPath(path)) {
+        // Definitely a local path
+        return _buildLocalImage(path, fit: fit);
+      } else {
+        // Network path - but check for local file first on mobile
+        return _buildNetworkImage(path, fit: fit);
+      }
+    } else {
+      // On web, use network for network paths, error for local paths
+      if (_isNetworkPath(path)) {
+        return _buildNetworkImage(path, fit: fit);
+      } else {
+        return _buildErrorWidget('Local file not accessible on web');
+      }
+    }
+  }
+
+  // Build network image (for both web and mobile)
+  // On mobile, first checks for local file before loading from network
+  Widget _buildNetworkImage(String path, {BoxFit fit = BoxFit.cover}) {
+    // On mobile, try to find local file first
+    if (!kIsWeb) {
+      return FutureBuilder<String?>(
+        future: _findLocalFile(path),
+        builder: (context, localSnapshot) {
+          // If local file found, use it
+          if (localSnapshot.hasData && localSnapshot.data != null) {
+            return _buildLocalImage(localSnapshot.data!, fit: fit);
+          }
+          
+          // If still checking for local file, show loading
+          if (localSnapshot.connectionState == ConnectionState.waiting) {
+            return _buildLoadingWidget();
+          }
+          
+          // No local file found, load from network
+          return _loadNetworkImage(path, fit: fit);
+        },
+      );
+    }
+    
+    // On web, load directly from network
+    return _loadNetworkImage(path, fit: fit);
+  }
+
+  // Load image from network
+  Widget _loadNetworkImage(String path, {BoxFit fit = BoxFit.cover}) {
+    return FutureBuilder<String>(
+      future: _getFullImageUrl(path),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return _buildLoadingWidget();
+        }
+        
+        if (snapshot.hasError) {
+          print('Error getting full URL: ${snapshot.error}');
+          return _buildErrorWidget('URL error: ${snapshot.error}');
+        }
+        
+        final imageUrl = snapshot.data ?? path;
+        print('Loading network image from URL: $imageUrl');
+        
+        return Image.network(
+          imageUrl,
+          fit: fit,
+          headers: {
+            // Add headers if needed for authentication
+            'Accept': 'image/*',
+          },
+          errorBuilder: (context, error, stackTrace) {
+            print('ERROR: Failed to load network image');
+            print('URL: $imageUrl');
+            print('Error: $error');
+            return _buildErrorWidget('Failed to load image');
+          },
+          loadingBuilder: (context, child, loadingProgress) {
+            if (loadingProgress == null) {
+              print('Image loaded successfully');
+              return child;
+            }
+            return _buildLoadingWidget(
+              progress: loadingProgress.expectedTotalBytes != null
+                  ? loadingProgress.cumulativeBytesLoaded / loadingProgress.expectedTotalBytes!
+                  : null,
+            );
+          },
+          // Add cache settings for better performance
+          cacheWidth: fit == BoxFit.cover ? 300 : null,
+          cacheHeight: fit == BoxFit.cover ? 300 : null,
+        );
+      },
+    );
+  }
+
+  // Build local image (mobile only)
+  Widget _buildLocalImage(String path, {BoxFit fit = BoxFit.cover}) {
+    if (kIsWeb) {
+      // On web, local files are not accessible
+      return _buildErrorWidget('Local file not accessible on web');
+    }
+    
+    final file = File(path);
+    
+    return FutureBuilder<bool>(
+      future: file.exists(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return _buildLoadingWidget();
+        }
+        
+        if (snapshot.data == true) {
+          print('Loading local image: $path');
+          return Image.file(
+            file,
+            fit: fit,
+            errorBuilder: (context, error, stackTrace) {
+              print('ERROR: Failed to load local image: $path');
+              print('ERROR details: $error');
+              // Try to load as network image if local fails and path is network path
+              if (_isNetworkPath(path)) {
+                print('Retrying as network image...');
+                return _loadNetworkImage(path, fit: fit);
+              }
+              return _buildErrorWidget('Failed to load');
+            },
+            cacheWidth: fit == BoxFit.cover ? 300 : null,
+            cacheHeight: fit == BoxFit.cover ? 300 : null,
+          );
+        } else {
+          print('Local image file not found: $path');
+          // If local file doesn't exist, try network if it's a network path
+          if (_isNetworkPath(path)) {
+            print('File not found locally, trying network...');
+            return _loadNetworkImage(path, fit: fit);
+          }
+          return _buildErrorWidget('File not found');
+        }
+      },
+    );
+  }
+
+  // Check if a local file exists for a given path (extract filename and search)
+  Future<String?> _findLocalFile(String serverPath) async {
+    if (kIsWeb) return null;
+    
+    try {
+      // Extract filename from server path (handle both full URLs and relative paths)
+      String fileName = serverPath.split('/').last;
+      // Remove query parameters if any
+      if (fileName.contains('?')) {
+        fileName = fileName.split('?').first;
+      }
+      if (fileName.isEmpty) return null;
+      
+      print('Searching for local file with filename: $fileName');
+      
+      // Search in inspections directory
+      final Directory baseDir = await getApplicationDocumentsDirectory();
+      final Directory photosDir = Directory('${baseDir.path}/inspections/photos');
+      final Directory videosDir = Directory('${baseDir.path}/inspections/videos');
+      
+      // Helper function to check if filename matches
+      bool matchesFilename(String filePath, String targetName) {
+        String normalizeName(String input) {
+          if (input.isEmpty) return input;
+          String base = input.toLowerCase();
+          if (base.contains('.')) {
+            base = base.split('.').first;
+          }
+          final parts = base.split('_').where((part) => part.isNotEmpty).toList();
+          if (parts.isEmpty) return base;
+          final List<String> filtered = [];
+          bool trimmed = false;
+          for (final part in parts) {
+            final isNumeric = RegExp(r'^\d{6,}$').hasMatch(part);
+            final isHex = RegExp(r'^[0-9a-f]{6,}$').hasMatch(part);
+            if (!trimmed && (isNumeric || isHex)) {
+              continue;
+            }
+            trimmed = true;
+            filtered.add(part);
+          }
+          if (filtered.isEmpty) {
+            filtered.addAll(parts.length > 2 ? parts.sublist(parts.length - 2) : parts);
+          }
+          return filtered.join('_');
+        }
+
+        final file = File(filePath);
+        final name = file.path.split(Platform.pathSeparator).last;
+        final nameWithoutExt = name.split('.').first.toLowerCase();
+        final targetWithoutExt = targetName.split('.').first.toLowerCase();
+        final normalizedName = normalizeName(name);
+        final normalizedTarget = normalizeName(targetName);
+
+        if (name == targetName || nameWithoutExt == targetWithoutExt) {
+          return true;
+        }
+        if (name.contains(targetName) || nameWithoutExt.contains(targetWithoutExt)) {
+          return true;
+        }
+        if (targetName.contains(name) || targetWithoutExt.contains(nameWithoutExt)) {
+          return true;
+        }
+        if (normalizedName.isNotEmpty && normalizedTarget.isNotEmpty) {
+          if (normalizedName == normalizedTarget) return true;
+          if (normalizedName.contains(normalizedTarget) || normalizedTarget.contains(normalizedName)) return true;
+          final nameSuffix = normalizedName.length > 20 ? normalizedName.substring(normalizedName.length - 20) : normalizedName;
+          final targetSuffix = normalizedTarget.length > 20 ? normalizedTarget.substring(normalizedTarget.length - 20) : normalizedTarget;
+          if (nameSuffix == targetSuffix) return true;
+        }
+
+        final nameTimestamp = name.split('_').first;
+        final targetTimestamp = targetName.split('_').first;
+        if (nameTimestamp.isNotEmpty && targetTimestamp.isNotEmpty) {
+          try {
+            final nameTime = int.tryParse(nameTimestamp);
+            final targetTime = int.tryParse(targetTimestamp);
+            if (nameTime != null && targetTime != null) {
+              if ((nameTime - targetTime).abs() < 3600000) {
+                return true;
+              }
+            }
+          } catch (e) {}
+        }
+
+        return false;
+      }
+      
+      // Check photos directory
+      if (await photosDir.exists()) {
+        final files = await photosDir.list().toList();
+        for (var file in files) {
+          if (file is File) {
+            if (matchesFilename(file.path, fileName)) {
+              print('Found local photo file: ${file.path} for server path: $serverPath');
+              return file.path;
+            }
+          }
+        }
+      }
+      
+      // Check videos directory
+      if (await videosDir.exists()) {
+        final files = await videosDir.list().toList();
+        for (var file in files) {
+          if (file is File) {
+            if (matchesFilename(file.path, fileName)) {
+              print('Found local video file: ${file.path} for server path: $serverPath');
+              return file.path;
+            }
+          }
+        }
+      }
+      
+      // Also check media_backup directory (fallback location)
+      final Directory backupPhotosDir = Directory('${baseDir.path}/media_backup/photos');
+      final Directory backupVideosDir = Directory('${baseDir.path}/media_backup/videos');
+      
+      if (await backupPhotosDir.exists()) {
+        final files = await backupPhotosDir.list().toList();
+        for (var file in files) {
+          if (file is File && matchesFilename(file.path, fileName)) {
+            print('Found local photo in backup: ${file.path}');
+            return file.path;
+          }
+        }
+      }
+      
+      if (await backupVideosDir.exists()) {
+        final files = await backupVideosDir.list().toList();
+        for (var file in files) {
+          if (file is File && matchesFilename(file.path, fileName)) {
+            print('Found local video in backup: ${file.path}');
+            return file.path;
+          }
+        }
+      }
+      
+      print('No local file found for: $fileName');
+      return null;
+    } catch (e) {
+      print('Error searching for local file: $e');
+      return null;
+    }
+  }
+
+  // Helper widgets
+  Widget _buildLoadingWidget({double? progress}) {
+    return Container(
+      color: Colors.grey[200],
+      child: Center(
+        child: progress != null
+            ? CircularProgressIndicator(value: progress)
+            : const CircularProgressIndicator(strokeWidth: 2),
+      ),
+    );
+  }
+
+  Widget _buildErrorWidget(String message) {
+    return Container(
+      color: Colors.grey[300],
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.image_not_supported, color: Colors.grey, size: 20),
+          if (message.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                message,
+                style: const TextStyle(color: Colors.grey, fontSize: 10),
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+        ],
       ),
     );
   }

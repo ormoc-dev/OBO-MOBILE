@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
 import 'services/auth_service.dart';
 import 'services/connectivity_service.dart';
 import 'services/hive_offline_database.dart';
+import 'services/inspection_service.dart';
 import 'screens/dashboard_screen.dart';
 import 'screens/debug_screen.dart';
 import 'utils/asset_helper.dart';
@@ -10,12 +12,68 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
   // Initialize connectivity service
-  await ConnectivityService().initialize();
+  final connectivityService = ConnectivityService();
+  await connectivityService.initialize();
   
   // Initialize Hive database and handle migration
   await _initializeDatabase();
   
+  // Set up automatic sync when connection is restored
+  _setupAutoSync(connectivityService);
+  
   runApp(const MyApp());
+}
+
+// Set up automatic background sync for unsynced inspections
+void _setupAutoSync(ConnectivityService connectivityService) {
+  bool isSyncing = false;
+  
+  connectivityService.connectionStream.listen((isConnected) async {
+    if (isConnected && !isSyncing) {
+      // Connection restored - sync unsynced inspections
+      isSyncing = true;
+      try {
+        print('Connection restored. Checking for unsynced inspections...');
+        final result = await InspectionService.syncAllUnsyncedInspections();
+        
+        if (result['success'] == true) {
+          final syncedCount = result['synced_count'] ?? 0;
+          if (syncedCount > 0) {
+            print('Successfully synced $syncedCount inspection(s) with media files');
+          }
+        } else {
+          final failedCount = result['failed_count'] ?? 0;
+          if (failedCount > 0) {
+            print('Failed to sync $failedCount inspection(s). Will retry later.');
+          }
+        }
+      } catch (e) {
+        print('Error during auto-sync: $e');
+      } finally {
+        isSyncing = false;
+      }
+    }
+  });
+  
+  // Also check immediately if already connected
+  if (connectivityService.isConnected) {
+    Future.delayed(const Duration(seconds: 2), () async {
+      if (!isSyncing) {
+        isSyncing = true;
+        try {
+          final result = await InspectionService.syncAllUnsyncedInspections();
+          final syncedCount = result['synced_count'] ?? 0;
+          if (syncedCount > 0) {
+            print('Auto-synced $syncedCount inspection(s) on app start');
+          }
+        } catch (e) {
+          print('Error during initial auto-sync: $e');
+        } finally {
+          isSyncing = false;
+        }
+      }
+    });
+  }
 }
 
 Future<void> _initializeDatabase() async {

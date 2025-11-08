@@ -7,6 +7,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 import 'package:permission_handler/permission_handler.dart';
 import '../services/inspection_service.dart';
+import '../config/app_config.dart';
 
 class MediaCaptureWidget extends StatefulWidget {
   final List<String> imagePaths;
@@ -33,6 +34,391 @@ class MediaCaptureWidget extends StatefulWidget {
 class _MediaCaptureWidgetState extends State<MediaCaptureWidget> {
   final ImagePicker _picker = ImagePicker();
 
+  // Helper function to check if a path is a network URL or server path
+  bool _isNetworkPath(String path) {
+    if (path.isEmpty) return false;
+    // Check for full URLs
+    if (path.startsWith('http://') || path.startsWith('https://')) {
+      return true;
+    }
+    // Check for server relative paths
+    if (path.startsWith('uploads/') || path.startsWith('/uploads/')) {
+      return true;
+    }
+    // Check for blob URLs
+    if (path.startsWith('blob:')) {
+      return true;
+    }
+    return false;
+  }
+
+  // Helper function to normalize and get full URL for images
+  Future<String> _getFullImageUrl(String path) async {
+    if (path.isEmpty) return path;
+    
+    // If already a full URL, validate and return
+    if (path.startsWith('http://') || path.startsWith('https://')) {
+      try {
+        final uri = Uri.parse(path);
+        final reconstructed = uri.toString();
+        print('Using full URL: $reconstructed');
+        return reconstructed;
+      } catch (e) {
+        print('Error parsing URL, using original: $path - $e');
+        return path;
+      }
+    }
+    
+    // If it's a relative server path, construct full URL
+    if (path.startsWith('uploads/') || path.startsWith('/uploads/')) {
+      try {
+        final baseUrl = await AppConfig.baseUrl;
+        final webBaseUrl = baseUrl.replaceAll('/api', '');
+        final cleanPath = path.startsWith('/') ? path.substring(1) : path;
+        final fullUrl = Uri.parse('$webBaseUrl/$cleanPath').toString();
+        print('Constructed URL from relative path: $fullUrl');
+        return fullUrl;
+      } catch (e) {
+        print('Error getting base URL: $e');
+        return path.startsWith('/') ? path : '/$path';
+      }
+    }
+    
+    return path;
+  }
+
+  // Check if a local file exists for a given path (extract filename and search)
+  Future<String?> _findLocalFile(String serverPath) async {
+    if (kIsWeb) return null;
+    
+    try {
+      String fileName = serverPath.split('/').last;
+      if (fileName.contains('?')) {
+        fileName = fileName.split('?').first;
+      }
+      if (fileName.isEmpty) return null;
+      
+      print('Searching for local file with filename: $fileName');
+      
+      final Directory baseDir = await getApplicationDocumentsDirectory();
+      final Directory photosDir = Directory('${baseDir.path}/inspections/photos');
+      final Directory videosDir = Directory('${baseDir.path}/inspections/videos');
+      
+      bool matchesFilename(String filePath, String targetName) {
+        String normalizeName(String input) {
+          if (input.isEmpty) return input;
+          String base = input.toLowerCase();
+          if (base.contains('.')) {
+            base = base.split('.').first;
+          }
+          final parts = base.split('_').where((part) => part.isNotEmpty).toList();
+          if (parts.isEmpty) return base;
+          final List<String> filtered = [];
+          bool trimmed = false;
+          for (final part in parts) {
+            final isNumeric = RegExp(r'^\d{6,}$').hasMatch(part);
+            final isHex = RegExp(r'^[0-9a-f]{6,}$').hasMatch(part);
+            if (!trimmed && (isNumeric || isHex)) {
+              continue;
+            }
+            trimmed = true;
+            filtered.add(part);
+          }
+          if (filtered.isEmpty) {
+            filtered.addAll(parts.length > 2 ? parts.sublist(parts.length - 2) : parts);
+          }
+          return filtered.join('_');
+        }
+
+        final file = File(filePath);
+        final name = file.path.split(Platform.pathSeparator).last;
+        final nameWithoutExt = name.split('.').first.toLowerCase();
+        final targetWithoutExt = targetName.split('.').first.toLowerCase();
+        final normalizedName = normalizeName(name);
+        final normalizedTarget = normalizeName(targetName);
+
+        if (name == targetName || nameWithoutExt == targetWithoutExt) return true;
+        if (name.contains(targetName) || nameWithoutExt.contains(targetWithoutExt)) return true;
+        if (targetName.contains(name) || targetWithoutExt.contains(nameWithoutExt)) return true;
+        if (normalizedName.isNotEmpty && normalizedTarget.isNotEmpty) {
+          if (normalizedName == normalizedTarget) return true;
+          if (normalizedName.contains(normalizedTarget) || normalizedTarget.contains(normalizedName)) return true;
+          final nameSuffix = normalizedName.length > 20 ? normalizedName.substring(normalizedName.length - 20) : normalizedName;
+          final targetSuffix = normalizedTarget.length > 20 ? normalizedTarget.substring(normalizedTarget.length - 20) : normalizedTarget;
+          if (nameSuffix == targetSuffix) return true;
+        }
+
+        final nameTimestamp = name.split('_').first;
+        final targetTimestamp = targetName.split('_').first;
+        if (nameTimestamp.isNotEmpty && targetTimestamp.isNotEmpty) {
+          try {
+            final nameTime = int.tryParse(nameTimestamp);
+            final targetTime = int.tryParse(targetTimestamp);
+            if (nameTime != null && targetTime != null) {
+              if ((nameTime - targetTime).abs() < 3600000) return true;
+            }
+          } catch (e) {}
+        }
+        return false;
+      }
+      
+      if (await photosDir.exists()) {
+        final files = await photosDir.list().toList();
+        for (var file in files) {
+          if (file is File && matchesFilename(file.path, fileName)) {
+            print('Found local photo file: ${file.path}');
+            return file.path;
+          }
+        }
+      }
+      
+      if (await videosDir.exists()) {
+        final files = await videosDir.list().toList();
+        for (var file in files) {
+          if (file is File && matchesFilename(file.path, fileName)) {
+            print('Found local video file: ${file.path}');
+            return file.path;
+          }
+        }
+      }
+      
+      final Directory backupPhotosDir = Directory('${baseDir.path}/media_backup/photos');
+      final Directory backupVideosDir = Directory('${baseDir.path}/media_backup/videos');
+      
+      if (await backupPhotosDir.exists()) {
+        final files = await backupPhotosDir.list().toList();
+        for (var file in files) {
+          if (file is File && matchesFilename(file.path, fileName)) {
+            return file.path;
+          }
+        }
+      }
+      
+      if (await backupVideosDir.exists()) {
+        final files = await backupVideosDir.list().toList();
+        for (var file in files) {
+          if (file is File && matchesFilename(file.path, fileName)) {
+            return file.path;
+          }
+        }
+      }
+      
+      return null;
+    } catch (e) {
+      print('Error searching for local file: $e');
+      return null;
+    }
+  }
+
+  // Dynamic image widget that handles both web and mobile
+  Widget _buildImageWidget(String path, {BoxFit fit = BoxFit.cover}) {
+    print('_buildImageWidget called with path: $path');
+    
+    if (path.isEmpty) {
+      print('Path is empty');
+      return _buildImageErrorWidget('Empty path');
+    }
+
+    // On mobile, always try to find local file first (even for network paths)
+    if (!kIsWeb) {
+      print('Mobile platform detected');
+      if (!_isNetworkPath(path)) {
+        print('Path is local: $path');
+        return _buildLocalImage(path, fit: fit);
+      } else {
+        print('Path is network: $path');
+        return _buildNetworkImage(path, fit: fit);
+      }
+    } else {
+      print('Web platform detected');
+      if (_isNetworkPath(path)) {
+        print('Path is network: $path');
+        return _buildNetworkImage(path, fit: fit);
+      } else {
+        print('Path is local on web (invalid): $path');
+        return _buildImageErrorWidget('Local file not accessible on web');
+      }
+    }
+  }
+
+  // Build network image (for both web and mobile)
+  Widget _buildNetworkImage(String path, {BoxFit fit = BoxFit.cover}) {
+    print('_buildNetworkImage called with path: $path');
+    
+    // On mobile, try to find local file first
+    if (!kIsWeb) {
+      print('Mobile: Searching for local file first...');
+      return FutureBuilder<String?>(
+        future: _findLocalFile(path),
+        builder: (context, localSnapshot) {
+          if (localSnapshot.hasData && localSnapshot.data != null) {
+            print('Mobile: Found local file: ${localSnapshot.data}');
+            return _buildLocalImage(localSnapshot.data!, fit: fit);
+          }
+          if (localSnapshot.connectionState == ConnectionState.waiting) {
+            print('Mobile: Still searching for local file...');
+            return _buildImageLoadingWidget();
+          }
+          print('Mobile: No local file found, loading from network');
+          return _loadNetworkImage(path, fit: fit);
+        },
+      );
+    }
+    print('Web: Loading directly from network');
+    return _loadNetworkImage(path, fit: fit);
+  }
+
+  // Load image from network
+  Widget _loadNetworkImage(String path, {BoxFit fit = BoxFit.cover}) {
+    print('_loadNetworkImage called with path: $path');
+    
+    return FutureBuilder<String>(
+      future: _getFullImageUrl(path),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          print('Waiting for URL construction...');
+          return _buildImageLoadingWidget();
+        }
+        
+        if (snapshot.hasError) {
+          print('Error getting full URL: ${snapshot.error}');
+          return _buildImageErrorWidget('URL error: ${snapshot.error}');
+        }
+        
+        final imageUrl = snapshot.data ?? path;
+        print('Loading network image from URL: $imageUrl');
+        
+        return Image.network(
+          imageUrl,
+          fit: fit,
+          width: double.infinity,
+          height: double.infinity,
+          headers: {'Accept': 'image/*'},
+          errorBuilder: (context, error, stackTrace) {
+            print('ERROR: Failed to load network image');
+            print('URL: $imageUrl');
+            print('Error: $error');
+            print('StackTrace: $stackTrace');
+            return _buildImageErrorWidget('Failed to load image');
+          },
+          loadingBuilder: (context, child, loadingProgress) {
+            if (loadingProgress == null) {
+              print('Image loaded successfully');
+              return child;
+            }
+            final progress = loadingProgress.expectedTotalBytes != null
+                ? loadingProgress.cumulativeBytesLoaded / loadingProgress.expectedTotalBytes!
+                : null;
+            print('Loading image progress: $progress');
+            return _buildImageLoadingWidget(progress: progress);
+          },
+          cacheWidth: fit == BoxFit.cover ? 300 : null,
+          cacheHeight: fit == BoxFit.cover ? 300 : null,
+        );
+      },
+    );
+  }
+
+  // Build local image (mobile only)
+  Widget _buildLocalImage(String path, {BoxFit fit = BoxFit.cover}) {
+    print('_buildLocalImage called with path: $path');
+    
+    if (kIsWeb) {
+      print('Web: Cannot load local files');
+      return _buildImageErrorWidget('Local file not accessible on web');
+    }
+    
+    final file = File(path);
+    print('Checking if file exists: $path');
+    
+    return FutureBuilder<bool>(
+      future: file.exists(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          print('Checking file existence...');
+          return _buildImageLoadingWidget();
+        }
+        
+        print('File exists check result: ${snapshot.data}');
+        
+        if (snapshot.data == true) {
+          print('Loading local image: $path');
+          return Image.file(
+            file,
+            fit: fit,
+            width: double.infinity,
+            height: double.infinity,
+            errorBuilder: (context, error, stackTrace) {
+              print('ERROR: Failed to load local image: $path');
+              print('ERROR details: $error');
+              print('ERROR stackTrace: $stackTrace');
+              // Try to load as network image if local fails
+              if (_isNetworkPath(path)) {
+                print('Retrying as network image...');
+                return _loadNetworkImage(path, fit: fit);
+              }
+              return _buildImageErrorWidget('Failed to load');
+            },
+            cacheWidth: fit == BoxFit.cover ? 300 : null,
+            cacheHeight: fit == BoxFit.cover ? 300 : null,
+          );
+        } else {
+          print('Local image file not found: $path');
+          // If local file doesn't exist, try network if it's a network path
+          if (_isNetworkPath(path)) {
+            print('File not found locally, trying network...');
+            return _loadNetworkImage(path, fit: fit);
+          }
+          return _buildImageErrorWidget('File not found');
+        }
+      },
+    );
+  }
+
+  // Helper widgets
+  Widget _buildImageLoadingWidget({double? progress}) {
+    return Container(
+      color: Colors.grey[200],
+      width: double.infinity,
+      height: double.infinity,
+      child: Center(
+        child: progress != null
+            ? CircularProgressIndicator(value: progress)
+            : const CircularProgressIndicator(strokeWidth: 2),
+      ),
+    );
+  }
+
+  Widget _buildImageErrorWidget(String message) {
+    print('_buildImageErrorWidget called with message: $message');
+    return Container(
+      color: Colors.grey[300],
+      width: double.infinity,
+      height: double.infinity,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(
+            Icons.image_not_supported,
+            color: Colors.grey,
+            size: 32,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            message,
+            style: const TextStyle(
+              color: Colors.grey,
+              fontSize: 10,
+            ),
+            textAlign: TextAlign.center,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   void dispose() {
     super.dispose();
@@ -58,23 +444,52 @@ class _MediaCaptureWidgetState extends State<MediaCaptureWidget> {
       );
       
       if (image != null) {
-        String finalPath = image.path;
         if (!kIsWeb) {
-          finalPath = await _saveToInspectionsDir(image, subdir: 'photos');
+          // Mobile: Save to persistent directory (image.path is a real file path)
+          String finalPath = await _saveToInspectionsDir(image, subdir: 'photos');
+          
+          // Store the local path for offline access
+          setState(() {
+            widget.imagePaths.add(finalPath);
+          });
+          widget.onImagesChanged(widget.imagePaths);
+          
+          // Try to upload to server in background
+          try {
+            final serverPath = await InspectionService.uploadMediaFile(
+              finalPath,
+              section: widget.sectionName ?? 'Unknown',
+              type: 'image',
+            );
+            // Server path is stored when syncing inspection
+          } catch (_) {
+            // Upload failure doesn't affect local storage
+          }
+        } else {
+          // Web platform: Upload blob URL directly to server
+          // On web, image.path is a blob URL - we need to upload it immediately
+          try {
+            // Read blob as bytes
+            final bytes = await image.readAsBytes();
+            
+            // Upload directly to server
+            final serverPath = await InspectionService.uploadMediaFileFromBytes(
+              bytes,
+              originalPath: image.path,
+              fileName: image.name.isNotEmpty ? image.name : 'image.jpg',
+              section: widget.sectionName ?? 'Unknown',
+              type: 'image',
+            );
+            
+            // Store server path (on web, we don't have local storage)
+            setState(() {
+              widget.imagePaths.add(serverPath);
+            });
+            widget.onImagesChanged(widget.imagePaths);
+          } catch (e) {
+            _showErrorDialog('Failed to upload image: $e');
+          }
         }
-        // Try to upload to server to get web-accessible path
-        String serverPath = finalPath;
-        try {
-          serverPath = await InspectionService.uploadMediaFile(
-            finalPath,
-            section: widget.sectionName ?? 'Unknown',
-            type: 'image',
-          );
-        } catch (_) {}
-        setState(() {
-          widget.imagePaths.add(serverPath);
-        });
-        widget.onImagesChanged(widget.imagePaths);
       }
     } catch (e) {
       _showErrorDialog('Failed to pick image: $e');
@@ -99,37 +514,61 @@ class _MediaCaptureWidgetState extends State<MediaCaptureWidget> {
       );
       
       if (video != null) {
-        if (kIsWeb) {
-          // On web, use the blob/object URL directly (no dart:io validation)
-          setState(() {
-            widget.videoPaths.add(video.path);
-          });
-          widget.onVideosChanged(widget.videoPaths);
-        } else {
-          // Validate video file (mobile)
-          final file = File(video.path);
+        if (!kIsWeb) {
+          // Mobile: Process the video file
+          String videoPath = video.path;
+          final file = File(videoPath);
           if (await file.exists()) {
             final fileSize = await file.length();
             if (fileSize > 0) {
+              // Always save to persistent local directory
               String finalPath = await _saveToInspectionsDir(video, subdir: 'videos');
-              // Try to upload to server to get web-accessible path
-              String serverPath = finalPath;
+              
+              // Store the local path for offline access
+              setState(() {
+                widget.videoPaths.add(finalPath);
+              });
+              widget.onVideosChanged(widget.videoPaths);
+              
+              // Try to upload to server in background
               try {
-                serverPath = await InspectionService.uploadMediaFile(
+                final serverPath = await InspectionService.uploadMediaFile(
                   finalPath,
                   section: widget.sectionName ?? 'Unknown',
                   type: 'video',
                 );
-              } catch (_) {}
-              setState(() {
-                widget.videoPaths.add(serverPath);
-              });
-              widget.onVideosChanged(widget.videoPaths);
+                // Server path is stored when syncing inspection
+              } catch (_) {
+                // Upload failure doesn't affect local storage
+              }
             } else {
               _showErrorDialog('Video file is empty or corrupted.');
             }
           } else {
             _showErrorDialog('Video file not found.');
+          }
+        } else {
+          // Web platform: Upload blob URL directly to server
+          try {
+            // Read blob as bytes
+            final bytes = await video.readAsBytes();
+            
+            // Upload directly to server
+            final serverPath = await InspectionService.uploadMediaFileFromBytes(
+              bytes,
+              originalPath: video.path,
+              fileName: video.name.isNotEmpty ? video.name : 'video.mp4',
+              section: widget.sectionName ?? 'Unknown',
+              type: 'video',
+            );
+            
+            // Store server path (on web, we don't have local storage)
+            setState(() {
+              widget.videoPaths.add(serverPath);
+            });
+            widget.onVideosChanged(widget.videoPaths);
+          } catch (e) {
+            _showErrorDialog('Failed to upload video: $e');
           }
         }
       }
@@ -263,6 +702,7 @@ class _MediaCaptureWidgetState extends State<MediaCaptureWidget> {
 
   Future<String> _saveToInspectionsDir(XFile xfile, {required String subdir}) async {
     try {
+      // Always use application documents directory for persistence
       final Directory baseDir = await getApplicationDocumentsDirectory();
       final Directory inspectionsDir = Directory(p.join(baseDir.path, 'inspections', subdir));
       if (!(await inspectionsDir.exists())) {
@@ -270,30 +710,52 @@ class _MediaCaptureWidgetState extends State<MediaCaptureWidget> {
       }
 
       final String ext = p.extension(xfile.path);
-      final String fileName = '${DateTime.now().millisecondsSinceEpoch}_${p.basenameWithoutExtension(xfile.path)}$ext';
+      // Use timestamp and random number to ensure unique filename
+      final String fileName = '${DateTime.now().millisecondsSinceEpoch}_${DateTime.now().microsecondsSinceEpoch}_${p.basenameWithoutExtension(xfile.path)}$ext';
       final String destPath = p.join(inspectionsDir.path, fileName);
 
-      // Copy to destination
+      // Copy to destination - ensure file is fully written
       final File destFile = File(destPath);
-      await destFile.writeAsBytes(await xfile.readAsBytes(), flush: true);
-      return destPath;
-    } catch (e) {
-      // Fallback: try temporary directory
-      try {
-        final Directory tmpDir = await getTemporaryDirectory();
-        final Directory inspectionsTmp = Directory(p.join(tmpDir.path, 'inspections', subdir));
-        if (!(await inspectionsTmp.exists())) {
-          await inspectionsTmp.create(recursive: true);
-        }
-        final String ext = p.extension(xfile.path);
-        final String fileName = '${DateTime.now().millisecondsSinceEpoch}_${p.basenameWithoutExtension(xfile.path)}$ext';
-        final String destPath = p.join(inspectionsTmp.path, fileName);
-        final File destFile = File(destPath);
-        await destFile.writeAsBytes(await xfile.readAsBytes(), flush: true);
+      final bytes = await xfile.readAsBytes();
+      await destFile.writeAsBytes(bytes, flush: true);
+      
+      // Verify file was written successfully
+      if (await destFile.exists() && await destFile.length() > 0) {
+        debugPrint('Media saved successfully to: $destPath');
         return destPath;
+      } else {
+        throw Exception('File was not written correctly');
+      }
+    } catch (e) {
+      // If application documents directory fails, try external storage directory
+      try {
+        debugPrint('Primary save failed: $e, trying alternative location...');
+        final Directory baseDir = await getApplicationDocumentsDirectory();
+        // Try a different subdirectory as fallback
+        final Directory inspectionsDir = Directory(p.join(baseDir.path, 'media_backup', subdir));
+        if (!(await inspectionsDir.exists())) {
+          await inspectionsDir.create(recursive: true);
+        }
+        
+        final String ext = p.extension(xfile.path);
+        final String fileName = '${DateTime.now().millisecondsSinceEpoch}_${DateTime.now().microsecondsSinceEpoch}_${p.basenameWithoutExtension(xfile.path)}$ext';
+        final String destPath = p.join(inspectionsDir.path, fileName);
+        
+        final File destFile = File(destPath);
+        final bytes = await xfile.readAsBytes();
+        await destFile.writeAsBytes(bytes, flush: true);
+        
+        if (await destFile.exists() && await destFile.length() > 0) {
+          debugPrint('Media saved to fallback location: $destPath');
+          return destPath;
+        } else {
+          throw Exception('Fallback save also failed');
+        }
       } catch (e2) {
-        // As last resort return original path
-        debugPrint('Media save failed: $e | Fallback failed: $e2');
+        // Last resort: return original path but log warning
+        debugPrint('WARNING: Media save failed completely: $e | Fallback failed: $e2');
+        debugPrint('Using original path: ${xfile.path}');
+        // Return original path - this should still work if the file hasn't been deleted
         return xfile.path;
       }
     }
@@ -472,28 +934,14 @@ class _MediaCaptureWidgetState extends State<MediaCaptureWidget> {
                     ),
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(8),
-                      child: kIsWeb 
-                        ? Image.network(
-                            widget.imagePaths[index],
-                            fit: BoxFit.cover,
-                            width: double.infinity,
-                            height: double.infinity,
-                            errorBuilder: (context, error, stackTrace) {
-                              return Container(
-                                color: Colors.grey[300],
-                                child: const Icon(
-                                  Icons.image_not_supported,
-                                  color: Colors.grey,
-                                ),
-                              );
-                            },
-                          )
-                        : Image.file(
-                            File(widget.imagePaths[index]),
-                            fit: BoxFit.cover,
-                            width: double.infinity,
-                            height: double.infinity,
-                          ),
+                      child: SizedBox(
+                        width: double.infinity,
+                        height: double.infinity,
+                        child: _buildImageWidget(
+                          widget.imagePaths[index],
+                          fit: BoxFit.cover,
+                        ),
+                      ),
                     ),
                   ),
                   Positioned(
@@ -661,11 +1109,54 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
     _initializeVideo();
   }
 
+  // Helper function to check if a path is a network URL or server path
+  bool _isNetworkPath(String path) {
+    if (path.isEmpty) return false;
+    return path.startsWith('http://') || 
+           path.startsWith('https://') || 
+           path.startsWith('uploads/') ||
+           path.startsWith('/uploads/') ||
+           path.startsWith('blob:');
+  }
+
+  // Helper function to get full URL for server paths
+  Future<String> _getFullVideoUrl(String path) async {
+    if (path.startsWith('http://') || path.startsWith('https://')) {
+      return path; // Already a full URL
+    }
+    
+    if (path.startsWith('uploads/') || path.startsWith('/uploads/')) {
+      // Get base URL from config and construct web-accessible URL
+      try {
+        final baseUrl = await AppConfig.baseUrl;
+        // baseUrl is like "http://192.168.0.115/OBO-LGU/api"
+        // We need to convert it to web root: "http://192.168.0.115/OBO-LGU"
+        final webBaseUrl = baseUrl.replaceAll('/api', '');
+        final cleanPath = path.startsWith('/') ? path.substring(1) : path;
+        return '$webBaseUrl/$cleanPath';
+      } catch (e) {
+        print('Error getting base URL for video: $e');
+        // Fallback: return path as-is
+        return path.startsWith('/') ? path : '/$path';
+      }
+    }
+    
+    return path;
+  }
+
   Future<void> _initializeVideo() async {
     try {
-      if (kIsWeb) {
-        _controller = VideoPlayerController.network(widget.videoPath);
+      // Check if it's a network path or local file
+      if (_isNetworkPath(widget.videoPath)) {
+        // Network path - get full URL and use network controller
+        final videoUrl = await _getFullVideoUrl(widget.videoPath);
+        _controller = VideoPlayerController.network(videoUrl);
       } else {
+        // Local file path
+        if (kIsWeb) {
+          // On web, if it's not a network path, it's invalid
+          throw Exception('Invalid video path for web: ${widget.videoPath}');
+        }
         _controller = VideoPlayerController.file(File(widget.videoPath));
       }
       

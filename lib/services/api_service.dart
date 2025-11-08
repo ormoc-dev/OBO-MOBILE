@@ -51,8 +51,8 @@ class ApiService {
     }
   }
   
-  // Extract cookie from Set-Cookie header
-  static String? _extractCookieFromHeaders(Map<String, String> headers) {
+  // Extract cookie from Set-Cookie header (public for use in other services)
+  static String? extractCookieFromHeaders(Map<String, String> headers) {
     // Check all possible cookie header formats
     final setCookie = headers['set-cookie'] ?? 
                       headers['Set-Cookie'] ?? 
@@ -159,7 +159,7 @@ class ApiService {
       );
       
       // Extract and save session cookie from response
-      final cookie = _extractCookieFromHeaders(response.headers);
+      final cookie = extractCookieFromHeaders(response.headers);
       if (cookie != null) {
         await _saveSessionCookie(cookie);
         print('Session cookie saved from response: $cookie');
@@ -210,7 +210,7 @@ class ApiService {
       );
       
       // Extract and save session cookie from response
-      final cookie = _extractCookieFromHeaders(response.headers);
+      final cookie = extractCookieFromHeaders(response.headers);
       if (cookie != null) {
         await _saveSessionCookie(cookie);
         print('Session cookie saved from response: $cookie');
