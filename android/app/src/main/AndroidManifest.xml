@@ -11,6 +11,9 @@
     <!-- Network permissions for map tiles and IP detection -->
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
+    <uses-permission
+        android:name="android.permission.NEARBY_WIFI_DEVICES"
+        android:usesPermissionFlags="neverForLocation" />
     
     <!-- Storage and Media permissions -->
     <!-- For Android 13+ (API 33+) - Granular media permissions -->

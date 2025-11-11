@@ -116,7 +116,7 @@ Photos: ${widget.inspection.imagePaths.length}
 Videos: ${widget.inspection.videoPaths.length}
 Sync Status: ${widget.inspection.isSynced ? 'Synced' : 'Pending'}
 
-QR Code Data:
+Business ID:
 ${widget.inspection.scannedData}
 
 Location: ${widget.inspection.latitude != null && widget.inspection.longitude != null 
@@ -207,7 +207,7 @@ For detailed inspection data, please refer to the mobile application.''';
     <div style="padding:28px 24px 12px 24px;">
       <div style="margin-bottom:18px; color:$headerColor; font-size:18px; font-weight:bold; letter-spacing:1px;">Inspection Report</div>
       <div style="font-size:13px; color:#374151; margin-bottom:10px;">Report ID: $idShort · Inspector: ${_escapeHtml(inspectorName)}<br>Date: $createdDate</div>
-      <div style="font-size:13px; color:#374151;">QR Code Data: ${_escapeHtml(widget.inspection.scannedData.toString())}</div>
+      <div style="font-size:13px; color:#374151;">Business ID: ${_escapeHtml(widget.inspection.scannedData.toString())}</div>
       <div style="margin-top:5px; font-size:13px; color:#374151;">Location: ${_escapeHtml(locationInfo)}${hasLocation ? ' · <a href="$mapsUrl" style="color:$accentColor; text-decoration:underline;">Open in Maps</a>' : ''}</div>
       <div style="height:16px;"></div>
       <table style="border-collapse:collapse; width:100%; background:#fafcff; border:1px solid $borderColor; border-radius:10px; overflow:hidden;">
@@ -388,7 +388,7 @@ Inspector ID: ${_currentUser?.id ?? 'N/A'}
 INSPECTION DETAILS
 ------------------
 Inspection ID: ${widget.inspection.id.substring(widget.inspection.id.length - 8)}
-QR Code Data: ${widget.inspection.scannedData}
+Business ID: ${widget.inspection.scannedData}
 Location: $locationInfo
 Created: $createdDate
 Updated: $updatedDate

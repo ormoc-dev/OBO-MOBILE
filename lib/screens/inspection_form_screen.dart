@@ -4,7 +4,6 @@ import '../models/inspection.dart';
 import '../services/hive_offline_database.dart';
 import '../services/auth_service.dart';
 import '../services/connectivity_service.dart';
-import '../services/inspection_service.dart';
 import '../utils/location_service.dart';
 import '../widgets/map_widget.dart';
 import '../widgets/media_capture_widget.dart';
@@ -107,18 +106,15 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
       'Electrical/Electronics': {'remarks': inspection.electricalElectronicsRemarks, 'assessment': inspection.electricalElectronicsAssessment},
     };
 
-    // Pre-fill section data
+    // Pre-fill section data and restore selected state based on stored content
     for (String section in sections.keys) {
       final sectionData = sections[section]!;
       final remarks = sectionData['remarks']!;
       final assessment = sectionData['assessment']!;
-      
-      // Select section if it has data
-      if (remarks.isNotEmpty || assessment.isNotEmpty) {
-        _selectedSections[section] = true;
-        _remarksControllers[section]?.text = remarks;
-        _assessmentControllers[section]?.text = assessment;
-      }
+
+      _remarksControllers[section]?.text = remarks;
+      _assessmentControllers[section]?.text = assessment;
+      _selectedSections[section] = _shouldSelectSection(inspection, section);
     }
 
     // Load section status
@@ -149,6 +145,55 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
     // Load timing data
     _inspectionStartTime = inspection.inspectionStartTime;
     _inspectionEndTime = inspection.inspectionEndTime;
+  }
+
+  bool _shouldSelectSection(Inspection inspection, String section) {
+    bool hasText = false;
+    switch (section) {
+      case 'Mechanical':
+        hasText = inspection.mechanicalRemarks.isNotEmpty || inspection.mechanicalAssessment.isNotEmpty;
+        break;
+      case 'Line and Grade':
+        hasText = inspection.lineGradeRemarks.isNotEmpty || inspection.lineGradeAssessment.isNotEmpty;
+        break;
+      case 'Architectural':
+        hasText = inspection.architecturalRemarks.isNotEmpty || inspection.architecturalAssessment.isNotEmpty;
+        break;
+      case 'Civil/Structural':
+        hasText = inspection.civilStructuralRemarks.isNotEmpty || inspection.civilStructuralAssessment.isNotEmpty;
+        break;
+      case 'Sanitary/Plumbing':
+        hasText = inspection.sanitaryPlumbingRemarks.isNotEmpty || inspection.sanitaryPlumbingAssessment.isNotEmpty;
+        break;
+      case 'Electrical/Electronics':
+        hasText = inspection.electricalElectronicsRemarks.isNotEmpty || inspection.electricalElectronicsAssessment.isNotEmpty;
+        break;
+    }
+
+    if (hasText) return true;
+
+    final sectionImages = inspection.sectionImagePaths?[section] ?? const [];
+    if (sectionImages.isNotEmpty) return true;
+
+    final sectionVideos = inspection.sectionVideoPaths?[section] ?? const [];
+    if (sectionVideos.isNotEmpty) return true;
+
+    final statusValue = inspection.sectionStatus[section];
+    if (statusValue != null && statusValue.trim().isNotEmpty) return true;
+
+    if (section == 'Civil/Structural' && inspection.latitude != null && inspection.longitude != null) {
+      return true;
+    }
+
+    return false;
+  }
+
+  Map<String, List<String>> _cloneSectionMediaMap(Map<String, List<String>> source) {
+    final Map<String, List<String>> clone = {};
+    source.forEach((key, value) {
+      clone[key] = List<String>.from(value);
+    });
+    return clone;
   }
 
   @override
@@ -302,7 +347,7 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
               ),
               const SizedBox(width: 12),
               Text(
-                'Scanned QR Code Data',
+                'Business ID (scanned QR)',
                 style: TextStyle(
                   fontSize: isTablet ? 18 : 16,
                   fontWeight: FontWeight.bold,
@@ -321,7 +366,7 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
               border: Border.all(color: const Color(0xFFE5E7EB), width: 1),
             ),
             child: Text(
-              widget.scannedData ?? 'No data available',
+              widget.scannedData ?? 'No business ID available',
               style: TextStyle(
                 fontSize: isTablet ? 14 : 12,
                 color: const Color(0xFF374151),
@@ -1262,13 +1307,29 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
         final currentUser = await AuthService.getCurrentUser();
         final userId = currentUser?.id.toString();
 
-        // Collect all media from all sections
-        List<String> allImagePaths = [];
-        List<String> allVideoPaths = [];
-        
-        for (String section in selectedSections) {
-          allImagePaths.addAll(_sectionImagePaths[section] ?? []);
-          allVideoPaths.addAll(_sectionVideoPaths[section] ?? []);
+        // Collect all media from all sections (avoid duplicates)
+        final allImagePaths = _sectionImagePaths.values
+            .whereType<List<String>>()
+            .expand((paths) => paths)
+            .toSet()
+            .toList();
+        final allVideoPaths = _sectionVideoPaths.values
+            .whereType<List<String>>()
+            .expand((paths) => paths)
+            .toSet()
+            .toList();
+
+        // Build section status map, keeping every stored status value
+        final Map<String, String> savedSectionStatus = Map.fromEntries(
+          _sectionStatus.entries.where((entry) => entry.value.trim().isNotEmpty),
+        );
+
+        if (widget.isEditing && widget.existingInspection != null) {
+          widget.existingInspection!.sectionStatus.forEach((section, value) {
+            if (!savedSectionStatus.containsKey(section) && value.isNotEmpty) {
+              savedSectionStatus[section] = value;
+            }
+          });
         }
 
         // Create inspection object with dynamic data
@@ -1290,14 +1351,15 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
                 electricalElectronicsAssessment: _getSectionText('Electrical/Electronics', 'assessment'),
                 imagePaths: allImagePaths,
                 videoPaths: allVideoPaths,
-                sectionImagePaths: _sectionImagePaths,
-                sectionVideoPaths: _sectionVideoPaths,
+                sectionImagePaths: _cloneSectionMediaMap(_sectionImagePaths),
+                sectionVideoPaths: _cloneSectionMediaMap(_sectionVideoPaths),
                 inspectionStartTime: _inspectionStartTime,
                 inspectionEndTime: _inspectionEndTime,
-                sectionStatus: _sectionStatus,
-                isSynced: widget.existingInspection!.isSynced,
+                sectionStatus: Map<String, String>.from(savedSectionStatus),
+                isSynced: false,
                 createdAt: widget.existingInspection!.createdAt, // Keep original creation time
                 updatedAt: DateTime.now(), // Update modification time
+                userId: widget.existingInspection!.userId,
                 latitude: _civilStructuralLocation?.latitude,
                 longitude: _civilStructuralLocation?.longitude,
               )
@@ -1320,11 +1382,11 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
                 longitude: _civilStructuralLocation?.longitude,
                 imagePaths: allImagePaths,
                 videoPaths: allVideoPaths,
-                sectionImagePaths: _sectionImagePaths,
-                sectionVideoPaths: _sectionVideoPaths,
+                sectionImagePaths: _cloneSectionMediaMap(_sectionImagePaths),
+                sectionVideoPaths: _cloneSectionMediaMap(_sectionVideoPaths),
                 inspectionStartTime: _inspectionStartTime,
                 inspectionEndTime: _inspectionEndTime,
-                sectionStatus: _sectionStatus,
+                sectionStatus: Map<String, String>.from(savedSectionStatus),
               );
 
         // Save to Hive database first (offline-first approach)
@@ -1336,47 +1398,6 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
         print('Images captured: ${allImagePaths.length}');
         print('Videos captured: ${allVideoPaths.length}');
         print('Inspection duration: ${_calculateDuration()}');
-
-        // Try to sync to server if online
-        bool syncedToServer = false;
-        String syncMessage = '';
-        final connectivityService = ConnectivityService();
-        
-        if (connectivityService.isConnected) {
-          try {
-            if (widget.isEditing && widget.existingInspection != null) {
-              // Update existing inspection
-              final result = await InspectionService.updateInspection(inspection);
-              if (result['success'] == true) {
-                syncedToServer = true;
-                await HiveOfflineDatabase.markInspectionAsSynced(inspection.id);
-                syncMessage = 'Synced to server successfully.';
-              }
-            } else {
-              // Create new inspection
-              final result = await InspectionService.createInspection(inspection);
-              if (result['success'] == true) {
-                syncedToServer = true;
-                final serverId = result['server_inspection_id'];
-                if (serverId != null) {
-                  // Store old ID and update with server ID
-                  final oldId = inspection.id;
-                  inspection.id = 'inspection_$serverId';
-                  // Delete old entry and save with new ID
-                  await HiveOfflineDatabase.deleteInspection(oldId);
-                  await HiveOfflineDatabase.saveInspection(inspection);
-                }
-                await HiveOfflineDatabase.markInspectionAsSynced(inspection.id);
-                syncMessage = 'Synced to server successfully.';
-              }
-            }
-          } catch (e) {
-            print('Error syncing to server: $e');
-            syncMessage = 'Saved locally. Will sync when online.';
-          }
-        } else {
-          syncMessage = 'Saved locally. Will sync when online.';
-        }
 
         // Show success dialog
         if (mounted) {
@@ -1393,16 +1414,16 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
                   Row(
                     children: [
                       Icon(
-                        syncedToServer ? Icons.cloud_done : Icons.cloud_off,
-                        color: syncedToServer ? Colors.green : Colors.orange,
+                        Icons.cloud_off,
+                        color: Colors.orange,
                         size: 20,
                       ),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          syncMessage,
+                          'Saved locally. Use "Export Report" in Inspection Reports when you are online to send this to the server.',
                           style: TextStyle(
-                            color: syncedToServer ? Colors.green : Colors.orange,
+                            color: Colors.orange,
                             fontWeight: FontWeight.w500,
                             fontSize: 12,
                           ),

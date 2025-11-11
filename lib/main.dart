@@ -278,20 +278,6 @@ class WelcomePage extends StatelessWidget {
             ) : Column(
               children: [
                 // Fixed Ormoc Banner at top
-                Container(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: (isLargeTablet ? 16.0 : (isTablet ? 12.0 : (isVerySmallScreen ? 6.0 : (isSmallScreen ? 8.0 : 10.0)))) * finalScale, 
-                    vertical: (isLargeTablet ? 8.0 : (isTablet ? 6.0 : (isVerySmallScreen ? 3.0 : (isSmallScreen ? 4.0 : 5.0)))) * finalScale
-                  ),
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: AssetHelper.loadOrmocBanner(
-                      width: (isLargeTablet ? 200.0 : (isTablet ? 160.0 : (isVerySmallScreen ? 100.0 : (isSmallScreen ? 120.0 : 140.0)))) * finalScale,
-                      height: (isLargeTablet ? 60.0 : (isTablet ? 50.0 : (isVerySmallScreen ? 30.0 : (isSmallScreen ? 35.0 : 40.0)))) * finalScale,
-                      fit: BoxFit.contain,
-                    ),
-                  ),
-                ),
                 Expanded(
                   child: Center(
                     child: SingleChildScrollView(
@@ -309,52 +295,60 @@ class WelcomePage extends StatelessWidget {
                             children: [
                     SizedBox(height: isSmallScreen ? 10 : 20),
                     // Logo + BO text combined
-                    Center(
+                        Center(
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
-                        // Logo as the "O"
-                        Container(
-                          width: logoSize,
-                          height: logoSize,
-                          decoration: BoxDecoration(
-                            color: const Color.fromRGBO(8, 111, 222, 0.977),
-                            borderRadius: BorderRadius.circular(logoSize / 2),
-                            boxShadow: const [
-                              BoxShadow(
-                                color: Color(0xFFE2E8F0),
-                                offset: Offset(0, 4),
-                                blurRadius: 8,
-                                spreadRadius: 0,
+                              // Logo as the "O"
+                              Container(
+                                width: logoSize,
+                                height: logoSize,
+                                decoration: BoxDecoration(
+                                  color: const Color.fromRGBO(8, 111, 222, 0.977),
+                                  borderRadius: BorderRadius.circular(logoSize / 2),
+                                  boxShadow: const [
+                                    BoxShadow(
+                                      color: Color(0xFFE2E8F0),
+                                      offset: Offset(0, 4),
+                                      blurRadius: 8,
+                                      spreadRadius: 0,
+                                    ),
+                                  ],
+                                ),
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(logoSize / 2),
+                                  child: AssetHelper.loadOrmocSeal(
+                                    width: logoSize * 0.62,
+                                    height: logoSize * 0.62,
+                                    fit: BoxFit.contain,
+                                  ),
+                                ),
+                              ),
+                              SizedBox(width: (isLargeTablet ? 16.0 : (isTablet ? 12.0 : (isVerySmallScreen ? 6.0 : (isSmallScreen ? 8.0 : 8.0)))) * finalScale),
+                              // BO text
+                              Text(
+                                'BO',
+                                style: TextStyle(
+                                  fontSize: logoFontSize,
+                                  fontWeight: FontWeight.w900,
+                                  color: const Color.fromRGBO(8, 111, 222, 0.977),
+                                  letterSpacing: 2,
+                                  height: 1.5,
+                                ),
                               ),
                             ],
                           ),
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(logoSize / 2),
-                            child: AssetHelper.loadOrmocSeal(
-                              width: logoSize * 0.620, // 5/8 of container size
-                              height: logoSize * 0.620,
-                              fit: BoxFit.contain,
-                            ),
-                          ),
                         ),
-                        SizedBox(width: (isLargeTablet ? 16.0 : (isTablet ? 12.0 : (isVerySmallScreen ? 6.0 : (isSmallScreen ? 8.0 : 8.0)))) * finalScale),
-                        // BO text
-                        Text(
-                          'BO',
-                          style: TextStyle(
-                            fontSize: logoFontSize,
-                            fontWeight: FontWeight.w900,
-                            color: const Color.fromRGBO(8, 111, 222, 0.977),
-                            letterSpacing: 2,
-                            height: 1.5,
-                          ),
-                        ),
-                      ],
+                    SizedBox(height: verticalSpacing * 0.6),
+                    Center(
+                      child: AssetHelper.loadOrmocBanner(
+                        width: (isLargeTablet ? 220.0 : (isTablet ? 180.0 : (isVerySmallScreen ? 110.0 : (isSmallScreen ? 130.0 : 150.0)))) * finalScale,
+                        height: (isLargeTablet ? 64.0 : (isTablet ? 54.0 : (isVerySmallScreen ? 34.0 : (isSmallScreen ? 38.0 : 44.0)))) * finalScale,
+                        fit: BoxFit.contain,
+                      ),
                     ),
-                  ),
-                    SizedBox(height: verticalSpacing),
+                    SizedBox(height: verticalSpacing * 0.8),
                     // Simple subtitle without neumorphism
                     Center(
                       child: Text(

@@ -1,5 +1,5 @@
-import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:share_plus/share_plus.dart';
@@ -10,6 +10,7 @@ import '../widgets/media_capture_widget.dart';
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import '../services/hive_offline_database.dart';
+import '../services/backup_service.dart';
 import '../services/auth_service.dart';
 import '../services/inspection_service.dart';
 import '../services/connectivity_service.dart';
@@ -17,6 +18,7 @@ import '../models/user.dart';
 import '../config/app_config.dart';
 import 'inspection_form_screen.dart';
 import 'email_report_screen.dart';
+import 'sms_report_screen.dart';
 
 class InspectionReportsScreen extends StatefulWidget {
   const InspectionReportsScreen({super.key});
@@ -48,6 +50,44 @@ class _InspectionReportsScreenState extends State<InspectionReportsScreen> {
       return true;
     }
     return false;
+  }
+
+  int? _extractServerInspectionId(Inspection inspection) {
+    final rawId = inspection.id;
+    if (rawId.isEmpty) return null;
+    if (rawId.startsWith('inspection_')) {
+      final parts = rawId.split('_');
+      if (parts.length > 1) {
+        return int.tryParse(parts.last);
+      }
+    }
+    return int.tryParse(rawId);
+  }
+
+  Future<bool> _serverRecordExists(Inspection inspection) async {
+    final serverId = _extractServerInspectionId(inspection);
+    if (serverId == null) {
+      return false;
+    }
+
+    try {
+      final response = await InspectionService.getInspection(serverId);
+      final success = response['success'] == true;
+      final data = response['data'] ?? response['inspection'] ?? response['result'];
+      if (!success || data == null) {
+        return false;
+      }
+      return true;
+    } catch (e) {
+      final errorText = e.toString().toLowerCase();
+      if (errorText.contains('404') ||
+          errorText.contains('not found') ||
+          errorText.contains('no inspection')) {
+        return false;
+      }
+      // For other errors (e.g., connectivity issues) assume record exists to avoid duplicates
+      return true;
+    }
   }
 
   // Helper function to normalize and get full URL for images
@@ -350,9 +390,9 @@ class _InspectionReportsScreenState extends State<InspectionReportsScreen> {
                   ),
                   borderRadius: BorderRadius.circular((isLargeTablet ? 12.0 : (isTablet ? 10.0 : (isVerySmallScreen ? 8.0 : (isSmallScreen ? 9.0 : 10.0)))) * finalScale),
                   boxShadow: [
-                    BoxShadow(
-                      color: const Color.fromRGBO(8, 111, 222, 0.3),
-                      offset: const Offset(0, 3),
+                    const BoxShadow(
+                      color: Color.fromRGBO(8, 111, 222, 0.3),
+                      offset: Offset(0, 3),
                       blurRadius: 8,
                       spreadRadius: 0,
                     ),
@@ -382,8 +422,10 @@ class _InspectionReportsScreenState extends State<InspectionReportsScreen> {
               SizedBox(height: (isLargeTablet ? 10.0 : (isTablet ? 8.0 : (isVerySmallScreen ? 6.0 : (isSmallScreen ? 7.0 : 8.0)))) * finalScale),
               // Refresh Button
               Container(
-                width: (isLargeTablet ? 48.0 : (isTablet ? 44.0 : (isVerySmallScreen ? 36.0 : (isSmallScreen ? 38.0 : 42.0)))) * finalScale,
-                height: (isLargeTablet ? 48.0 : (isTablet ? 44.0 : (isVerySmallScreen ? 36.0 : (isSmallScreen ? 38.0 : 42.0)))) * finalScale,
+                height: (isLargeTablet ? 48.0 : (isTablet ? 46.0 : (isVerySmallScreen ? 40.0 : (isSmallScreen ? 42.0 : 44.0)))) * finalScale,
+                padding: EdgeInsets.symmetric(
+                  horizontal: (isLargeTablet ? 18.0 : (isTablet ? 16.0 : (isVerySmallScreen ? 12.0 : (isSmallScreen ? 14.0 : 15.0)))) * finalScale,
+                ),
                 decoration: BoxDecoration(
                   color: const Color(0xFFF8FAFC),
                   borderRadius: BorderRadius.circular((isLargeTablet ? 14.0 : (isTablet ? 12.0 : (isVerySmallScreen ? 10.0 : (isSmallScreen ? 11.0 : 12.0)))) * finalScale),
@@ -405,12 +447,24 @@ class _InspectionReportsScreenState extends State<InspectionReportsScreen> {
                   child: InkWell(
                     borderRadius: BorderRadius.circular((isLargeTablet ? 14.0 : (isTablet ? 12.0 : (isVerySmallScreen ? 10.0 : (isSmallScreen ? 11.0 : 12.0)))) * finalScale),
                     onTap: _loadInspections,
-                    child: Center(
-                      child: Icon(
-                        Icons.refresh_rounded,
-                        color: const Color.fromRGBO(8, 111, 222, 0.977),
-                        size: (isLargeTablet ? 24.0 : (isTablet ? 22.0 : (isVerySmallScreen ? 18.0 : (isSmallScreen ? 19.0 : 21.0)))) * finalScale,
-                      ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.refresh_rounded,
+                          color: const Color.fromRGBO(8, 111, 222, 0.977),
+                          size: (isLargeTablet ? 24.0 : (isTablet ? 22.0 : (isVerySmallScreen ? 18.0 : (isSmallScreen ? 19.0 : 21.0)))) * finalScale,
+                        ),
+                        SizedBox(width: (isLargeTablet ? 10.0 : (isTablet ? 8.0 : (isVerySmallScreen ? 6.0 : (isSmallScreen ? 7.0 : 8.0)))) * finalScale),
+                        Text(
+                          'Refresh',
+                          style: TextStyle(
+                            color: const Color.fromRGBO(8, 111, 222, 0.977),
+                            fontWeight: FontWeight.w600,
+                            fontSize: (isTablet ? 14.0 : 12.5) * finalScale,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
@@ -423,61 +477,88 @@ class _InspectionReportsScreenState extends State<InspectionReportsScreen> {
   }
 
   Widget _buildSearchAndFilter(BuildContext context, bool isTablet) {
-    return Container(
-      padding: EdgeInsets.all(isTablet ? 20 : 16),
-      color: Colors.white,
-      child: Column(
-        children: [
-          // Search Bar
-          TextField(
-            onChanged: (value) {
-              setState(() {
-                _searchQuery = value;
-              });
-            },
-            decoration: InputDecoration(
-              hintText: 'Search inspections...',
-              prefixIcon: const Icon(Icons.search_rounded),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: Color(0xFF3B82F6), width: 2),
-              ),
-              contentPadding: EdgeInsets.symmetric(
-                horizontal: isTablet ? 16 : 12,
-                vertical: isTablet ? 16 : 12,
+    final double padding = isTablet ? 22 : 18;
+    final double radius = isTablet ? 16 : 14;
+    final theme = Theme.of(context);
+
+    return Padding(
+      padding: EdgeInsets.symmetric(horizontal: isTablet ? 20 : 16, vertical: isTablet ? 18 : 14),
+      child: Container(
+        padding: EdgeInsets.all(padding),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(radius),
+          color: Colors.white,
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFF0F172A).withOpacity(0.05),
+              blurRadius: 18,
+              offset: const Offset(0, 12),
+            ),
+          ],
+          border: Border.all(color: const Color(0xFFE2E8F0)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+           
+            const SizedBox(height: 15),
+            TextField(
+              onChanged: (value) {
+                setState(() {
+                  _searchQuery = value;
+                });
+              },
+              decoration: InputDecoration(
+                prefixIcon: const Icon(Icons.search_rounded, color: Color(0xFF3B82F6)),
+                hintText: 'Search by business ID or inspection number...',
+                filled: true,
+                fillColor: const Color(0xFFF8FAFC),
+                contentPadding: EdgeInsets.symmetric(
+                  horizontal: isTablet ? 18 : 14,
+                  vertical: isTablet ? 18 : 14,
+                ),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: BorderSide.none,
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: const BorderSide(color: Color(0xFF3B82F6), width: 2),
+                ),
               ),
             ),
-          ),
-          
-          const SizedBox(height: 12),
-          
-          // Filter Chips
-          Row(
-            children: [
-              _buildFilterChip('All', _selectedStatus == 'All', () {
-                setState(() {
-                  _selectedStatus = 'All';
-                });
-              }, isTablet),
-              const SizedBox(width: 8),
-              _buildFilterChip('Pending', _selectedStatus == 'Pending', () {
-                setState(() {
-                  _selectedStatus = 'Pending';
-                });
-              }, isTablet),
-              const SizedBox(width: 8),
-              _buildFilterChip('Completed', _selectedStatus == 'Completed', () {
-                setState(() {
-                  _selectedStatus = 'Completed';
-                });
-              }, isTablet),
-            ],
-          ),
-        ],
+            const SizedBox(height: 18),
+            Text(
+              'Status',
+              style: theme.textTheme.labelLarge?.copyWith(
+                fontWeight: FontWeight.w600,
+                color: const Color(0xFF475569),
+              ),
+            ),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                _buildFilterChip('All', _selectedStatus == 'All', () {
+                  setState(() {
+                    _selectedStatus = 'All';
+                  });
+                }, isTablet),
+                _buildFilterChip('Pending', _selectedStatus == 'Pending', () {
+                  setState(() {
+                    _selectedStatus = 'Pending';
+                  });
+                }, isTablet),
+                _buildFilterChip('Completed', _selectedStatus == 'Completed', () {
+                  setState(() {
+                    _selectedStatus = 'Completed';
+                  });
+                }, isTablet),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -612,11 +693,11 @@ class _InspectionReportsScreenState extends State<InspectionReportsScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Inspection #${inspection.id.substring(inspection.id.length - 8)}',
+                            'Business ID: ${inspection.scannedData}',
                             style: TextStyle(
-                              fontSize: isTablet ? 16 : 14,
-                              fontWeight: FontWeight.bold,
-                              color: const Color(0xFF2D3748),
+                              fontSize: isTablet ? 14 : 12,
+                              fontWeight: FontWeight.w600,
+                              color: const Color(0xFF1F2937),
                             ),
                           ),
                           const SizedBox(height: 2),
@@ -644,7 +725,7 @@ class _InspectionReportsScreenState extends State<InspectionReportsScreen> {
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: Text(
-                            inspection.isSynced ? 'Synced' : 'Pending',
+                            inspection.isSynced ? 'Exported' : 'Pending',
                             style: TextStyle(
                               fontSize: isTablet ? 12 : 10,
                               fontWeight: FontWeight.w600,
@@ -890,8 +971,8 @@ class _InspectionReportsScreenState extends State<InspectionReportsScreen> {
                       _buildExportButton(inspection, isTablet),
                       const SizedBox(height: 20),
                       
-                      // QR Code Data
-                      _buildSectionCard('QR Code Data', inspection.scannedData, Icons.qr_code_rounded, isTablet),
+                      // Business ID (from scanned QR code)
+                      _buildSectionCard('Business ID', inspection.scannedData, Icons.qr_code_rounded, isTablet),
                       const SizedBox(height: 16),
                       
                       // Inspection Sections
@@ -1162,7 +1243,7 @@ class _InspectionReportsScreenState extends State<InspectionReportsScreen> {
         inspectionStartTime: inspection.inspectionStartTime,
         inspectionEndTime: inspection.inspectionEndTime ?? DateTime.now(),
         sectionStatus: updatedSectionStatus,
-        isSynced: inspection.isSynced,
+        isSynced: false,
         createdAt: inspection.createdAt,
         updatedAt: DateTime.now(),
       );
@@ -1213,62 +1294,170 @@ class _InspectionReportsScreenState extends State<InspectionReportsScreen> {
 
   Widget _buildExportButton(Inspection inspection, bool isTablet) {
     return Row(
+      mainAxisAlignment: MainAxisAlignment.end,
       children: [
-        // Export Report Button
-        Expanded(
-          child: ElevatedButton.icon(
-            onPressed: () => _showExportOptions(inspection, isTablet),
-            icon: const Icon(Icons.download_rounded, color: Colors.white),
-            label: Text(
-              'Export Report',
-              style: TextStyle(
-                fontSize: isTablet ? 14 : 12,
-                fontWeight: FontWeight.w600,
-                color: Colors.white,
-              ),
-            ),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF10B981),
-              padding: EdgeInsets.symmetric(
-                vertical: isTablet ? 16 : 14,
-                horizontal: 16,
-              ),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              elevation: 0,
+        ElevatedButton.icon(
+          onPressed: () => _showTransactionOptions(context, inspection, isTablet),
+          icon: const Icon(Icons.playlist_add_check_rounded, color: Colors.white),
+          label: Text(
+            'Transactions',
+            style: TextStyle(
+              fontSize: isTablet ? 16 : 14,
+              fontWeight: FontWeight.w600,
+              color: Colors.white,
             ),
           ),
-        ),
-        const SizedBox(width: 12),
-        // Send Email Button
-        Expanded(
-          child: ElevatedButton.icon(
-            onPressed: () => _sendEmailReport(inspection, isTablet),
-            icon: const Icon(Icons.email_rounded, color: Colors.white),
-            label: Text(
-              'Send Email',
-              style: TextStyle(
-                fontSize: isTablet ? 14 : 12,
-                fontWeight: FontWeight.w600,
-                color: Colors.white,
-              ),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: const Color(0xFF3B82F6),
+            padding: EdgeInsets.symmetric(
+              vertical: isTablet ? 18 : 16,
+              horizontal: 20,
             ),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF3B82F6),
-              padding: EdgeInsets.symmetric(
-                vertical: isTablet ? 16 : 14,
-                horizontal: 16,
-              ),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              elevation: 0,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
             ),
+            elevation: 0,
           ),
         ),
       ],
     );
+  }
+
+  void _showTransactionOptions(
+    BuildContext context,
+    Inspection inspection,
+    bool isTablet,
+  ) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: EdgeInsets.symmetric(
+            horizontal: isTablet ? 24 : 16,
+            vertical: isTablet ? 20 : 16,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 16),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFE2E8F0),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              ListTile(
+                leading: const Icon(Icons.download_rounded, color: Color(0xFF10B981)),
+                title: const Text('Export Report'),
+                subtitle: const Text('Generate a report for server or offline use'),
+                onTap: () {
+                  Navigator.of(context).pop();
+                  _showExportOptions(inspection, isTablet);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.email_rounded, color: Color(0xFF3B82F6)),
+                title: const Text('Send Email'),
+                subtitle: const Text('Compose an email report'),
+                onTap: () {
+                  Navigator.of(context).pop();
+                  _sendEmailReport(inspection, isTablet);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.sms_rounded, color: Color(0xFFF97316)),
+                title: const Text('Send SMS'),
+                subtitle: const Text('Open SMS screen with summary'),
+                onTap: () {
+                  Navigator.of(context).pop();
+                  _openSmsScreen(inspection);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.file_download_rounded, color: Color(0xFF0EA5E9)),
+                title: const Text('Create Excel Backup'),
+                subtitle: const Text('Export all inspections to an Excel file'),
+                onTap: () {
+                  Navigator.of(context).pop();
+                  _generateExcelBackup(isTablet);
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _generateExcelBackup(bool isTablet) async {
+    try {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => AlertDialog(
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const CircularProgressIndicator(),
+              SizedBox(height: isTablet ? 20 : 16),
+              Text(
+                'Generating Excel backup...',
+                style: TextStyle(
+                  fontSize: isTablet ? 14 : 12,
+                  color: const Color(0xFF374151),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+
+      final result = await BackupService.exportInspectionsToExcel();
+
+      if (!mounted) return;
+      if (Navigator.of(context).canPop()) {
+        Navigator.of(context).pop(); // Close loading dialog
+      }
+
+      final snackBar = SnackBar(
+        content: Text(result.message),
+        backgroundColor: result.success
+            ? const Color(0xFF10B981)
+            : const Color(0xFFDC2626),
+        duration: const Duration(seconds: 4),
+        action: (result.success && result.filePath != null && !kIsWeb)
+            ? SnackBarAction(
+                label: 'Share',
+                textColor: Colors.white,
+                onPressed: () {
+                  final path = result.filePath;
+                  if (path != null) {
+                    Share.shareXFiles([XFile(path)]);
+                  }
+                },
+              )
+            : null,
+      );
+
+      ScaffoldMessenger.of(context).showSnackBar(snackBar);
+    } catch (e) {
+      if (!mounted) return;
+      if (Navigator.of(context).canPop()) {
+        Navigator.of(context).pop();
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to create backup: $e'),
+          backgroundColor: const Color(0xFFDC2626),
+          duration: const Duration(seconds: 4),
+        ),
+      );
+    }
   }
 
   void _showExportOptions(Inspection inspection, bool isTablet) {
@@ -1470,6 +1659,46 @@ class _InspectionReportsScreenState extends State<InspectionReportsScreen> {
   }
 
   Future<void> _exportDirectly(Inspection inspection, bool isTablet) async {
+    // Prevent exporting when there are no changes to sync, unless the server copy is missing
+    if (inspection.isSynced) {
+      final exists = await _serverRecordExists(inspection);
+      if (exists) {
+        if (mounted) {
+          showDialog(
+            context: context,
+            builder: (context) => AlertDialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              title: const Row(
+                children: [
+                  Icon(Icons.cloud_done_rounded, color: Color(0xFF10B981)),
+                  SizedBox(width: 8),
+                  Text('Already Exported'),
+                ],
+              ),
+              content: const Text(
+                'This inspection is already exported and there are no unsynced changes. '
+                'Make updates first before exporting again.',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('OK'),
+                ),
+              ],
+            ),
+          );
+        }
+        return;
+      } else {
+        // Server record is missing; mark as unsynced so we can create it again
+        inspection.isSynced = false;
+        inspection.updatedAt = DateTime.now();
+        await HiveOfflineDatabase.saveInspection(inspection);
+      }
+    }
+
     // Show loading dialog
     showDialog(
       context: context,
@@ -1545,21 +1774,47 @@ class _InspectionReportsScreenState extends State<InspectionReportsScreen> {
 
       print('Export inspection - ID: ${inspection.id}, IsSynced: ${inspection.isSynced}, ServerID: $serverInspectionId');
 
-      bool wasUpdate = inspection.isSynced && serverInspectionId != null;
-      Map<String, dynamic> result;
-      if (wasUpdate) {
-        // Update existing inspection
-        print('Updating existing inspection with server ID: $serverInspectionId');
-        result = await InspectionService.updateInspection(inspection);
-        print('Update result: $result');
-      } else {
+      final bool hasServerId = serverInspectionId != null;
+      bool performedUpdate = false;
+      Map<String, dynamic>? result;
+      if (hasServerId) {
+        try {
+          // Update existing inspection
+          print('Updating existing inspection with server ID: $serverInspectionId');
+          result = await InspectionService.updateInspection(inspection);
+          performedUpdate = true;
+          print('Update result: $result');
+        } catch (e) {
+          final errorText = e.toString().toLowerCase();
+          final bool isMissingOnServer = errorText.contains('404') ||
+              errorText.contains('not found') ||
+              errorText.contains('access denied');
+          if (isMissingOnServer) {
+            print('Server update failed because inspection was not found. Falling back to create.');
+            inspection.isSynced = false;
+            inspection.updatedAt = DateTime.now();
+            final oldId = inspection.id;
+            final hadServerId = _extractServerInspectionId(inspection) != null;
+            if (hadServerId) {
+              inspection.id = 'inspection_${DateTime.now().millisecondsSinceEpoch}';
+              await HiveOfflineDatabase.deleteInspection(oldId);
+            }
+            await HiveOfflineDatabase.saveInspection(inspection);
+            serverInspectionId = null;
+          } else {
+            rethrow;
+          }
+        }
+      }
+
+      if (!performedUpdate) {
         // Create new inspection
         print('Creating new inspection');
         result = await InspectionService.createInspection(inspection);
         print('Create result: $result');
         
         // Update local inspection with server ID if returned
-        if (result['success'] == true && result['server_inspection_id'] != null) {
+        if (result != null && result['success'] == true && result['server_inspection_id'] != null) {
           final oldId = inspection.id;
           final serverId = result['server_inspection_id'];
           print('Updating local inspection: oldId=$oldId, newServerId=$serverId');
@@ -1569,13 +1824,18 @@ class _InspectionReportsScreenState extends State<InspectionReportsScreen> {
         }
       }
 
+      result ??= {'success': false, 'message': 'Unknown export result'};
+
       // Verify result
       if (result['success'] != true) {
         final errorMsg = result['message'] ?? result['data']?['message'] ?? 'Unknown error occurred';
         throw Exception(errorMsg);
       }
 
-      // Mark as synced
+      // Mark as synced and persist
+      inspection.isSynced = true;
+      inspection.updatedAt = DateTime.now();
+      await HiveOfflineDatabase.saveInspection(inspection);
       await HiveOfflineDatabase.markInspectionAsSynced(inspection.id);
 
       // Close loading dialog
@@ -1664,7 +1924,7 @@ class _InspectionReportsScreenState extends State<InspectionReportsScreen> {
                         ),
                       ),
                       Text(
-                        'Status: ${wasUpdate ? 'Updated' : 'Created'}',
+                        'Status: ${performedUpdate ? 'Updated' : 'Created'}',
                         style: TextStyle(
                           fontSize: isTablet ? 11 : 9,
                           color: const Color(0xFF10B981),
@@ -1897,7 +2157,6 @@ class _InspectionReportsScreenState extends State<InspectionReportsScreen> {
               style: TextStyle(
                 fontSize: isTablet ? 14 : 12,
                 color: const Color(0xFF374151),
-                fontFamily: title == 'QR Code Data' ? 'monospace' : null,
               ),
             ),
           ),
@@ -3990,6 +4249,19 @@ class _InspectionReportsScreenState extends State<InspectionReportsScreen> {
     );
   }
 
+  void _openSmsScreen(Inspection inspection) {
+    final inspectorName = _currentUser?.name ?? 'Unknown Inspector';
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => SmsReportScreen(
+          inspection: inspection,
+          inspectorName: inspectorName,
+        ),
+      ),
+    );
+  }
+
   void _openEmailScreen(Inspection inspection, bool isDetailed, bool isTablet) {
     Navigator.push(
       context,
@@ -4112,7 +4384,7 @@ Photos: ${inspection.imagePaths.length}
 Videos: ${inspection.videoPaths.length}
 Sync Status: ${inspection.isSynced ? 'Synced' : 'Pending'}
 
-QR Code Data:
+Business ID:
 ${inspection.scannedData}
 
 Location: ${inspection.latitude != null && inspection.longitude != null 

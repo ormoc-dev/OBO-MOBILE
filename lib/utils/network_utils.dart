@@ -1,8 +1,14 @@
 import 'dart:io';
+
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:network_info_plus/network_info_plus.dart';
+
 import '../config/app_config.dart';
 
 class NetworkUtils {
+  static final NetworkInfo _networkInfo = NetworkInfo();
+
   /// Test if the API server is reachable
   static Future<bool> testApiConnection() async {
     try {
@@ -24,26 +30,83 @@ class NetworkUtils {
   /// Get the device's local IP address (for debugging)
   static Future<String?> getLocalIpAddress() async {
     // Try multiple methods to get the local IP address
+
+    if (kIsWeb) {
+      final host = Uri.base.host;
+      if (host.isNotEmpty) {
+        print('NetworkUtils: Using web host for IP: $host');
+        return host;
+      }
+      print('NetworkUtils: Web environment without host information.');
+      return null;
+    }
+    
+    String? lastGatewayIp;
+
+    // Method 0: Use network_info_plus (works well on Android/iOS when permissions granted)
+    try {
+      final wifiIp = await _networkInfo.getWifiIP();
+      if (_isValidPrivateIp(wifiIp)) {
+        print('NetworkUtils: WiFi IP from network_info_plus: $wifiIp');
+        return wifiIp;
+      }
+      final gatewayIp = await _networkInfo.getWifiGatewayIP();
+      if (gatewayIp != null) {
+        print('NetworkUtils: WiFi gateway IP (for reference): $gatewayIp');
+        lastGatewayIp = gatewayIp;
+      }
+    } catch (e) {
+      print('NetworkUtils: network_info_plus WiFi IP detection failed: $e');
+    }
+    
+    if (lastGatewayIp != null) {
+      final gatewayDerived = await _getLocalIpViaGateway(lastGatewayIp!);
+      if (_isValidPrivateIp(gatewayDerived)) {
+        print('NetworkUtils: IP derived from gateway socket: $gatewayDerived');
+        return gatewayDerived;
+      }
+    }
     
     // Method 1: Try NetworkInterface.list() (works on some platforms)
     try {
-      final interfaces = await NetworkInterface.list();
+      final interfaces = await NetworkInterface.list(
+        includeLoopback: false,
+        includeLinkLocal: true,
+        type: InternetAddressType.any,
+      );
       print('NetworkUtils: Found ${interfaces.length} network interfaces');
-      
+
+      String? wifiCandidate;
+      String? otherCandidate;
+
       for (var interface in interfaces) {
         print('NetworkUtils: Interface ${interface.name} has ${interface.addresses.length} addresses');
         
         for (var addr in interface.addresses) {
           print('NetworkUtils: Address ${addr.address} - Type: ${addr.type}, Loopback: ${addr.isLoopback}');
-          
-          if (addr.type == InternetAddressType.IPv4 && !addr.isLoopback) {
-            print('NetworkUtils: Found valid IPv4 address: ${addr.address}');
-            return addr.address;
+
+          if (addr.type == InternetAddressType.IPv4 && !addr.isLoopback && _isPrivateIp(addr.address)) {
+            print('NetworkUtils: Found valid private IPv4 address: ${addr.address}');
+            if (_isLikelyWifiInterface(interface.name)) {
+              wifiCandidate ??= addr.address;
+            } else {
+              otherCandidate ??= addr.address;
+            }
           }
         }
       }
-      
-      print('NetworkUtils: No valid IPv4 address found via NetworkInterface');
+
+      if (wifiCandidate != null) {
+        print('NetworkUtils: Returning WiFi candidate: $wifiCandidate');
+        return wifiCandidate;
+      }
+
+      if (otherCandidate != null) {
+        print('NetworkUtils: Returning fallback candidate: $otherCandidate');
+        return otherCandidate;
+      }
+
+      print('NetworkUtils: No valid private IPv4 address found via NetworkInterface');
     } catch (e) {
       print('NetworkUtils: NetworkInterface.list() failed: $e');
     }
@@ -60,17 +123,38 @@ class NetworkUtils {
     }
     
     // Method 3: Try common local IP ranges
+    final ip = await _tryCommonLocalIps();
+    if (ip != null) {
+      print('NetworkUtils: Found IP via socket detection: $ip');
+      return ip;
+    }
+
+    print('NetworkUtils: All IP detection methods failed');
+    return null;
+  }
+  
+  static bool _isValidPrivateIp(String? ip) {
+    if (ip == null) return false;
+    if (ip.isEmpty) return false;
+    if (ip == '0.0.0.0') return false;
+    return _isPrivateIp(ip);
+  }
+  
+  static Future<String?> _getLocalIpViaGateway(String gatewayIp) async {
     try {
-      final ip = await _tryCommonLocalIps();
-      if (ip != null) {
-        print('NetworkUtils: Found IP via common ranges: $ip');
-        return ip;
+      final socket = await Socket.connect(
+        gatewayIp,
+        80,
+        timeout: const Duration(milliseconds: 600),
+      );
+      final localAddress = socket.address.address;
+      socket.destroy();
+      if (_isValidPrivateIp(localAddress)) {
+        return localAddress;
       }
     } catch (e) {
-      print('NetworkUtils: Common IP detection failed: $e');
+      print('NetworkUtils: Gateway socket method failed: $e');
     }
-    
-    print('NetworkUtils: All IP detection methods failed');
     return null;
   }
   
@@ -80,29 +164,6 @@ class NetworkUtils {
       // Try to connect to a local service and extract IP from connection
       final client = HttpClient();
       client.connectionTimeout = const Duration(seconds: 2);
-      
-      // Try common local IP ranges
-      final commonIps = [
-        '192.168.0.115', // From your ipconfig output
-        '192.168.1.1',
-        '192.168.0.1',
-        '10.0.0.1',
-        '172.16.0.1',
-      ];
-      
-      for (final ip in commonIps) {
-        try {
-          final request = await client.getUrl(Uri.parse('http://$ip:80/'));
-          final response = await request.close().timeout(const Duration(seconds: 1));
-          if (response.statusCode < 500) {
-            // If we can connect, this might be our local network
-            return ip;
-          }
-        } catch (e) {
-          // Continue to next IP
-        }
-      }
-      
       client.close();
     } catch (e) {
       print('NetworkUtils: HTTP request method error: $e');
@@ -118,8 +179,7 @@ class NetworkUtils {
       final socket = await Socket.connect('8.8.8.8', 53, timeout: const Duration(seconds: 2));
       final localAddress = socket.address.address;
       socket.destroy();
-      
-      // Only return if it's a private IP address
+
       if (_isPrivateIp(localAddress)) {
         return localAddress;
       }
@@ -127,8 +187,7 @@ class NetworkUtils {
       print('NetworkUtils: Socket connection method failed: $e');
     }
     
-    // Fallback: return the IP from your ipconfig output
-    return '192.168.0.115';
+    return null;
   }
   
   /// Check if an IP address is in the private range
@@ -146,6 +205,15 @@ class NetworkUtils {
     return (first == 10) ||
            (first == 172 && second >= 16 && second <= 31) ||
            (first == 192 && second == 168);
+  }
+
+  static bool _isLikelyWifiInterface(String name) {
+    final lowered = name.toLowerCase();
+    return lowered.contains('wlan') ||
+        lowered.contains('wifi') ||
+        lowered.contains('wi-fi') ||
+        lowered.contains('wl') ||
+        lowered.contains('en');
   }
 
   /// Check internet connectivity

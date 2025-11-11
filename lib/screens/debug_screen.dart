@@ -1,19 +1,31 @@
+import 'dart:io';
+
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../utils/network_utils.dart';
-import '../utils/url_tester.dart';
+
 import '../config/app_config.dart';
-import '../services/offline_sync_service.dart';
 import '../services/auth_service.dart';
 import '../services/hive_offline_database.dart';
-import 'dart:io';
+import '../services/offline_sync_service.dart';
+import '../utils/network_utils.dart';
+import '../utils/url_tester.dart';
 
 class DebugScreen extends StatefulWidget {
   const DebugScreen({super.key});
 
   @override
   State<DebugScreen> createState() => _DebugScreenState();
+}
+
+class _PermissionResult {
+  final bool allowed;
+  final String? message;
+
+  const _PermissionResult({required this.allowed, this.message});
 }
 
 class _DebugScreenState extends State<DebugScreen> {
@@ -28,6 +40,7 @@ class _DebugScreenState extends State<DebugScreen> {
   String _currentIp = '';
   String _networkInterfacesInfo = 'Not loaded';
   final TextEditingController _ipController = TextEditingController();
+  final TextEditingController _manualIpController = TextEditingController();
   List<Map<String, dynamic>> _apiLogs = [];
   List<String> _errorLogs = [];
   // Chatbot state
@@ -35,6 +48,13 @@ class _DebugScreenState extends State<DebugScreen> {
   final List<Map<String, dynamic>> _chatMessages = [];
   final TextEditingController _chatController = TextEditingController();
   final ScrollController _chatScrollController = ScrollController();
+  String _manualIpDraft = '';
+  final List<String> _chatSuggestions = const [
+    'App workflow',
+    'How do I configure IP?',
+    'Connection failed',
+    'How to sync offline data?',
+  ];
 
   @override
   void initState() {
@@ -50,6 +70,7 @@ class _DebugScreenState extends State<DebugScreen> {
   @override
   void dispose() {
     _ipController.dispose();
+    _manualIpController.dispose();
     _chatController.dispose();
     _chatScrollController.dispose();
     super.dispose();
@@ -99,6 +120,17 @@ class _DebugScreenState extends State<DebugScreen> {
       _localIp = 'Loading...';
     });
     
+    if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
+      final permissionResult = await _ensureWifiPermissions();
+      if (!permissionResult.allowed) {
+        setState(() {
+          _localIp = permissionResult.message ??
+              'Location permission required for WiFi IP detection';
+        });
+        return;
+      }
+    }
+    
     try {
       final ip = await NetworkUtils.getLocalIpAddress();
       setState(() {
@@ -113,6 +145,26 @@ class _DebugScreenState extends State<DebugScreen> {
 
 
   Future<void> _loadNetworkInterfaces() async {
+    if (kIsWeb) {
+      setState(() {
+        _networkInterfacesInfo =
+            'Network interface inspection is not available on web builds.';
+      });
+      return;
+    }
+
+    if (Platform.isAndroid || Platform.isIOS) {
+      final permissionResult = await _ensureWifiPermissions();
+      if (!permissionResult.allowed) {
+        setState(() {
+          _networkInterfacesInfo =
+              permissionResult.message ??
+              'Location permission required to inspect network interfaces.';
+        });
+        return;
+      }
+    }
+
     try {
       final interfaces = await NetworkInterface.list();
       StringBuffer info = StringBuffer();
@@ -142,6 +194,95 @@ class _DebugScreenState extends State<DebugScreen> {
     }
   }
 
+  Future<_PermissionResult> _ensureWifiPermissions() async {
+    if (kIsWeb) {
+      return const _PermissionResult(allowed: true);
+    }
+    if (!Platform.isAndroid && !Platform.isIOS) {
+      return const _PermissionResult(allowed: true);
+    }
+
+    final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) {
+      setState(() {
+        _errorLogs.insert(
+          0,
+          '${DateTime.now()} - Location services disabled. Enable GPS/Location to read WiFi IP.',
+        );
+        _networkInterfacesInfo =
+            'Enable device Location services, then tap refresh.';
+      });
+      return const _PermissionResult(
+        allowed: false,
+        message:
+            'Enable device Location/GPS services, then tap refresh to detect WiFi IP.',
+      );
+    }
+
+    // Android 13+ requires the NEARBY_WIFI_DEVICES permission in addition to Location.
+    if (Platform.isAndroid) {
+      try {
+        final nearbyStatus = await Permission.nearbyWifiDevices.status;
+        if (nearbyStatus.isDenied) {
+          final nearbyRequested = await Permission.nearbyWifiDevices.request();
+          if (!nearbyRequested.isGranted) {
+            setState(() {
+              _errorLogs.insert(
+                0,
+                '${DateTime.now()} - Nearby Wi-Fi Devices permission denied. Cannot detect WiFi IP.',
+              );
+              _networkInterfacesInfo =
+                  'Please allow the "Nearby Wi-Fi devices" permission then tap refresh.';
+            });
+            return const _PermissionResult(
+              allowed: false,
+              message:
+                  'Allow Nearby Wi-Fi devices permission (Settings → Apps → OBO Mobile → Permissions) to detect WiFi IP automatically.',
+            );
+          }
+        } else if (nearbyStatus.isPermanentlyDenied) {
+          setState(() {
+            _errorLogs.insert(
+              0,
+              '${DateTime.now()} - Nearby Wi-Fi Devices permission permanently denied. Cannot detect WiFi IP.',
+            );
+            _networkInterfacesInfo =
+                'Nearby Wi-Fi devices permission is permanently denied. Enable it in system settings, then tap refresh.';
+          });
+          return const _PermissionResult(
+            allowed: false,
+            message:
+                'Nearby Wi-Fi devices permission is required. Enable it in system settings, then tap refresh.',
+          );
+        }
+      } catch (e) {
+        // Older Android versions don't support this permission; ignore errors.
+        print('Nearby Wi-Fi permission check failed: $e');
+      }
+    }
+
+    final status = await Permission.locationWhenInUse.status;
+    if (status.isGranted) {
+      return const _PermissionResult(allowed: true);
+    }
+
+    final requested = await Permission.locationWhenInUse.request();
+    if (requested.isGranted) {
+      return const _PermissionResult(allowed: true);
+    }
+
+    setState(() {
+      _errorLogs.insert(
+        0,
+        '${DateTime.now()} - Location permission denied. Cannot detect WiFi IP.',
+      );
+    });
+    return const _PermissionResult(
+      allowed: false,
+      message:
+          'Allow Location permission (Settings → Apps → OBO Mobile → Permissions → Allow Location) to detect WiFi IP automatically.',
+    );
+  }
 
   Future<void> _copyToClipboard(String text) async {
     await Clipboard.setData(ClipboardData(text: text));
@@ -229,6 +370,8 @@ class _DebugScreenState extends State<DebugScreen> {
     setState(() {
       _currentIp = ip;
       _currentBaseUrl = refreshedBaseUrl;
+      _manualIpDraft = ip;
+      _manualIpController.text = ip;
     });
   }
 
@@ -249,6 +392,8 @@ class _DebugScreenState extends State<DebugScreen> {
       _currentBaseUrl = currentBaseUrl;
       _currentIp = currentIp;
       _ipController.text = customIp.isEmpty ? currentIp : customIp;
+      _manualIpDraft = _ipController.text;
+      _manualIpController.text = _manualIpDraft;
     });
   }
 
@@ -334,6 +479,11 @@ class _DebugScreenState extends State<DebugScreen> {
                     const SizedBox(height: 16),
                     
                     _buildInfoCard('Local IP', _localIp, onTap: () => _copyToClipboard(_localIp)),
+                    _buildInfoCard(
+                      'Configured Server IP',
+                      _currentIp.isNotEmpty ? _currentIp : 'Not configured',
+                      onTap: _currentIp.isNotEmpty ? () => _copyToClipboard(_currentIp) : null,
+                    ),
                     
                     // IP Address Retry Button and Manual Input
                     if (_localIp == 'No IPv4 address found' || _localIp.startsWith('Error:'))
@@ -359,16 +509,22 @@ class _DebugScreenState extends State<DebugScreen> {
                               children: [
                                 Expanded(
                                   child: TextField(
-                                    controller: TextEditingController(text: '192.168.0.115'),
+                                    controller: _manualIpController,
                                     decoration: const InputDecoration(
                                       labelText: 'Manual IP (from ipconfig)',
                                       border: OutlineInputBorder(),
                                       contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                                     ),
+                                    onChanged: (value) {
+                                      _manualIpDraft = value.trim();
+                                    },
                                     onSubmitted: (value) {
-                                      if (value.isNotEmpty) {
+                                      final trimmed = value.trim();
+                                      if (trimmed.isNotEmpty) {
                                         setState(() {
-                                          _localIp = value;
+                                          _manualIpDraft = trimmed;
+                                          _manualIpController.text = trimmed;
+                                          _localIp = trimmed;
                                         });
                                       }
                                     },
@@ -377,7 +533,11 @@ class _DebugScreenState extends State<DebugScreen> {
                                 const SizedBox(width: 8),
                                 ElevatedButton(
                                   onPressed: () {
-                                    final controller = TextEditingController(text: '192.168.0.115');
+                                    final controller = TextEditingController(
+                                      text: _manualIpDraft.isNotEmpty
+                                          ? _manualIpDraft
+                                          : (_currentIp.isNotEmpty ? _currentIp : _localIp),
+                                    );
                                     showDialog(
                                       context: context,
                                       builder: (context) => AlertDialog(
@@ -386,7 +546,7 @@ class _DebugScreenState extends State<DebugScreen> {
                                           controller: controller,
                                           decoration: const InputDecoration(
                                             labelText: 'IP Address',
-                                            hintText: 'e.g., 192.168.0.115',
+                                            hintText: 'e.g., 192.168.x.x',
                                           ),
                                         ),
                                         actions: [
@@ -396,9 +556,13 @@ class _DebugScreenState extends State<DebugScreen> {
                                           ),
                                           TextButton(
                                             onPressed: () {
-                                              setState(() {
-                                                _localIp = controller.text;
-                                              });
+                                              final value = controller.text.trim();
+                                              if (value.isNotEmpty) {
+                                                setState(() {
+                                                  _manualIpDraft = value;
+                                                  _localIp = value;
+                                                });
+                                              }
                                               Navigator.pop(context);
                                             },
                                             child: const Text('Set'),
@@ -506,85 +670,142 @@ class _DebugScreenState extends State<DebugScreen> {
         color: Colors.black54,
         child: SafeArea(
           child: Center(
-            child: Container(
-              width: overlayWidth,
-              height: overlayHeight,
-              constraints: BoxConstraints(
-                maxWidth: overlayWidth,
-                maxHeight: overlayHeight,
-                minWidth: isTablet ? 400 : 280,
-                minHeight: isSmallScreen ? 400 : 500,
-              ),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(20),
-                boxShadow: const [
-                  BoxShadow(
-                    color: Colors.black26,
-                    blurRadius: 20,
-                    spreadRadius: 5,
+          child: Container(
+            width: overlayWidth,
+            height: overlayHeight,
+            constraints: BoxConstraints(
+              maxWidth: overlayWidth,
+              maxHeight: overlayHeight,
+              minWidth: isTablet ? 400 : 280,
+              minHeight: isSmallScreen ? 400 : 500,
+            ),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(24),
+              boxShadow: const [
+                BoxShadow(
+                  color: Colors.black26,
+                  blurRadius: 24,
+                  spreadRadius: 6,
+                ),
+              ],
+            ),
+            child: Column(
+              children: [
+                // Header
+                Container(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: headerPadding,
+                    vertical: headerPadding * 0.9,
                   ),
-                ],
-              ),
-              child: Column(
-                children: [
-                  // Header
-                  Container(
-                    padding: EdgeInsets.all(headerPadding),
-                    decoration: BoxDecoration(
-                      color: const Color.fromRGBO(8, 111, 222, 0.977),
-                      borderRadius: const BorderRadius.only(
-                        topLeft: Radius.circular(20),
-                        topRight: Radius.circular(20),
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        Container(
-                          padding: EdgeInsets.all(isTablet ? 10 : 8),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.2),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Icon(
-                            Icons.psychology,
-                            color: Colors.white,
-                            size: headerIconSize,
-                          ),
-                        ),
-                        SizedBox(width: isTablet ? 12 : 8),
-                        Expanded(
-                          child: Text(
-                            'Debug Assistant',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: headerFontSize,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                        IconButton(
-                          onPressed: () {
-                            setState(() {
-                              _isChatbotOpen = false;
-                            });
-                          },
-                          icon: Icon(
-                            Icons.close,
-                            color: Colors.white,
-                            size: isTablet ? 24 : 20,
-                          ),
-                          padding: EdgeInsets.all(isTablet ? 12 : 8),
-                          constraints: BoxConstraints(
-                            minWidth: isTablet ? 48 : 40,
-                            minHeight: isTablet ? 48 : 40,
-                          ),
-                        ),
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        Color.fromRGBO(8, 111, 222, 0.98),
+                        Color(0xFF1D4ED8),
                       ],
                     ),
+                    borderRadius: BorderRadius.only(
+                      topLeft: Radius.circular(24),
+                      topRight: Radius.circular(24),
+                    ),
                   ),
-                  // Messages
-                  Expanded(
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: EdgeInsets.all(isTablet ? 12 : 10),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.18),
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: Icon(
+                          Icons.psychology_alt_rounded,
+                          color: Colors.white,
+                          size: headerIconSize,
+                        ),
+                      ),
+                      SizedBox(width: isTablet ? 14 : 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Debug Assistant',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: headerFontSize,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 0.2,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Ask about setup, IP configuration, sync, or workflow.',
+                              style: TextStyle(
+                                color: Colors.white.withOpacity(0.82),
+                                fontSize: isTablet ? 13 : 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: () {
+                          setState(() {
+                            _isChatbotOpen = false;
+                          });
+                        },
+                        icon: Icon(
+                          Icons.close_rounded,
+                          color: Colors.white,
+                          size: isTablet ? 26 : 22,
+                        ),
+                        padding: EdgeInsets.all(isTablet ? 12 : 8),
+                        constraints: BoxConstraints(
+                          minWidth: isTablet ? 48 : 40,
+                          minHeight: isTablet ? 48 : 40,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                // Suggestions
+                if (_chatSuggestions.isNotEmpty)
+                  Container(
+                    alignment: Alignment.centerLeft,
+                    padding: EdgeInsets.symmetric(
+                      horizontal: messagePadding,
+                      vertical: isTablet ? 14 : 12,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF8FAFC),
+                      border: Border(
+                        bottom: BorderSide(
+                          color: const Color(0xFFE2E8F0),
+                          width: 1,
+                        ),
+                      ),
+                    ),
+                    child: _buildChatSuggestions(
+                      isTablet: isTablet,
+                      isSmallScreen: isSmallScreen,
+                    ),
+                  ),
+                // Messages
+                Expanded(
+                  child: Container(
+                    decoration: const BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          Color(0xFFF8FAFC),
+                          Colors.white,
+                        ],
+                      ),
+                    ),
                     child: ListView.builder(
                       controller: _chatScrollController,
                       padding: EdgeInsets.all(messagePadding),
@@ -594,86 +815,105 @@ class _DebugScreenState extends State<DebugScreen> {
                         return _buildChatMessage(
                           message['text'] as String,
                           message['isUser'] as bool,
+                          timestamp: message['timestamp'] as DateTime?,
                           isTablet: isTablet,
                           isSmallScreen: isSmallScreen,
                         );
                       },
                     ),
                   ),
-                  // Input area
-                  Container(
-                    padding: EdgeInsets.all(inputPadding),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF8FAFC),
-                      border: Border(
-                        top: BorderSide(color: const Color(0xFFE2E8F0), width: 1),
-                      ),
+                ),
+                // Input area
+                Container(
+                  padding: EdgeInsets.all(inputPadding),
+                  decoration: const BoxDecoration(
+                    color: Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.only(
+                      bottomLeft: Radius.circular(24),
+                      bottomRight: Radius.circular(24),
                     ),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: _chatController,
-                            decoration: InputDecoration(
-                              hintText: 'Ask about debugging or setup...',
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(25),
-                                borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-                              ),
-                              focusedBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(25),
-                                borderSide: const BorderSide(color: Color.fromRGBO(8, 111, 222, 0.977), width: 2),
-                              ),
-                              contentPadding: EdgeInsets.symmetric(
-                                horizontal: isTablet ? 20 : 16,
-                                vertical: isTablet ? 16 : (isSmallScreen ? 10 : 12),
-                              ),
-                              filled: true,
-                              fillColor: Colors.white,
-                              hintStyle: TextStyle(
-                                fontSize: isTablet ? 14 : (isSmallScreen ? 12 : 13),
-                              ),
-                            ),
-                            onSubmitted: _sendChatMessage,
-                            textCapitalization: TextCapitalization.sentences,
-                            style: TextStyle(
-                              fontSize: isTablet ? 15 : (isSmallScreen ? 13 : 14),
-                            ),
-                          ),
-                        ),
-                        SizedBox(width: isTablet ? 12 : 8),
-                        Container(
-                          decoration: BoxDecoration(
-                            color: const Color.fromRGBO(8, 111, 222, 0.977),
-                            shape: BoxShape.circle,
-                          ),
-                          child: IconButton(
-                            onPressed: () => _sendChatMessage(_chatController.text),
-                            icon: Icon(
-                              Icons.send,
-                              color: Colors.white,
-                              size: isTablet ? 24 : 20,
-                            ),
-                            padding: EdgeInsets.all(isTablet ? 12 : 8),
-                            constraints: BoxConstraints(
-                              minWidth: isTablet ? 48 : 40,
-                              minHeight: isTablet ? 48 : 40,
-                            ),
-                          ),
-                        ),
-                      ],
+                    border: Border(
+                      top: BorderSide(color: Color(0xFFE2E8F0), width: 1),
                     ),
                   ),
-                ],
-              ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _chatController,
+                          decoration: InputDecoration(
+                            hintText: 'Ask about workflow, IP setup, syncing, or issues...',
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(28),
+                              borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(28),
+                              borderSide: const BorderSide(color: Color.fromRGBO(8, 111, 222, 0.977), width: 2),
+                            ),
+                            contentPadding: EdgeInsets.symmetric(
+                              horizontal: isTablet ? 22 : 18,
+                              vertical: isTablet ? 18 : (isSmallScreen ? 12 : 14),
+                            ),
+                            filled: true,
+                            fillColor: Colors.white,
+                            hintStyle: TextStyle(
+                              fontSize: isTablet ? 14 : (isSmallScreen ? 12 : 13),
+                            ),
+                          ),
+                          onSubmitted: _sendChatMessage,
+                          textCapitalization: TextCapitalization.sentences,
+                          style: TextStyle(
+                            fontSize: isTablet ? 15 : (isSmallScreen ? 13 : 14),
+                          ),
+                        ),
+                      ),
+                      SizedBox(width: isTablet ? 12 : 8),
+                      Container(
+                        decoration: const BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: [
+                              Color.fromRGBO(8, 111, 222, 0.977),
+                              Color(0xFF1D4ED8),
+                            ],
+                          ),
+                        ),
+                        child: IconButton(
+                          onPressed: () => _sendChatMessage(_chatController.text),
+                          icon: Icon(
+                            Icons.send_rounded,
+                            color: Colors.white,
+                            size: isTablet ? 24 : 20,
+                          ),
+                          padding: EdgeInsets.all(isTablet ? 12 : 10),
+                          constraints: BoxConstraints(
+                            minWidth: isTablet ? 50 : 42,
+                            minHeight: isTablet ? 50 : 42,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
+          ),
           ),
         ),
       ),
     );
   }
 
-  Widget _buildChatMessage(String text, bool isUser, {bool isTablet = false, bool isSmallScreen = false}) {
+  Widget _buildChatMessage(
+    String text,
+    bool isUser, {
+    DateTime? timestamp,
+    bool isTablet = false,
+    bool isSmallScreen = false,
+  }) {
     final iconSize = isTablet ? 24.0 : (isSmallScreen ? 18.0 : 20.0);
     final iconPadding = isTablet ? 10.0 : (isSmallScreen ? 6.0 : 8.0);
     final messagePadding = isTablet 
@@ -683,6 +923,9 @@ class _DebugScreenState extends State<DebugScreen> {
             : const EdgeInsets.symmetric(horizontal: 16, vertical: 12));
     final fontSize = isTablet ? 15.0 : (isSmallScreen ? 12.0 : 14.0);
     final spacing = isTablet ? 12.0 : (isSmallScreen ? 8.0 : 10.0);
+    final timeLabel = timestamp != null
+        ? '${timestamp.hour.toString().padLeft(2, '0')}:${timestamp.minute.toString().padLeft(2, '0')}'
+        : null;
     
     return Container(
       margin: EdgeInsets.only(bottom: isSmallScreen ? 8 : 12),
@@ -701,6 +944,21 @@ class _DebugScreenState extends State<DebugScreen> {
                     ? const Color.fromRGBO(8, 111, 222, 0.977)
                     : const Color(0xFFF1F5F9),
                 borderRadius: BorderRadius.circular(18),
+                border: Border.all(
+                  color: isUser
+                      ? Colors.transparent
+                      : const Color(0xFFE2E8F0),
+                  width: isUser ? 0 : 1,
+                ),
+                boxShadow: isUser
+                    ? const [
+                        BoxShadow(
+                          color: Color(0x22000000),
+                          offset: Offset(0, 6),
+                          blurRadius: 12,
+                        ),
+                      ]
+                    : null,
               ),
               child: Text(
                 text,
@@ -727,8 +985,53 @@ class _DebugScreenState extends State<DebugScreen> {
               ),
             ),
           ],
+          if (timeLabel != null)
+            Padding(
+              padding: EdgeInsets.only(
+                left: isUser ? 0 : spacing,
+                right: isUser ? spacing : 0,
+                top: 4,
+              ),
+              child: Text(
+                timeLabel,
+                style: TextStyle(
+                  color: const Color(0xFF94A3B8),
+                  fontSize: isTablet ? 11 : 10,
+                ),
+              ),
+            ),
         ],
       ),
+    );
+  }
+
+  Widget _buildChatSuggestions({required bool isTablet, required bool isSmallScreen}) {
+    final chipStyle = TextStyle(
+      fontSize: isTablet ? 13 : (isSmallScreen ? 11 : 12),
+      fontWeight: FontWeight.w600,
+    );
+
+    return Wrap(
+      spacing: isTablet ? 10 : 8,
+      runSpacing: isTablet ? 8 : 6,
+      children: _chatSuggestions.map((suggestion) {
+        return ActionChip(
+          label: Text(suggestion, style: chipStyle),
+          backgroundColor: Colors.white,
+          elevation: 0,
+          pressElevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(18),
+            side: const BorderSide(color: Color(0xFFBFDBFE)),
+          ),
+          onPressed: () => _handleSuggestionTap(suggestion),
+          avatar: const Icon(
+            Icons.lightbulb_outline,
+            size: 18,
+            color: Color.fromRGBO(8, 111, 222, 0.977),
+          ),
+        );
+      }).toList(),
     );
   }
 
@@ -822,6 +1125,11 @@ class _DebugScreenState extends State<DebugScreen> {
     _chatController.clear();
   }
 
+  void _handleSuggestionTap(String suggestion) {
+    _chatController.clear();
+    _sendChatMessage(suggestion);
+  }
+
   String _processChatMessage(String message) {
     final lowerMessage = message.toLowerCase();
 
@@ -859,6 +1167,7 @@ class _DebugScreenState extends State<DebugScreen> {
 1. ❌ Not connected to WiFi network
 2. ❌ Connected to wrong WiFi network
 3. ❌ Mobile data is enabled instead of WiFi
+4. ❌ Location permission denied (required on Android/iOS to read WiFi IP)
 
 **Solutions:**
 
@@ -878,6 +1187,11 @@ class _DebugScreenState extends State<DebugScreen> {
 - Disable mobile data temporarily
 - Ensure you're connected to the correct network
 
+**Option 4: Enable Location Permission**
+- When prompted, tap "Allow while using the app"
+- Or go to Settings → Apps → OBO Mobile → Permissions → Allow Location
+- Retry IP detection afterwards
+
 💡 **Need Server Configuration Help?** Ask me "server configuration" or "how to setup server" for detailed steps!''';
         }
       }
@@ -890,6 +1204,11 @@ class _DebugScreenState extends State<DebugScreen> {
 **Current Status:** $_localIp
 
 **Quick Fixes:**
+
+0. **Allow Location Access** 📍
+   - Location permission is required to read the WiFi IP on Android/iOS
+   - When prompted, tap "Allow while using the app"
+   - You can also enable it from Settings → Apps → OBO Mobile → Permissions
 
 1. **Connect to Server WiFi** 📶
    - Open device WiFi settings
@@ -911,9 +1230,10 @@ class _DebugScreenState extends State<DebugScreen> {
         return '''🔧 **IP Address Not Showing**
 
 Here's how to fix it:
-1. Click "Retry IP Detection" button
-2. If it still doesn't work, use manual IP input:
-   - Enter your computer's IP (e.g., 192.168.0.115)
+1. Make sure the app has **Location permission** (required for WiFi IP on Android/iOS)
+2. Click "Retry IP Detection" button
+3. If it still doesn't work, use manual IP input:
+   - Enter your computer's IP (e.g., 192.168.x.x)
    - Click "Set Manual" button
    - You can find your IP by running `ipconfig` in Command Prompt
 
@@ -1079,6 +1399,43 @@ Network requirements:
 - Firewall blocking → Allow Apache in Windows Firewall
 
 Need help with a specific network issue?''';
+    }
+
+    if (lowerMessage.contains('workflow') || lowerMessage.contains('flow') || lowerMessage.contains('process')) {
+      return '''🔄 **OBO Mobile App Workflow**
+
+1. **Login**
+   - Connect your device to the same Wi-Fi network as the OBO server (XAMPP).
+   - Login online to verify credentials and load permissions.
+
+2. **Sync Assignments & Data**
+   - On the dashboard, tap **"Sync My Data"** to pull assignments, references, and checklists.
+   - Syncing stores everything securely in Hive for offline use.
+
+3. **Inspection Workflow**
+   - Scan a business QR code to start or resume an inspection.
+   - Complete sections, capture photos/videos, add remarks, and track status (in_progress / passed / not_passed).
+   - Save progress at any time; unsynced records stay marked as **Pending**.
+
+4. **Operate Offline**
+   - After syncing, you can disconnect from Wi-Fi.
+   - The app works offline using stored inspections and credentials.
+
+5. **Export & Submit**
+   - When back online, go to **Inspection Reports**.
+   - Use **Export** to upload new or updated inspections to the server.
+   - If the server copy is missing, the app automatically recreates it; repeated exports update existing records.
+
+6. **Backups**
+   - From **Inspection Reports → Transactions**, tap **Create Excel Backup** to export every inspection to an .xlsx file.
+   - Mobile/Desktop: saved locally in app documents (works offline).
+   - Web: triggers an immediate browser download.
+
+7. **Debug & Network**
+   - Visit the **Debug Screen** to inspect IPs, server status, offline data, and run health checks.
+   - The built-in assistant here can guide you through setup, syncing, and troubleshooting.
+
+Need a visual checklist or help with a specific step? Just ask!''';
     }
 
     // Setup/Installation
@@ -1328,7 +1685,7 @@ If I couldn't answer your question, please contact:
                 child: TextField(
                   controller: _ipController,
                   decoration: InputDecoration(
-                    hintText: 'e.g., 192.168.0.115',
+                    hintText: 'e.g., 192.168.x.x',
                     labelText: 'IP Address',
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
@@ -1679,7 +2036,7 @@ If I couldn't answer your question, please contact:
           ),
           SizedBox(height: 12),
           Text(
-            '• IPv4 Address Not Showing: Use manual IP input (192.168.0.115)\n'
+            '• IPv4 Address Not Showing: Use manual IP input (e.g., 192.168.x.x)\n'
             '• NetworkInterface.list() Unsupported: Use retry button or manual input\n'
             '• API Connection Failed: Check XAMPP is running\n'
             '• Wrong IP Address: Update baseUrl in app_config.dart\n'

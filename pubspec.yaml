@@ -50,6 +50,9 @@ dependencies:
   # Connectivity checking
   connectivity_plus: ^5.0.2
   
+  # Network information (WiFi IP detection)
+  network_info_plus: ^5.0.3
+  
   # JSON serialization
   json_annotation: ^4.8.1
   
@@ -77,6 +80,9 @@ dependencies:
   
   # Email functionality
   flutter_email_sender: ^8.0.0
+  
+  # Excel export for backups
+  excel: ^2.1.0
 
 dev_dependencies:
   flutter_test:
