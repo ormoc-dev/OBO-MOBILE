@@ -352,7 +352,7 @@ class WelcomePage extends StatelessWidget {
                     // Simple subtitle without neumorphism
                     Center(
                       child: Text(
-                        'Office of Building Official',
+                        'Office of Building',
                         style: TextStyle(
                           fontSize: titleFontSize,
                           color: const Color(0xFF1F2937),
