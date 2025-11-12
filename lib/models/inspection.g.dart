@@ -41,13 +41,28 @@ class InspectionAdapter extends TypeAdapter<Inspection> {
       videoPaths: (fields[21] as List).cast<String>(),
       inspectionStartTime: fields[22] as DateTime?,
       inspectionEndTime: fields[23] as DateTime?,
+      sectionStatus: (fields[24] as Map?)?.map(
+            (key, value) => MapEntry(key as String, value as String),
+          ) ??
+          <String, String>{},
+      sectionImagePaths: (fields[25] as Map?)?.map(
+        (key, value) => MapEntry(key as String, (value as List).cast<String>()),
+      ),
+      sectionVideoPaths: (fields[26] as Map?)?.map(
+        (key, value) => MapEntry(key as String, (value as List).cast<String>()),
+      ),
+      hasBuildingPermit: fields[27] as bool?,
+      hasOccupancyPermit: fields[28] as bool?,
+      occupancyPermitIssuedYear: fields[29] as int?,
+      occupancyPermitRecommendation: fields[30] as String?,
+      buildingPermitRecommendation: fields[31] as String?,
     );
   }
 
   @override
   void write(BinaryWriter writer, Inspection obj) {
     writer
-      ..writeByte(24)
+      ..writeByte(32)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -95,7 +110,23 @@ class InspectionAdapter extends TypeAdapter<Inspection> {
       ..writeByte(22)
       ..write(obj.inspectionStartTime)
       ..writeByte(23)
-      ..write(obj.inspectionEndTime);
+      ..write(obj.inspectionEndTime)
+      ..writeByte(24)
+      ..write(obj.sectionStatus)
+      ..writeByte(25)
+      ..write(obj.sectionImagePaths)
+      ..writeByte(26)
+      ..write(obj.sectionVideoPaths)
+      ..writeByte(27)
+      ..write(obj.hasBuildingPermit)
+      ..writeByte(28)
+      ..write(obj.hasOccupancyPermit)
+      ..writeByte(29)
+      ..write(obj.occupancyPermitIssuedYear)
+      ..writeByte(30)
+      ..write(obj.occupancyPermitRecommendation)
+      ..writeByte(31)
+      ..write(obj.buildingPermitRecommendation);
   }
 
   @override

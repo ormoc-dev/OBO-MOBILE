@@ -70,12 +70,6 @@ class Inspection extends HiveObject {
   @HiveField(21)
   List<String> videoPaths;
 
-  @HiveField(25)
-  Map<String, List<String>>? sectionImagePaths;
-
-  @HiveField(26)
-  Map<String, List<String>>? sectionVideoPaths;
-
   @HiveField(22)
   DateTime? inspectionStartTime;
 
@@ -84,6 +78,27 @@ class Inspection extends HiveObject {
 
   @HiveField(24)
   Map<String, String> sectionStatus;
+
+  @HiveField(25)
+  Map<String, List<String>>? sectionImagePaths;
+
+  @HiveField(26)
+  Map<String, List<String>>? sectionVideoPaths;
+
+  @HiveField(27)
+  bool? hasBuildingPermit;
+
+  @HiveField(28)
+  bool? hasOccupancyPermit;
+
+  @HiveField(29)
+  int? occupancyPermitIssuedYear;
+
+  @HiveField(30)
+  String? occupancyPermitRecommendation;
+
+  @HiveField(31)
+  String? buildingPermitRecommendation;
 
   Inspection({
     required this.id,
@@ -113,6 +128,11 @@ class Inspection extends HiveObject {
     this.inspectionStartTime,
     this.inspectionEndTime,
     this.sectionStatus = const {},
+    this.hasBuildingPermit,
+    this.hasOccupancyPermit,
+    this.occupancyPermitIssuedYear,
+    this.occupancyPermitRecommendation,
+    this.buildingPermitRecommendation,
   });
 
   // Factory constructor for creating from form data
@@ -140,6 +160,11 @@ class Inspection extends HiveObject {
     DateTime? inspectionStartTime,
     DateTime? inspectionEndTime,
     Map<String, String> sectionStatus = const {},
+    bool? hasBuildingPermit,
+    bool? hasOccupancyPermit,
+    int? occupancyPermitIssuedYear,
+    String? occupancyPermitRecommendation,
+    String? buildingPermitRecommendation,
   }) {
     final now = DateTime.now();
     return Inspection(
@@ -170,6 +195,11 @@ class Inspection extends HiveObject {
       inspectionStartTime: inspectionStartTime,
       inspectionEndTime: inspectionEndTime,
       sectionStatus: sectionStatus,
+      hasBuildingPermit: hasBuildingPermit,
+      hasOccupancyPermit: hasOccupancyPermit,
+      occupancyPermitIssuedYear: occupancyPermitIssuedYear,
+      occupancyPermitRecommendation: occupancyPermitRecommendation,
+      buildingPermitRecommendation: buildingPermitRecommendation,
     );
   }
 
@@ -203,6 +233,11 @@ class Inspection extends HiveObject {
       'inspection_start_time': inspectionStartTime?.toIso8601String(),
       'inspection_end_time': inspectionEndTime?.toIso8601String(),
       'section_status': sectionStatus,
+      'has_building_permit': hasBuildingPermit,
+      'has_occupancy_permit': hasOccupancyPermit,
+      'occupancy_permit_issued_year': occupancyPermitIssuedYear,
+      'occupancy_permit_recommendation': occupancyPermitRecommendation,
+      'building_permit_recommendation': buildingPermitRecommendation,
     };
   }
 
@@ -220,6 +255,14 @@ class Inspection extends HiveObject {
     String? sanitaryPlumbingAssessment,
     String? electricalElectronicsRemarks,
     String? electricalElectronicsAssessment,
+    Map<String, String>? sectionStatus,
+    Map<String, List<String>>? sectionImagePaths,
+    Map<String, List<String>>? sectionVideoPaths,
+    bool? hasBuildingPermit,
+    bool? hasOccupancyPermit,
+    int? occupancyPermitIssuedYear,
+    String? occupancyPermitRecommendation,
+    String? buildingPermitRecommendation,
   }) {
     if (mechanicalRemarks != null) this.mechanicalRemarks = mechanicalRemarks;
     if (mechanicalAssessment != null) this.mechanicalAssessment = mechanicalAssessment;
@@ -233,6 +276,14 @@ class Inspection extends HiveObject {
     if (sanitaryPlumbingAssessment != null) this.sanitaryPlumbingAssessment = sanitaryPlumbingAssessment;
     if (electricalElectronicsRemarks != null) this.electricalElectronicsRemarks = electricalElectronicsRemarks;
     if (electricalElectronicsAssessment != null) this.electricalElectronicsAssessment = electricalElectronicsAssessment;
+    if (sectionStatus != null) this.sectionStatus = sectionStatus;
+    if (sectionImagePaths != null) this.sectionImagePaths = sectionImagePaths;
+    if (sectionVideoPaths != null) this.sectionVideoPaths = sectionVideoPaths;
+    if (hasBuildingPermit != null) this.hasBuildingPermit = hasBuildingPermit;
+    if (hasOccupancyPermit != null) this.hasOccupancyPermit = hasOccupancyPermit;
+    if (occupancyPermitIssuedYear != null) this.occupancyPermitIssuedYear = occupancyPermitIssuedYear;
+    if (occupancyPermitRecommendation != null) this.occupancyPermitRecommendation = occupancyPermitRecommendation;
+    if (buildingPermitRecommendation != null) this.buildingPermitRecommendation = buildingPermitRecommendation;
     
     updatedAt = DateTime.now();
     save(); // Save to Hive

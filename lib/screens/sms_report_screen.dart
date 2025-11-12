@@ -572,6 +572,7 @@ class _SmsReportScreenState extends State<SmsReportScreen> {
     final inspectorName =
         widget.inspectorName.isNotEmpty ? widget.inspectorName : 'Unknown Inspector';
 
+<<<<<<< HEAD
     final buffer = StringBuffer()
       ..writeln('OBO Inspection ${inspection.id.substring(inspection.id.length - 4)}')
       ..writeln('Inspector: $inspectorName')
@@ -654,6 +655,41 @@ class _SmsReportScreenState extends State<SmsReportScreen> {
     buffer.writeln('Thank you.');
 
     return buffer.toString().trim();
+=======
+    final permitSummary = _buildPermitSummary(inspection);
+
+    return 'OBO Inspection ${inspection.id.substring(inspection.id.length - 4)}\n'
+        'Inspector: $inspectorName\n'
+        'Date: $createdDate\n'
+        'Sections: $sectionCount\n'
+        'Status: $status\n'
+        'Business ID: ${inspection.scannedData}'
+        '${permitSummary.isNotEmpty ? '\n$permitSummary' : ''}';
+  }
+
+  String _buildPermitSummary(Inspection inspection) {
+    final buildingStatus = _formatPermitLine(
+      label: 'Building Permit',
+      hasPermit: inspection.hasBuildingPermit,
+      recommendation: inspection.buildingPermitRecommendation,
+    );
+
+    final occupancyStatus = _formatPermitLine(
+      label: 'Occupancy Permit',
+      hasPermit: inspection.hasOccupancyPermit,
+      recommendation: inspection.occupancyPermitRecommendation,
+      issuedYear: inspection.occupancyPermitIssuedYear,
+    );
+
+    final lines = [
+      if (buildingStatus != null) buildingStatus,
+      if (occupancyStatus != null) occupancyStatus,
+    ];
+
+    if (lines.isEmpty) return '';
+
+    return 'Permits:\n${lines.join('\n')}';
+>>>>>>> version_2
   }
 
   int _getSelectedSectionsCount(Inspection inspection) {
@@ -667,6 +703,7 @@ class _SmsReportScreenState extends State<SmsReportScreen> {
     return count;
   }
 
+<<<<<<< HEAD
   String _formatSectionStatus(String status) {
     switch (status) {
       case 'passed':
@@ -797,6 +834,46 @@ class _SmsReportScreenState extends State<SmsReportScreen> {
         );
       },
     );
+=======
+  String? _formatPermitLine({
+    required String label,
+    required bool? hasPermit,
+    required String? recommendation,
+    int? issuedYear,
+  }) {
+    if (hasPermit == null && (recommendation == null || recommendation.trim().isEmpty) && issuedYear == null) {
+      return null;
+    }
+
+    final status = hasPermit == null
+        ? 'N/A'
+        : hasPermit
+            ? 'Yes'
+            : 'No';
+
+    final parts = <String>['$label: $status'];
+
+    if (hasPermit == true && issuedYear != null) {
+      final ageText = _formatOccupancyAge(issuedYear);
+      parts.add(ageText);
+    }
+
+    if (recommendation != null && recommendation.trim().isNotEmpty) {
+      parts.add(recommendation);
+    }
+
+    return parts.join(' · ');
+  }
+
+  String _formatOccupancyAge(int issuedYear) {
+    final currentYear = DateTime.now().year;
+    if (issuedYear < 1900 || issuedYear > currentYear) {
+      return 'Issued: $issuedYear';
+    }
+
+    final age = currentYear - issuedYear;
+    return 'Issued: $issuedYear (${age}y)';
+>>>>>>> version_2
   }
 
   String _formatDateTime(DateTime dateTime) {

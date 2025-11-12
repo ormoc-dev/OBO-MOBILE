@@ -105,6 +105,8 @@ class _EmailReportScreenState extends State<EmailReportScreen> {
     if (widget.inspection.sanitaryPlumbingRemarks.isNotEmpty || widget.inspection.sanitaryPlumbingAssessment.isNotEmpty) completedSections++;
     if (widget.inspection.electricalElectronicsRemarks.isNotEmpty || widget.inspection.electricalElectronicsAssessment.isNotEmpty) completedSections++;
     
+    final permitSummary = _buildPermitSummaryText();
+    
     return '''INSPECTION REPORT SUMMARY
 
 Inspection ID: ${widget.inspection.id.substring(widget.inspection.id.length - 8)}
@@ -115,6 +117,8 @@ Sections Completed: $completedSections/6
 Photos: ${widget.inspection.imagePaths.length}
 Videos: ${widget.inspection.videoPaths.length}
 Sync Status: ${widget.inspection.isSynced ? 'Synced' : 'Pending'}
+
+$permitSummary
 
 Business ID:
 ${widget.inspection.scannedData}
@@ -186,6 +190,7 @@ For detailed inspection data, please refer to the mobile application.''';
         <!-- ZIP BUTTON PLACEHOLDER, IMPLEMENT in UI for web -->
       </div>
     ''';
+    final permitHtml = _buildPermitHtmlBlock();
 
     // Build final HTML
     final cityLogo = 'https://upload.wikimedia.org/wikipedia/commons/e/e2/Ormoc_City_Seal.png'; // Placeholder logo
@@ -210,6 +215,7 @@ For detailed inspection data, please refer to the mobile application.''';
       <div style="font-size:13px; color:#374151;">Business ID: ${_escapeHtml(widget.inspection.scannedData.toString())}</div>
       <div style="margin-top:5px; font-size:13px; color:#374151;">Location: ${_escapeHtml(locationInfo)}${hasLocation ? ' · <a href="$mapsUrl" style="color:$accentColor; text-decoration:underline;">Open in Maps</a>' : ''}</div>
       <div style="height:16px;"></div>
+      ${permitHtml.isNotEmpty ? permitHtml : ''}
       <table style="border-collapse:collapse; width:100%; background:#fafcff; border:1px solid $borderColor; border-radius:10px; overflow:hidden;">
     <thead>
           <tr style="background:$sectionHeaderColor;">
@@ -377,6 +383,8 @@ For detailed inspection data, please refer to the mobile application.''';
     if (timingInfo.isEmpty) {
       timingInfo = 'No timing information available.\n';
     }
+
+    final permitDetails = _buildPermitDetailedText();
     
     return '''INSPECTION REPORT
 =================
@@ -393,6 +401,10 @@ Location: $locationInfo
 Created: $createdDate
 Updated: $updatedDate
 User ID: ${widget.inspection.userId ?? 'N/A'}
+
+PERMIT INFORMATION
+------------------
+$permitDetails
 
 INSPECTION SECTIONS
 -------------------
@@ -417,6 +429,123 @@ For detailed information, please refer to the full inspection data in the mobile
 Office of Building Official
 Ormoc City
 ''';
+  }
+
+  bool _hasPermitInfo() {
+    final inspection = widget.inspection;
+    return inspection.hasBuildingPermit != null ||
+        inspection.hasOccupancyPermit != null ||
+        inspection.occupancyPermitIssuedYear != null ||
+        (inspection.buildingPermitRecommendation?.trim().isNotEmpty ?? false) ||
+        (inspection.occupancyPermitRecommendation?.trim().isNotEmpty ?? false);
+  }
+
+  String _permitStatusText(bool? value) {
+    if (value == null) return 'Not provided';
+    return value ? 'Yes' : 'No';
+  }
+
+  String _permitRecommendationText(String? recommendation) {
+    if (recommendation == null || recommendation.trim().isEmpty) return 'None';
+    return recommendation;
+  }
+
+  String _occupancyAgeText(int? issuedYear) {
+    if (issuedYear == null) return 'Issued year not available';
+    final currentYear = DateTime.now().year;
+    if (issuedYear < 1900 || issuedYear > currentYear) {
+      return 'Issued: $issuedYear';
+    }
+    final age = currentYear - issuedYear;
+    return 'Issued: $issuedYear (${age} year${age == 1 ? '' : 's'} old)';
+  }
+
+  bool _isOccupancyCaution(Inspection inspection) {
+    return inspection.hasOccupancyPermit == true &&
+        (inspection.occupancyPermitRecommendation != null &&
+            inspection.occupancyPermitRecommendation != 'Approved');
+  }
+
+  String _buildPermitSummaryText() {
+    if (!_hasPermitInfo()) {
+      return 'Permit Summary:\n- Building Permit: Not provided\n- Occupancy Permit: Not provided';
+    }
+
+    final inspection = widget.inspection;
+
+    final buildingLine =
+        '- Building Permit: ${_permitStatusText(inspection.hasBuildingPermit)}'
+        ' | Recommendation: ${_permitRecommendationText(inspection.buildingPermitRecommendation)}';
+
+    final occupancyLine =
+        '- Occupancy Permit: ${_permitStatusText(inspection.hasOccupancyPermit)}'
+        ' | ${_occupancyAgeText(inspection.occupancyPermitIssuedYear)}'
+        ' | Recommendation: ${_permitRecommendationText(inspection.occupancyPermitRecommendation)}';
+
+    return 'Permit Summary:\n$buildingLine\n$occupancyLine';
+  }
+
+  String _buildPermitDetailedText() {
+    if (!_hasPermitInfo()) {
+      return 'Building Permit: Not provided\nOccupancy Permit: Not provided\n';
+    }
+
+    final inspection = widget.inspection;
+
+    final building = 'Building Permit:\n'
+        '  Status: ${_permitStatusText(inspection.hasBuildingPermit)}\n'
+        '  Recommendation: ${_permitRecommendationText(inspection.buildingPermitRecommendation)}\n';
+
+    final occupancy = 'Occupancy Permit:\n'
+        '  Status: ${_permitStatusText(inspection.hasOccupancyPermit)}\n'
+        '  ${_occupancyAgeText(inspection.occupancyPermitIssuedYear)}\n'
+        '  Recommendation: ${_permitRecommendationText(inspection.occupancyPermitRecommendation)}\n';
+
+    return '$building$occupancy';
+  }
+
+  String _buildPermitHtmlBlock() {
+    if (!_hasPermitInfo()) return '';
+
+    final inspection = widget.inspection;
+
+    final buildingStatus = _permitStatusText(inspection.hasBuildingPermit);
+    final buildingRecommendation = _permitRecommendationText(inspection.buildingPermitRecommendation);
+
+    final occupancyStatus = _permitStatusText(inspection.hasOccupancyPermit);
+    final occupancyRecommendation = _permitRecommendationText(inspection.occupancyPermitRecommendation);
+    final occupancyAge = _occupancyAgeText(inspection.occupancyPermitIssuedYear);
+
+    final buildingColor = inspection.hasBuildingPermit == true ? '#10B981' : '#EF4444';
+    final occupancyColor = inspection.hasOccupancyPermit == true
+        ? (_isOccupancyCaution(inspection) ? '#F97316' : '#10B981')
+        : '#EF4444';
+
+    final buildingIcon = inspection.hasBuildingPermit == true ? '✅' : '❌';
+    final occupancyIcon = inspection.hasOccupancyPermit == true
+        ? (_isOccupancyCaution(inspection) ? '⚠️' : '✅')
+        : '❌';
+
+    return '''
+    <div style="margin-bottom:18px; border:1px solid #e2e8f0; border-radius:10px; overflow:hidden; background:#f9fafb;">
+      <div style="background:#f1f5f9; padding:12px 16px; font-size:14px; font-weight:600; color:#1f2937; letter-spacing:0.3px;">
+        Permit Overview
+      </div>
+      <div style="display:flex; flex-wrap:wrap; gap:12px; padding:14px 16px;">
+        <div style="flex:1 1 220px; border:1px solid ${buildingColor}3D; border-radius:10px; padding:12px; background:${buildingColor}14;">
+          <div style="font-size:13px; font-weight:600; color:$buildingColor;">$buildingIcon Building Permit</div>
+          <div style="margin-top:6px; font-size:12px; color:#1f2937;">Status: <b>$buildingStatus</b></div>
+          <div style="margin-top:6px; font-size:12px; color:#1f2937;">Recommendation: $buildingRecommendation</div>
+        </div>
+        <div style="flex:1 1 220px; border:1px solid ${occupancyColor}3D; border-radius:10px; padding:12px; background:${occupancyColor}14;">
+          <div style="font-size:13px; font-weight:600; color:$occupancyColor;">$occupancyIcon Occupancy Permit</div>
+          <div style="margin-top:6px; font-size:12px; color:#1f2937;">Status: <b>$occupancyStatus</b></div>
+          <div style="margin-top:6px; font-size:12px; color:#1f2937;">$occupancyAge</div>
+          <div style="margin-top:6px; font-size:12px; color:#1f2937;">Recommendation: $occupancyRecommendation</div>
+        </div>
+      </div>
+    </div>
+    ''';
   }
 
   String _formatDateTime(DateTime dateTime) {

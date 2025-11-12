@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'dart:math';
 import '../models/inspection.dart';
 import '../services/hive_offline_database.dart';
@@ -35,6 +36,13 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
   
   // Status for each section
   final Map<String, String> _sectionStatus = {};
+
+  // Permit information
+  bool? _hasBuildingPermit;
+  bool? _hasOccupancyPermit;
+  final TextEditingController _occupancyPermitYearController = TextEditingController();
+  String? _buildingPermitRecommendation;
+  String? _occupancyPermitRecommendation;
   
   // Location data for Civil/Structural section
   LatLng? _civilStructuralLocation;
@@ -79,6 +87,13 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
       _sectionImagePaths[section] = []; // Initialize empty image list for each section
       _sectionVideoPaths[section] = []; // Initialize empty video list for each section
     }
+
+    // Reset permit information for new inspections
+    _hasBuildingPermit = null;
+    _hasOccupancyPermit = null;
+    _occupancyPermitYearController.clear();
+    _buildingPermitRecommendation = null;
+    _occupancyPermitRecommendation = null;
     
     // Handle editing mode - pre-fill data from existing inspection
     if (widget.isEditing && widget.existingInspection != null) {
@@ -142,6 +157,15 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
     // Load timing data
     _inspectionStartTime = inspection.inspectionStartTime;
     _inspectionEndTime = inspection.inspectionEndTime;
+
+    // Load permit information
+    _hasBuildingPermit = inspection.hasBuildingPermit;
+    _hasOccupancyPermit = inspection.hasOccupancyPermit;
+    if (inspection.occupancyPermitIssuedYear != null) {
+      _occupancyPermitYearController.text = inspection.occupancyPermitIssuedYear!.toString();
+    }
+    _buildingPermitRecommendation = inspection.buildingPermitRecommendation ?? _computeBuildingPermitRecommendation();
+    _occupancyPermitRecommendation = inspection.occupancyPermitRecommendation ?? _computeOccupancyPermitRecommendation();
   }
 
   bool _shouldSelectSection(Inspection inspection, String section) {
@@ -201,6 +225,7 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
     for (var controller in _assessmentControllers.values) {
       controller.dispose();
     }
+    _occupancyPermitYearController.dispose();
     super.dispose();
   }
 
@@ -240,6 +265,10 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
                   
                   // Scanned Data Info
                   _buildScannedDataCard(context, isTablet),
+                  const SizedBox(height: 24),
+                  
+                  // Permit Section (first list in the form)
+                  _buildPermitsCard(context, isTablet),
                   const SizedBox(height: 24),
                   
                   // Inspection Timing
@@ -309,6 +338,299 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
                   ),
                 ),
               ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPermitsCard(BuildContext context, bool isTablet) {
+    final buildingRecommendation = _buildingPermitRecommendation;
+    final occupancyRecommendation = _occupancyPermitRecommendation;
+    final bool? hasBuildingPermit = _hasBuildingPermit;
+    final bool? hasOccupancyPermit = _hasOccupancyPermit;
+
+    Color _occupancyRecommendationColor(String? recommendation) {
+      if (recommendation == null) return const Color(0xFF94A3B8);
+      if (hasOccupancyPermit == true && recommendation == 'Approved') {
+        return const Color(0xFF10B981);
+      }
+      if (hasOccupancyPermit == true) {
+        return const Color(0xFFF59E0B);
+      }
+      return const Color(0xFFEF4444);
+    }
+
+    IconData _occupancyRecommendationIcon(String? recommendation) {
+      if (recommendation == null) return Icons.info_outline_rounded;
+      if (hasOccupancyPermit == true && recommendation == 'Approved') {
+        return Icons.check_circle_rounded;
+      }
+      if (hasOccupancyPermit == true) {
+        return Icons.warning_amber_rounded;
+      }
+      return Icons.error_outline_rounded;
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.all(isTablet ? 24 : 20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFE2E8F0), width: 1),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF0284C7),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(
+                  Icons.assignment_turned_in_rounded,
+                  color: Colors.white,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Text(
+                'Permit Requirements',
+                style: TextStyle(
+                  fontSize: isTablet ? 18 : 16,
+                  fontWeight: FontWeight.bold,
+                  color: const Color(0xFF2D3748),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Building Permit',
+            style: TextStyle(
+              fontSize: isTablet ? 14 : 12,
+              fontWeight: FontWeight.w600,
+              color: const Color(0xFF374151),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 12,
+            runSpacing: 8,
+            children: [
+              _buildPermitOption(
+                label: 'Yes',
+                icon: Icons.check_rounded,
+                isSelected: hasBuildingPermit == true,
+                onTap: () => _handleBuildingPermitSelection(true),
+                color: const Color(0xFF10B981),
+                isTablet: isTablet,
+              ),
+              _buildPermitOption(
+                label: 'No',
+                icon: Icons.close_rounded,
+                isSelected: hasBuildingPermit == false,
+                onTap: () => _handleBuildingPermitSelection(false),
+                color: const Color(0xFFF97316),
+                isTablet: isTablet,
+              ),
+            ],
+          ),
+          if (buildingRecommendation != null) ...[
+            const SizedBox(height: 12),
+            _buildRecommendationBanner(
+              buildingRecommendation,
+              hasBuildingPermit == true
+                  ? Icons.check_circle_rounded
+                  : Icons.info_outline_rounded,
+              hasBuildingPermit == true
+                  ? const Color(0xFF10B981)
+                  : const Color(0xFFF97316),
+              isTablet,
+            ),
+          ],
+          const SizedBox(height: 20),
+          Text(
+            'Occupancy Permit',
+            style: TextStyle(
+              fontSize: isTablet ? 14 : 12,
+              fontWeight: FontWeight.w600,
+              color: const Color(0xFF374151),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 12,
+            runSpacing: 8,
+            children: [
+              _buildPermitOption(
+                label: 'Yes',
+                icon: Icons.check_rounded,
+                isSelected: hasOccupancyPermit == true,
+                onTap: () => _handleOccupancyPermitSelection(true),
+                color: const Color(0xFF3B82F6),
+                isTablet: isTablet,
+              ),
+              _buildPermitOption(
+                label: 'No',
+                icon: Icons.close_rounded,
+                isSelected: hasOccupancyPermit == false,
+                onTap: () => _handleOccupancyPermitSelection(false),
+                color: const Color(0xFFEF4444),
+                isTablet: isTablet,
+              ),
+            ],
+          ),
+          if (hasOccupancyPermit == true) ...[
+            const SizedBox(height: 12),
+            Text(
+              'Issued Year',
+              style: TextStyle(
+                fontSize: isTablet ? 12 : 10,
+                fontWeight: FontWeight.w600,
+                color: const Color(0xFF6B7280),
+              ),
+            ),
+            const SizedBox(height: 6),
+            TextFormField(
+              controller: _occupancyPermitYearController,
+              keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              decoration: InputDecoration(
+                hintText: 'Enter year (e.g. 2015)',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: const BorderSide(color: Color(0xFFD1D5DB)),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: const BorderSide(color: Color(0xFF3B82F6), width: 2),
+                ),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 12,
+                ),
+              ),
+              validator: (value) {
+                if (_hasOccupancyPermit == true) {
+                  final trimmed = value?.trim() ?? '';
+                  if (trimmed.isEmpty) {
+                    return 'Please enter the issued year.';
+                  }
+                  final year = int.tryParse(trimmed);
+                  final currentYear = DateTime.now().year;
+                  if (year == null || year < 1900 || year > currentYear) {
+                    return 'Enter a valid year between 1900 and $currentYear.';
+                  }
+                }
+                return null;
+              },
+              onChanged: _handleOccupancyYearChanged,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'If the occupancy permit is older than 15 years, the system will recommend issuing a Certificate of Structural Permit.',
+              style: TextStyle(
+                fontSize: isTablet ? 12 : 10,
+                color: const Color(0xFF6B7280),
+              ),
+            ),
+          ],
+          if (occupancyRecommendation != null) ...[
+            const SizedBox(height: 12),
+            _buildRecommendationBanner(
+              occupancyRecommendation,
+              _occupancyRecommendationIcon(occupancyRecommendation),
+              _occupancyRecommendationColor(occupancyRecommendation),
+              isTablet,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPermitOption({
+    required String label,
+    required IconData icon,
+    required bool isSelected,
+    required VoidCallback onTap,
+    required Color color,
+    required bool isTablet,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: EdgeInsets.symmetric(
+          horizontal: isTablet ? 16 : 12,
+          vertical: isTablet ? 10 : 8,
+        ),
+        decoration: BoxDecoration(
+          color: isSelected ? color : Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isSelected ? color : const Color(0xFFE2E8F0),
+            width: 2,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              color: isSelected ? Colors.white : color,
+              size: isTablet ? 18 : 16,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: isTablet ? 14 : 12,
+                fontWeight: FontWeight.w600,
+                color: isSelected ? Colors.white : const Color(0xFF374151),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRecommendationBanner(
+    String message,
+    IconData icon,
+    Color color,
+    bool isTablet,
+  ) {
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.all(isTablet ? 14 : 12),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color, width: 1),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            icon,
+            color: color,
+            size: isTablet ? 18 : 16,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              message,
+              style: TextStyle(
+                fontSize: isTablet ? 13 : 11,
+                color: color,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ),
         ],
@@ -580,6 +902,64 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
     } else {
       return '${minutes}m';
     }
+  }
+
+  String? _computeBuildingPermitRecommendation() {
+    if (_hasBuildingPermit == null) {
+      return null;
+    }
+    return _hasBuildingPermit!
+        ? 'Approved'
+        : 'Secure building permit before proceeding to the next step.';
+  }
+
+  String? _computeOccupancyPermitRecommendation() {
+    if (_hasOccupancyPermit == null) {
+      return null;
+    }
+    if (_hasOccupancyPermit == false) {
+      return 'Secure occupancy permit before proceeding to the next step.';
+    }
+
+    final rawYear = _occupancyPermitYearController.text.trim();
+    if (rawYear.isEmpty) {
+      return null;
+    }
+
+    final year = int.tryParse(rawYear);
+    final currentYear = DateTime.now().year;
+    if (year == null || year < 1900 || year > currentYear) {
+      return null;
+    }
+
+    final age = currentYear - year;
+    if (age <= 15) {
+      return 'Approved';
+    }
+    return 'Issue a Certificate of Structural Permit.';
+  }
+
+  void _handleBuildingPermitSelection(bool hasPermit) {
+    setState(() {
+      _hasBuildingPermit = hasPermit;
+      _buildingPermitRecommendation = _computeBuildingPermitRecommendation();
+    });
+  }
+
+  void _handleOccupancyPermitSelection(bool hasPermit) {
+    setState(() {
+      _hasOccupancyPermit = hasPermit;
+      if (!hasPermit) {
+        _occupancyPermitYearController.clear();
+      }
+      _occupancyPermitRecommendation = _computeOccupancyPermitRecommendation();
+    });
+  }
+
+  void _handleOccupancyYearChanged(String value) {
+    setState(() {
+      _occupancyPermitRecommendation = _computeOccupancyPermitRecommendation();
+    });
   }
 
   Widget _buildSectionSelection(BuildContext context, bool isTablet) {
@@ -1263,6 +1643,17 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
     }
 
     if (_formKey.currentState!.validate()) {
+      final String? buildingRecommendation = _computeBuildingPermitRecommendation();
+      final String? occupancyRecommendation = _computeOccupancyPermitRecommendation();
+      final int? occupancyIssuedYear = _hasOccupancyPermit == true
+          ? int.tryParse(_occupancyPermitYearController.text.trim())
+          : null;
+
+      setState(() {
+        _buildingPermitRecommendation = buildingRecommendation;
+        _occupancyPermitRecommendation = occupancyRecommendation;
+      });
+
       try {
         // Set inspection end time when submitting
         _inspectionEndTime = DateTime.now();
@@ -1326,6 +1717,11 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
                 userId: widget.existingInspection!.userId,
                 latitude: _civilStructuralLocation?.latitude,
                 longitude: _civilStructuralLocation?.longitude,
+                hasBuildingPermit: _hasBuildingPermit,
+                buildingPermitRecommendation: buildingRecommendation,
+                hasOccupancyPermit: _hasOccupancyPermit,
+                occupancyPermitIssuedYear: occupancyIssuedYear,
+                occupancyPermitRecommendation: occupancyRecommendation,
               )
             : Inspection.fromFormData(
                 scannedData: widget.scannedData ?? 'No QR data',
@@ -1351,6 +1747,11 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
                 inspectionStartTime: _inspectionStartTime,
                 inspectionEndTime: _inspectionEndTime,
                 sectionStatus: Map<String, String>.from(savedSectionStatus),
+                hasBuildingPermit: _hasBuildingPermit,
+                buildingPermitRecommendation: buildingRecommendation,
+                hasOccupancyPermit: _hasOccupancyPermit,
+                occupancyPermitIssuedYear: occupancyIssuedYear,
+                occupancyPermitRecommendation: occupancyRecommendation,
               );
 
         // Save to Hive database first (offline-first approach)

@@ -317,6 +317,11 @@ class InspectionService {
         'sanitary_plumbing_assessment': inspection.sanitaryPlumbingAssessment,
         'electrical_electronics_remarks': inspection.electricalElectronicsRemarks,
         'electrical_electronics_assessment': inspection.electricalElectronicsAssessment,
+        'has_building_permit': inspection.hasBuildingPermit,
+        'building_permit_recommendation': inspection.buildingPermitRecommendation,
+        'has_occupancy_permit': inspection.hasOccupancyPermit,
+        'occupancy_permit_issued_year': inspection.occupancyPermitIssuedYear,
+        'occupancy_permit_recommendation': inspection.occupancyPermitRecommendation,
       };
 
       print('Creating inspection with data:');
@@ -428,6 +433,11 @@ class InspectionService {
         'sanitary_plumbing_assessment': inspection.sanitaryPlumbingAssessment,
         'electrical_electronics_remarks': inspection.electricalElectronicsRemarks,
         'electrical_electronics_assessment': inspection.electricalElectronicsAssessment,
+        'has_building_permit': inspection.hasBuildingPermit,
+        'building_permit_recommendation': inspection.buildingPermitRecommendation,
+        'has_occupancy_permit': inspection.hasOccupancyPermit,
+        'occupancy_permit_issued_year': inspection.occupancyPermitIssuedYear,
+        'occupancy_permit_recommendation': inspection.occupancyPermitRecommendation,
       };
 
       final response = await ApiService.post(endpoint, body);

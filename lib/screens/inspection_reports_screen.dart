@@ -813,6 +813,11 @@ class _InspectionReportsScreenState extends State<InspectionReportsScreen> {
                     ],
                   ],
                 ),
+                
+                if (_hasPermitInformation(inspection)) ...[
+                  SizedBox(height: isTablet ? 12 : 10),
+                  _buildPermitStatsRow(inspection, isTablet),
+                ],
               ],
             ),
           ),
@@ -847,6 +852,203 @@ class _InspectionReportsScreenState extends State<InspectionReportsScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildPermitStatsRow(Inspection inspection, bool isTablet) {
+    Color _statusColor(bool? value, {bool caution = false}) {
+      if (value == null) return const Color(0xFF94A3B8);
+      if (value) {
+        return caution ? const Color(0xFFF97316) : const Color(0xFF10B981);
+      }
+      return const Color(0xFFEF4444);
+    }
+
+    IconData _statusIcon(bool? value, {bool caution = false}) {
+      if (value == null) return Icons.help_outline_rounded;
+      if (value) {
+        return caution ? Icons.warning_amber_rounded : Icons.check_circle_rounded;
+      }
+      return Icons.close_rounded;
+    }
+
+    final buildingColor = _statusColor(inspection.hasBuildingPermit);
+    final occupancyColor = _statusColor(
+      inspection.hasOccupancyPermit,
+      caution: inspection.hasOccupancyPermit == true &&
+          (inspection.occupancyPermitRecommendation != null &&
+              inspection.occupancyPermitRecommendation != 'Approved'),
+    );
+
+    final buildingIcon = _statusIcon(inspection.hasBuildingPermit);
+    final occupancyIcon = _statusIcon(
+      inspection.hasOccupancyPermit,
+      caution: inspection.hasOccupancyPermit == true &&
+          (inspection.occupancyPermitRecommendation != null &&
+              inspection.occupancyPermitRecommendation != 'Approved'),
+    );
+
+    String _statusLabel(bool? value) {
+      if (value == null) return 'N/A';
+      return value ? 'Yes' : 'No';
+    }
+
+    String _recommendationText(String? recommendation) {
+      if (recommendation == null || recommendation.trim().isEmpty) {
+        return 'No recommendation provided.';
+      }
+      return recommendation;
+    }
+
+    String _occupancyAgeText() {
+      if (inspection.hasOccupancyPermit == true && inspection.occupancyPermitIssuedYear != null) {
+        final currentYear = DateTime.now().year;
+        final year = inspection.occupancyPermitIssuedYear!;
+        if (year >= 1900 && year <= currentYear) {
+          final age = currentYear - year;
+          return 'Issued $year (${age} year${age == 1 ? '' : 's'} old)';
+        }
+        return 'Issued year: $year';
+      }
+      return 'Issued year: N/A';
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.all(isTablet ? 12 : 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE2E8F0), width: 1),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.assignment_turned_in_rounded, color: const Color(0xFF0284C7), size: isTablet ? 18 : 16),
+              const SizedBox(width: 6),
+              Text(
+                'Permit Overview',
+                style: TextStyle(
+                  fontSize: isTablet ? 12 : 10,
+                  fontWeight: FontWeight.w600,
+                  color: const Color(0xFF0284C7),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: Container(
+                  padding: EdgeInsets.all(isTablet ? 10 : 8),
+                  decoration: BoxDecoration(
+                    color: buildingColor.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: buildingColor.withOpacity(0.4), width: 1),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(buildingIcon, color: buildingColor, size: isTablet ? 16 : 14),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              'Building Permit',
+                              style: TextStyle(
+                                fontSize: isTablet ? 12 : 10,
+                                fontWeight: FontWeight.w600,
+                                color: buildingColor,
+                              ),
+                            ),
+                          ),
+                          Text(
+                            _statusLabel(inspection.hasBuildingPermit),
+                            style: TextStyle(
+                              fontSize: isTablet ? 11 : 9,
+                              fontWeight: FontWeight.w600,
+                              color: buildingColor,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        _recommendationText(inspection.buildingPermitRecommendation),
+                        style: TextStyle(
+                          fontSize: isTablet ? 10 : 9,
+                          color: buildingColor,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Container(
+                  padding: EdgeInsets.all(isTablet ? 10 : 8),
+                  decoration: BoxDecoration(
+                    color: occupancyColor.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: occupancyColor.withOpacity(0.4), width: 1),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(occupancyIcon, color: occupancyColor, size: isTablet ? 16 : 14),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              'Occupancy Permit',
+                              style: TextStyle(
+                                fontSize: isTablet ? 12 : 10,
+                                fontWeight: FontWeight.w600,
+                                color: occupancyColor,
+                              ),
+                            ),
+                          ),
+                          Text(
+                            _statusLabel(inspection.hasOccupancyPermit),
+                            style: TextStyle(
+                              fontSize: isTablet ? 11 : 9,
+                              fontWeight: FontWeight.w600,
+                              color: occupancyColor,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        _occupancyAgeText(),
+                        style: TextStyle(
+                          fontSize: isTablet ? 10 : 8.5,
+                          color: occupancyColor,
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        _recommendationText(inspection.occupancyPermitRecommendation),
+                        style: TextStyle(
+                          fontSize: isTablet ? 10 : 9,
+                          color: occupancyColor,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -974,6 +1176,12 @@ class _InspectionReportsScreenState extends State<InspectionReportsScreen> {
                       // Business ID (from scanned QR code)
                       _buildSectionCard('Business ID', inspection.scannedData, Icons.qr_code_rounded, isTablet),
                       const SizedBox(height: 16),
+
+                      // Permit Summary
+                      if (_hasPermitInformation(inspection)) ...[
+                        _buildPermitSummaryCard(inspection, isTablet),
+                        const SizedBox(height: 16),
+                      ],
                       
                       // Inspection Sections
                       _buildInspectionSections(inspection, isTablet),
@@ -1017,6 +1225,237 @@ class _InspectionReportsScreenState extends State<InspectionReportsScreen> {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  bool _hasPermitInformation(Inspection inspection) {
+    return inspection.hasBuildingPermit != null ||
+        inspection.hasOccupancyPermit != null ||
+        inspection.occupancyPermitIssuedYear != null ||
+        (inspection.buildingPermitRecommendation?.isNotEmpty ?? false) ||
+        (inspection.occupancyPermitRecommendation?.isNotEmpty ?? false);
+  }
+
+  Widget _buildPermitSummaryCard(Inspection inspection, bool isTablet) {
+    final bool? hasBuildingPermit = inspection.hasBuildingPermit;
+    final bool? hasOccupancyPermit = inspection.hasOccupancyPermit;
+    final int? occupancyYear = inspection.occupancyPermitIssuedYear;
+    final String? buildingRecommendation = inspection.buildingPermitRecommendation;
+    final String? occupancyRecommendation = inspection.occupancyPermitRecommendation;
+
+    Color _statusColor(bool? value, {bool isOccupancy = false, String? recommendation}) {
+      if (value == null) return const Color(0xFF94A3B8);
+      if (value) {
+        if (isOccupancy && (recommendation != null && recommendation != 'Approved')) {
+          return const Color(0xFFF97316);
+        }
+        return const Color(0xFF10B981);
+      }
+      return const Color(0xFFEF4444);
+    }
+
+    IconData _statusIcon(bool? value, {bool isOccupancy = false, String? recommendation}) {
+      if (value == null) return Icons.help_outline_rounded;
+      if (value) {
+        if (isOccupancy && (recommendation != null && recommendation != 'Approved')) {
+          return Icons.warning_amber_rounded;
+        }
+        return Icons.check_circle_rounded;
+      }
+      return Icons.close_rounded;
+    }
+
+    final currentYear = DateTime.now().year;
+    int? occupancyAge;
+    if (occupancyYear != null && occupancyYear >= 1900 && occupancyYear <= currentYear) {
+      occupancyAge = currentYear - occupancyYear;
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.all(isTablet ? 16 : 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE2E8F0), width: 1),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF0284C7),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(
+                  Icons.assignment_turned_in_rounded,
+                  color: Colors.white,
+                  size: 18,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Text(
+                'Permit Requirements',
+                style: TextStyle(
+                  fontSize: isTablet ? 16 : 14,
+                  fontWeight: FontWeight.bold,
+                  color: const Color(0xFF1F2937),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          _buildPermitDetailSection(
+            title: 'Building Permit',
+            statusLabel: hasBuildingPermit == null
+                ? 'Not provided'
+                : (hasBuildingPermit ? 'Yes' : 'No'),
+            icon: _statusIcon(hasBuildingPermit),
+            color: _statusColor(hasBuildingPermit),
+            isTablet: isTablet,
+            recommendation: buildingRecommendation,
+          ),
+          const SizedBox(height: 12),
+          _buildPermitDetailSection(
+            title: 'Occupancy Permit',
+            statusLabel: hasOccupancyPermit == null
+                ? 'Not provided'
+                : (hasOccupancyPermit ? 'Yes' : 'No'),
+            icon: _statusIcon(
+              hasOccupancyPermit,
+              isOccupancy: true,
+              recommendation: occupancyRecommendation,
+            ),
+            color: _statusColor(
+              hasOccupancyPermit,
+              isOccupancy: true,
+              recommendation: occupancyRecommendation,
+            ),
+            isTablet: isTablet,
+            details: [
+              if (hasOccupancyPermit == true && occupancyYear != null) ...[
+                Text(
+                  'Issued Year: $occupancyYear'
+                  '${occupancyAge != null ? ' (${occupancyAge} year${occupancyAge == 1 ? '' : 's'} old)' : ''}',
+                  style: TextStyle(
+                    fontSize: isTablet ? 12 : 10,
+                    color: const Color(0xFF374151),
+                  ),
+                ),
+              ],
+            ],
+            recommendation: occupancyRecommendation,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPermitDetailSection({
+    required String title,
+    required String statusLabel,
+    required IconData icon,
+    required Color color,
+    required bool isTablet,
+    List<Widget>? details,
+    String? recommendation,
+  }) {
+    final detailWidgets = details ?? [];
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.all(isTablet ? 12 : 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF9FAFB),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE5E7EB), width: 1),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: isTablet ? 14 : 12,
+                    fontWeight: FontWeight.w600,
+                    color: const Color(0xFF1F2937),
+                  ),
+                ),
+              ),
+              Container(
+                padding: EdgeInsets.symmetric(
+                  horizontal: isTablet ? 10 : 8,
+                  vertical: isTablet ? 6 : 4,
+                ),
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(24),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      icon,
+                      color: color,
+                      size: isTablet ? 14 : 12,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      statusLabel,
+                      style: TextStyle(
+                        fontSize: isTablet ? 12 : 10,
+                        fontWeight: FontWeight.w600,
+                        color: color,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          if (detailWidgets.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            ...detailWidgets,
+          ],
+          if (recommendation != null && recommendation.trim().isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Container(
+              width: double.infinity,
+              padding: EdgeInsets.all(isTablet ? 10 : 8),
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.08),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    Icons.lightbulb_outline_rounded,
+                    color: color,
+                    size: isTablet ? 16 : 14,
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      recommendation,
+                      style: TextStyle(
+                        fontSize: isTablet ? 12 : 10,
+                        color: color,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }
@@ -3737,6 +4176,29 @@ class _InspectionReportsScreenState extends State<InspectionReportsScreen> {
           _buildDetailRow('User ID', inspection.userId ?? 'N/A', Icons.person_rounded, isTablet),
           const SizedBox(height: 6),
           _buildDetailRow('Sync Status', inspection.isSynced ? 'Synced' : 'Pending', inspection.isSynced ? Icons.cloud_done_rounded : Icons.cloud_off_rounded, isTablet),
+          if (_hasPermitInformation(inspection)) ...[
+            const SizedBox(height: 6),
+            _buildDetailRow(
+              'Building Permit',
+              _formatPermitDetail(
+                inspection.hasBuildingPermit,
+                inspection.buildingPermitRecommendation,
+              ),
+              Icons.domain_rounded,
+              isTablet,
+            ),
+            const SizedBox(height: 6),
+            _buildDetailRow(
+              'Occupancy Permit',
+              _formatPermitDetail(
+                inspection.hasOccupancyPermit,
+                inspection.occupancyPermitRecommendation,
+                issuedYear: inspection.occupancyPermitIssuedYear,
+              ),
+              Icons.apartment_rounded,
+              isTablet,
+            ),
+          ],
         ],
       ),
     );
@@ -3908,6 +4370,32 @@ class _InspectionReportsScreenState extends State<InspectionReportsScreen> {
     if (inspection.sanitaryPlumbingRemarks.isNotEmpty || inspection.sanitaryPlumbingAssessment.isNotEmpty) count++;
     if (inspection.electricalElectronicsRemarks.isNotEmpty || inspection.electricalElectronicsAssessment.isNotEmpty) count++;
     return count;
+  }
+
+  String _formatPermitDetail(bool? hasPermit, String? recommendation, {int? issuedYear}) {
+    String status;
+    if (hasPermit == null) {
+      status = 'Status: Not provided';
+    } else {
+      status = 'Status: ${hasPermit ? 'Yes' : 'No'}';
+    }
+
+    String issuedText = '';
+    if (issuedYear != null && hasPermit == true) {
+      final currentYear = DateTime.now().year;
+      if (issuedYear >= 1900 && issuedYear <= currentYear) {
+        final age = currentYear - issuedYear;
+        issuedText = ' | Issued: $issuedYear (${age} year${age == 1 ? '' : 's'} old)';
+      } else {
+        issuedText = ' | Issued: $issuedYear';
+      }
+    }
+
+    final recommendationText = (recommendation != null && recommendation.trim().isNotEmpty)
+        ? ' | Recommendation: $recommendation'
+        : '';
+
+    return '$status$issuedText$recommendationText';
   }
 
   void _showDeleteConfirmation(Inspection inspection, bool isTablet) {
@@ -4373,6 +4861,28 @@ class _InspectionReportsScreenState extends State<InspectionReportsScreen> {
     if (inspection.sanitaryPlumbingRemarks.isNotEmpty || inspection.sanitaryPlumbingAssessment.isNotEmpty) completedSections++;
     if (inspection.electricalElectronicsRemarks.isNotEmpty || inspection.electricalElectronicsAssessment.isNotEmpty) completedSections++;
     
+    String _permitStatusText(bool? value) {
+      if (value == null) return 'Not provided';
+      return value ? 'Yes' : 'No';
+    }
+
+    String _permitRecommendation(String? recommendation) {
+      if (recommendation == null || recommendation.trim().isEmpty) return 'None';
+      return recommendation;
+    }
+
+    String occupancyAge = 'Issued year not available';
+    if (inspection.hasOccupancyPermit == true && inspection.occupancyPermitIssuedYear != null) {
+      final currentYear = DateTime.now().year;
+      final issuedYear = inspection.occupancyPermitIssuedYear!;
+      if (issuedYear >= 1900 && issuedYear <= currentYear) {
+        final age = currentYear - issuedYear;
+        occupancyAge = 'Issued $issuedYear (${age} year${age == 1 ? '' : 's'} old)';
+      } else {
+        occupancyAge = 'Issued $issuedYear';
+      }
+    }
+
     return '''INSPECTION REPORT SUMMARY
 
 Inspection ID: ${inspection.id.substring(inspection.id.length - 8)}
@@ -4383,6 +4893,13 @@ Sections Completed: $completedSections/6
 Photos: ${inspection.imagePaths.length}
 Videos: ${inspection.videoPaths.length}
 Sync Status: ${inspection.isSynced ? 'Synced' : 'Pending'}
+
+Permit Summary:
+- Building Permit: ${_permitStatusText(inspection.hasBuildingPermit)}
+  Recommendation: ${_permitRecommendation(inspection.buildingPermitRecommendation)}
+- Occupancy Permit: ${_permitStatusText(inspection.hasOccupancyPermit)}
+  $occupancyAge
+  Recommendation: ${_permitRecommendation(inspection.occupancyPermitRecommendation)}
 
 Business ID:
 ${inspection.scannedData}
