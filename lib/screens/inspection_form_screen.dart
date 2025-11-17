@@ -12,6 +12,176 @@ import '../widgets/media_capture_widget.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:geolocator/geolocator.dart';
 
+/// INSPECTION FEE COMPUTATION DOCUMENTATION
+/// ============================================
+/// 
+/// This document outlines the complete fee computation logic for all inspection types.
+/// All fees are calculated in Philippine Peso (₱).
+/// 
+/// ================================================================================
+/// ELECTRICAL/ELECTRONICS INSPECTION FEES
+/// ================================================================================
+/// 
+/// 1. TOTAL CONNECTED LOAD (kVA)
+///    - Up to 5 kVA: Php 200.00 (flat rate)
+///    - 5 to 50 kVA: Php 200.00 + (kVA × Php 20.00)
+///    - 50 to 300 kVA: Php 1,100.00 + (kVA × Php 10.00)
+///    - 300 to 1,500 kVA: Php 3,600.00 + (kVA × Php 5.00)
+///    - 1,500 to 6,000 kVA: Php 9,600.00 + (kVA × Php 2.50)
+///    - Above 6,000 kVA: Php 20,850.00 + (kVA × Php 1.25)
+/// 
+/// 2. TRANSFORMER/UPS/GENERATOR (kVA)
+///    - Up to 5 kVA: Php 40.00 (flat rate)
+///    - 5 to 50 kVA: Php 40.00 + (kVA × Php 4.00)
+///    - 50 to 300 kVA: Php 220.00 + (kVA × Php 2.00)
+///    - 300 to 1,500 kVA: Php 720.00 + (kVA × Php 1.00)
+///    - 1,500 to 6,000 kVA: Php 1,920.00 + (kVA × Php 0.50)
+///    - Above 6,000 kVA: Php 4,170.00 + (kVA × Php 0.25)
+/// 
+/// 3. POLE/ATTACHMENT LOCATION PLAN
+///    - Power Supply Poles: Php 30.00 per pole
+///    - Guying Attachments: Php 30.00 per attachment
+/// 
+/// 4. ELECTRIC METER & WIRING
+///    - Residential: Php 15.00 (meter) + Php 15.00 (wiring) = Php 30.00 per meter
+///    - Commercial: Php 60.00 (meter) + Php 36.00 (wiring) = Php 96.00 per meter
+///    - Institutional: Php 30.00 (meter) + Php 12.00 (wiring) = Php 42.00 per meter
+/// 
+/// 5. ELECTRONICS SYSTEMS
+///    - Switching Ports: Php 2.40 per port
+///    - Broadcast Locations: Php 1,000.00 per location
+///    - Vending Machines: Php 10.00 per unit
+///    - Electronics Outlets: Php 2.40 per outlet
+///    - Security Terminations: Php 2.40 per termination
+///    - Studio Locations: Php 1,000.00 per location
+///    - Antenna Structures: Php 1,000.00 per structure
+///    - Electronic Signages: Php 50.00 per unit
+///    - Pole Count: Php 20.00 per pole
+///    - Attachment Count: Php 20.00 per attachment
+///    - Other Devices: Php 50.00 per unit
+/// 
+/// ================================================================================
+/// MECHANICAL INSPECTION FEES
+/// ================================================================================
+/// 
+/// 1. REFRIGERATION & ICE PLANT (per ton)
+///    - Up to 100 tons: Php 25.00 per ton
+///    - 100 to 150 tons: Php 20.00 per ton
+///    - 150 to 300 tons: Php 15.00 per ton
+///    - 300 to 500 tons: Php 10.00 per ton
+///    - Above 500 tons: Php 5.00 per ton
+/// 
+/// 2. AIR CONDITIONING
+///    - Window Type: Php 40.00 per unit
+///    - Packaged Type (tiered pricing):
+///      * First 100 tons: Php 25.00 per ton
+///      * Next 50 tons (101-150): Php 20.00 per ton
+///      * Above 150 tons: Php 8.00 per ton
+/// 
+/// 3. MECHANICAL VENTILATION (per kW)
+///    - Up to 1 kW: Php 10.00 per kW
+///    - 1 to 7.5 kW: Php 50.00 per kW
+///    - Above 7.5 kW: Php 20.00 per kW
+/// 
+/// 4. ESCALATORS & MOVING WALKS
+///    - Escalator: Php 120.00 per unit
+///    - Funicular: Php 50.00 per kW + Php 10.00 per lineal meter
+///    - Cable Car: Php 25.00 per kW + Php 2.00 per lineal meter
+/// 
+/// 5. ELEVATORS
+///    - Passenger: Php 500.00 per unit
+///    - Freight: Php 400.00 per unit
+///    - Dumbwaiter: Php 50.00 per unit
+///    - Construction: Php 400.00 per unit
+///    - Car: Php 500.00 per unit
+///    - Additional Landing (above 5): Php 50.00 per landing
+/// 
+/// 6. BOILERS, HEATERS & PUMPS
+///    - Steam boilers up to 7.5 kW: Php 400.00 per unit
+///    - Steam boilers 7.5-22 kW: Php 550.00 per unit
+///    - Steam boilers 22-37 kW: Php 600.00 per unit
+///    - Steam boilers 37-52 kW: Php 650.00 per unit
+///    - Steam boilers 52-67 kW: Php 800.00 per unit
+///    - Steam boilers 67-74 kW: Php 900.00 per unit
+///    - Steam boilers above 74 kW: Php 4.00 per kW above 74
+///    - Pressurized water heaters: Php 120.00 per unit
+///    - Automatic fire extinguisher heads: Php 2.00 per head
+///    - Water/sump/sewage pumps up to 5 kW: Php 55.00 per unit
+///    - Water/sump/sewage pumps 5-10 kW: Php 90.00 per unit
+///    - Water/sump/sewage pumps above 10 kW: Php 2.00 per kW above 10
+/// 
+/// 7. ENGINES & GENERATORS
+///    - Diesel/gasoline engines up to 50 kW: Php 15.00 per kW
+///    - Diesel/gasoline engines 50-100 kW: Php 10.00 per kW
+///    - Diesel/gasoline engines above 100 kW: Php 2.40 per kW above 100
+/// 
+/// 8. MISCELLANEOUS MECHANICAL EQUIPMENT
+///    - Compressed air/vacuum/gas outlets: Php 10.00 per outlet
+///    - Power piping: Php 2.00 per lineal meter or cu.m
+///    - Cranes/forklifts/mixers up to 10 kW: Php 100.00 per unit
+///    - Cranes/forklifts/mixers above 10 kW: Php 3.00 per kW above 10
+///    - Pressure vessels: Php 40.00 per cubic meter
+///    - Pneumatic tubes/conveyors: Php 2.40 per lineal meter
+///    - Weighing scale structures: Php 30.00 per ton
+///    - Pressure gauge testing units: Php 24.00 per unit
+///    - Gas meter testing units: Php 30.00 per unit
+///    - Mechanical rides (Ferris wheels, etc.): Php 30.00 per unit
+/// 
+/// ================================================================================
+/// ARCHITECTURAL INSPECTION FEES
+/// ================================================================================
+/// 
+/// 1. FLOOR AREA COMPUTATION (progressive schedule)
+///    - Up to 100 sq.m: Php 120.00
+///    - 100 to 200 sq.m: Php 240.00
+///    - 200 to 350 sq.m: Php 480.00
+///    - 350 to 500 sq.m: Php 720.00
+///    - 500 to 750 sq.m: Php 960.00
+///    - 750 to 1,000 sq.m: Php 1,200.00
+///    - Above 1,000 sq.m: Php 1,200.00 + (Php 1,200.00 per 1,000 sq.m increment)
+/// 
+/// 2. APPENDAGES/PROJECTIONS
+///    - Canopies, marquees, awnings, balconies: Php 150.00 per unit
+/// 
+/// ================================================================================
+/// SANITARY/PLUMBING INSPECTION FEES
+/// ================================================================================
+/// 
+/// 1. PLUMBING FIXTURES
+///    - Inspection fee: Php 60.00 per plumbing unit
+/// 
+/// ================================================================================
+/// LINE AND GRADE INSPECTION FEES
+/// ================================================================================
+/// 
+/// 1. MANUAL ADJUSTMENTS
+///    - Additional fees can be entered manually as needed
+/// 
+/// ================================================================================
+/// CIVIL/STRUCTURAL INSPECTION FEES
+/// ================================================================================
+/// 
+/// 1. MANUAL ADJUSTMENTS
+///    - Additional fees can be entered manually as needed
+/// 
+/// ================================================================================
+/// COMPUTATION METHOD
+/// ================================================================================
+/// 
+/// The system calculates fees as follows:
+/// 1. Each category is calculated separately based on input values
+/// 2. All category fees are summed to get the total fee
+/// 3. The total is displayed in the calculatedFee field (formatted to 2 decimal places)
+/// 4. Calculations update automatically when any fee-related input changes
+/// 5. The total fee is stored with the inspection record when submitted
+/// 
+/// For Electrical/Electronics section:
+/// - Electrical fees and Electronics fees are calculated separately
+/// - Both subtotals are displayed in the assessment field (aligned)
+/// - Combined breakdown is shown in the remarks field
+/// 
+/// ================================================================================
+
 class InspectionFormScreen extends StatefulWidget {
   final String? scannedData;
   final Inspection? existingInspection;
@@ -76,16 +246,30 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
   // Annual inspection fees (Architectural)
   final TextEditingController _floorAreaController = TextEditingController();
   final TextEditingController _appendageCountController = TextEditingController();
+  final TextEditingController _architecturalAdditionalFeeController = TextEditingController();
   double _architecturalFeeTotal = 0;
   List<String> _architecturalFeeBreakdown = [];
+  bool _architecturalFloorAreaEnabled = true;
+  bool _architecturalAppendageEnabled = false;
+  bool _architecturalManualEnabled = false;
+
+  // Line and Grade fees
+  final TextEditingController _lineGradeAdditionalFeeController = TextEditingController();
+  double _lineGradeFeeTotal = 0;
+  List<String> _lineGradeFeeBreakdown = [];
+  bool _lineGradeManualEnabled = false;
+
+  // Civil/Structural fees
+  final TextEditingController _civilStructuralAdditionalFeeController = TextEditingController();
+  double _civilStructuralFeeTotal = 0;
+  List<String> _civilStructuralFeeBreakdown = [];
 
   // Sanitary / Plumbing fees
   final TextEditingController _sanitaryPlumbingUnitsController = TextEditingController();
   double _sanitaryFeeTotal = 0;
   List<String> _sanitaryFeeBreakdown = [];
-  bool _architecturalFloorAreaEnabled = true;
-  bool _architecturalAppendageEnabled = false;
   bool _sanitaryUnitsEnabled = false;
+  bool _civilStructuralManualEnabled = false;
 
   // Electrical fees
   final TextEditingController _connectedLoadController = TextEditingController();
@@ -686,6 +870,9 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
   void _initializeFeeControllers() {
     _floorAreaController.addListener(_computeArchitecturalFees);
     _appendageCountController.addListener(_computeArchitecturalFees);
+    _architecturalAdditionalFeeController.addListener(_computeArchitecturalFees);
+    _lineGradeAdditionalFeeController.addListener(_computeLineGradeFees);
+    _civilStructuralAdditionalFeeController.addListener(_computeCivilStructuralFees);
 
     _sanitaryPlumbingUnitsController.addListener(_computeSanitaryFees);
 
@@ -730,6 +917,9 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
     // Reset fee controllers & toggles
     _architecturalFloorAreaEnabled = true;
     _architecturalAppendageEnabled = false;
+    _architecturalManualEnabled = false;
+    _lineGradeManualEnabled = false;
+    _civilStructuralManualEnabled = false;
     _sanitaryUnitsEnabled = false;
     _electricalConnectedLoadEnabled = false;
     _electricalCapacityEnabled = false;
@@ -742,6 +932,9 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
     _mechanicalManualEnabled = false;
     _floorAreaController.clear();
     _appendageCountController.clear();
+    _architecturalAdditionalFeeController.clear();
+    _lineGradeAdditionalFeeController.clear();
+    _civilStructuralAdditionalFeeController.clear();
     _sanitaryPlumbingUnitsController.clear();
     _connectedLoadController.clear();
     _transformerCapacityController.clear();
@@ -907,6 +1100,9 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
     _occupancyPermitYearController.dispose();
     _floorAreaController.dispose();
     _appendageCountController.dispose();
+    _architecturalAdditionalFeeController.dispose();
+    _lineGradeAdditionalFeeController.dispose();
+    _civilStructuralAdditionalFeeController.dispose();
     _sanitaryPlumbingUnitsController.dispose();
     _connectedLoadController.dispose();
     _transformerCapacityController.dispose();
@@ -938,6 +1134,8 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
     final screenWidth = MediaQuery.of(context).size.width;
     final isTablet = screenWidth > 600;
 
+    final isMobile = screenWidth < 600;
+    
     return Scaffold(
       body: Container(
         width: double.infinity,
@@ -946,8 +1144,8 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
         child: SafeArea(
           child: SingleChildScrollView(
             padding: EdgeInsets.symmetric(
-              horizontal: isTablet ? 32.0 : 16.0,
-              vertical: 16.0,
+              horizontal: isTablet ? 32.0 : isMobile ? 12.0 : 16.0,
+              vertical: isMobile ? 8.0 : 16.0,
             ),
             child: Form(
               key: _formKey,
@@ -955,33 +1153,33 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   // Header
-                  _buildHeader(context, isTablet),
-                  const SizedBox(height: 24),
+                  _buildHeader(context, isTablet, isMobile),
+                  SizedBox(height: isMobile ? 12 : 20),
                   
-                  // Scanned Data Info
-                  _buildScannedDataCard(context, isTablet),
-                  const SizedBox(height: 24),
+                  // Scanned Data Info - Compact on mobile
+                  _buildScannedDataCard(context, isTablet, isMobile),
+                  SizedBox(height: isMobile ? 12 : 20),
                   
-                  // Permit Section (first list in the form)
+                  // Inspection Timing - Compact on mobile
+                  _buildInspectionTimingCard(context, isTablet, isMobile),
+                  SizedBox(height: isMobile ? 12 : 20),
+                  
+                  // Permit Section - Compact on mobile
                   _buildPermitsCard(context, isTablet),
-                  const SizedBox(height: 24),
+                  SizedBox(height: isMobile ? 12 : 20),
                   
-                  // Inspection Timing
-                  _buildInspectionTimingCard(context, isTablet),
-                  const SizedBox(height: 24),
-                  
-                  // Section Selection
-                  _buildSectionSelection(context, isTablet),
-                  const SizedBox(height: 24),
+                  // Section Selection - Compact on mobile
+                  _buildSectionSelection(context, isTablet, isMobile),
+                  SizedBox(height: isMobile ? 12 : 20),
                   
                   // Selected Sections
-                  ..._buildSelectedSections(context, isTablet),
+                  ..._buildSelectedSections(context, isTablet, isMobile),
                   
-                  const SizedBox(height: 32),
+                  SizedBox(height: isMobile ? 16 : 24),
                   
                   // Submit Button
-                  _buildSubmitButton(context, isTablet),
-                  const SizedBox(height: 24),
+                  _buildSubmitButton(context, isTablet, isMobile),
+                  SizedBox(height: isMobile ? 12 : 20),
                 ],
               ),
             ),
@@ -992,46 +1190,59 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
     );
   }
 
-  Widget _buildHeader(BuildContext context, bool isTablet) {
+  Widget _buildHeader(BuildContext context, bool isTablet, bool isMobile) {
     return Container(
-      padding: EdgeInsets.all(isTablet ? 24 : 20),
+      padding: EdgeInsets.all(isTablet ? 24 : isMobile ? 12 : 20),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE2E8F0), width: 1),
+        borderRadius: BorderRadius.circular(isMobile ? 10 : 12),
+        border: Border.all(
+          color: const Color(0xFFE2E8F0),
+          width: isMobile ? 1 : 1.5,
+        ),
       ),
       child: Row(
         children: [
-          IconButton(
-            onPressed: () => Navigator.of(context).pop(),
-            icon: const Icon(Icons.arrow_back_rounded),
-            style: IconButton.styleFrom(
-              backgroundColor: const Color(0xFFF8FAFC),
-              foregroundColor: const Color(0xFF374151),
-              side: const BorderSide(color: Color(0xFFE2E8F0), width: 1),
+          SizedBox(
+            width: isMobile ? 40 : 48,
+            height: isMobile ? 40 : 48,
+            child: IconButton(
+              onPressed: () => Navigator.of(context).pop(),
+              icon: Icon(Icons.arrow_back_rounded, size: isMobile ? 20 : 24),
+              style: IconButton.styleFrom(
+                backgroundColor: const Color(0xFFF8FAFC),
+                foregroundColor: const Color(0xFF374151),
+                side: const BorderSide(color: Color(0xFFE2E8F0), width: 1),
+                padding: EdgeInsets.zero,
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
             ),
           ),
-          const SizedBox(width: 16),
+          SizedBox(width: isMobile ? 10 : 16),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
                   'Inspection Form',
                   style: TextStyle(
-                    fontSize: isTablet ? 28 : 24,
+                    fontSize: isTablet ? 28 : isMobile ? 18 : 24,
                     fontWeight: FontWeight.bold,
                     color: const Color(0xFF2D3748),
                   ),
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  'Complete inspection details',
-                  style: TextStyle(
-                    fontSize: isTablet ? 16 : 14,
-                    color: const Color(0xFF6B7280),
+                if (!isMobile) ...[
+                  SizedBox(height: isMobile ? 2 : 4),
+                  Text(
+                    'Complete inspection details',
+                    style: TextStyle(
+                      fontSize: isTablet ? 16 : 14,
+                      color: const Color(0xFF6B7280),
+                    ),
                   ),
-                ),
+                ],
               ],
             ),
           ),
@@ -1041,6 +1252,8 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
   }
 
   Widget _buildPermitsCard(BuildContext context, bool isTablet) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 600;
     final buildingRecommendation = _buildingPermitRecommendation;
     final occupancyRecommendation = _occupancyPermitRecommendation;
     final bool? hasBuildingPermit = _hasBuildingPermit;
@@ -1070,179 +1283,339 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
 
     return Container(
       width: double.infinity,
-      padding: EdgeInsets.all(isTablet ? 24 : 20),
+      padding: EdgeInsets.all(isTablet ? 24 : isMobile ? 16 : 20),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE2E8F0), width: 1),
+        borderRadius: BorderRadius.circular(isMobile ? 12 : 16),
+        border: Border.all(
+          color: const Color(0xFFE2E8F0),
+          width: isMobile ? 1 : 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(isMobile ? 0.03 : 0.05),
+            blurRadius: isMobile ? 4 : 6,
+            offset: Offset(0, isMobile ? 1 : 2),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Header
           Row(
             children: [
               Container(
-                padding: const EdgeInsets.all(8),
+                padding: EdgeInsets.all(isMobile ? 6 : 10),
                 decoration: BoxDecoration(
                   color: const Color(0xFF0284C7),
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(isMobile ? 6 : 10),
                 ),
-                child: const Icon(
+                child: Icon(
                   Icons.assignment_turned_in_rounded,
                   color: Colors.white,
-                  size: 20,
+                  size: isTablet ? 24 : isMobile ? 16 : 20,
                 ),
               ),
-              const SizedBox(width: 12),
-              Text(
-                'Permit Requirements',
-                style: TextStyle(
-                  fontSize: isTablet ? 18 : 16,
-                  fontWeight: FontWeight.bold,
-                  color: const Color(0xFF2D3748),
+              SizedBox(width: isTablet ? 12 : isMobile ? 8 : 12),
+              Expanded(
+                child: Text(
+                  isMobile ? 'Permits' : 'Permit Requirements',
+                  style: TextStyle(
+                    fontSize: isTablet ? 20 : isMobile ? 14 : 18,
+                    fontWeight: FontWeight.bold,
+                    color: const Color(0xFF2D3748),
+                    letterSpacing: 0.2,
+                  ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 16),
-          Text(
-            'Building Permit',
-            style: TextStyle(
-              fontSize: isTablet ? 14 : 12,
-              fontWeight: FontWeight.w600,
-              color: const Color(0xFF374151),
-            ),
+          SizedBox(height: isTablet ? 20 : isMobile ? 10 : 18),
+          
+          // Building Permit Section
+          _buildPermitSection(
+            title: 'Building Permit',
+            icon: Icons.business_rounded,
+            iconColor: const Color(0xFF10B981),
+            hasPermit: hasBuildingPermit,
+            onYes: () => _handleBuildingPermitSelection(true),
+            onNo: () => _handleBuildingPermitSelection(false),
+            recommendation: buildingRecommendation,
+            recommendationIcon: hasBuildingPermit == true
+                ? Icons.check_circle_rounded
+                : Icons.info_outline_rounded,
+            recommendationColor: hasBuildingPermit == true
+                ? const Color(0xFF10B981)
+                : const Color(0xFFF97316),
+            isTablet: isTablet,
+            isMobile: isMobile,
           ),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 12,
-            runSpacing: 8,
-            children: [
-              _buildPermitOption(
-                label: 'Yes',
-                icon: Icons.check_rounded,
-                isSelected: hasBuildingPermit == true,
-                onTap: () => _handleBuildingPermitSelection(true),
-                color: const Color(0xFF10B981),
-                isTablet: isTablet,
-              ),
-              _buildPermitOption(
-                label: 'No',
-                icon: Icons.close_rounded,
-                isSelected: hasBuildingPermit == false,
-                onTap: () => _handleBuildingPermitSelection(false),
-                color: const Color(0xFFF97316),
-                isTablet: isTablet,
-              ),
-            ],
-          ),
-          if (buildingRecommendation != null) ...[
-            const SizedBox(height: 12),
-            _buildRecommendationBanner(
-              buildingRecommendation,
-              hasBuildingPermit == true
-                  ? Icons.check_circle_rounded
-                  : Icons.info_outline_rounded,
-              hasBuildingPermit == true
-                  ? const Color(0xFF10B981)
-                  : const Color(0xFFF97316),
-              isTablet,
-            ),
-          ],
-          const SizedBox(height: 20),
-          Text(
-            'Occupancy Permit',
-            style: TextStyle(
-              fontSize: isTablet ? 14 : 12,
-              fontWeight: FontWeight.w600,
-              color: const Color(0xFF374151),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 12,
-            runSpacing: 8,
-            children: [
-              _buildPermitOption(
-                label: 'Yes',
-                icon: Icons.check_rounded,
-                isSelected: hasOccupancyPermit == true,
-                onTap: () => _handleOccupancyPermitSelection(true),
-                color: const Color(0xFF3B82F6),
-                isTablet: isTablet,
-              ),
-              _buildPermitOption(
-                label: 'No',
-                icon: Icons.close_rounded,
-                isSelected: hasOccupancyPermit == false,
-                onTap: () => _handleOccupancyPermitSelection(false),
-                color: const Color(0xFFEF4444),
-                isTablet: isTablet,
-              ),
-            ],
-          ),
-          if (hasOccupancyPermit == true) ...[
-            const SizedBox(height: 12),
-            Text(
-              'Issued Year',
-              style: TextStyle(
-                fontSize: isTablet ? 12 : 10,
-                fontWeight: FontWeight.w600,
-                color: const Color(0xFF6B7280),
-              ),
-            ),
-            const SizedBox(height: 6),
-            TextFormField(
-              controller: _occupancyPermitYearController,
-              keyboardType: TextInputType.number,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-              decoration: InputDecoration(
-                hintText: 'Enter year (e.g. 2015)',
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: const BorderSide(color: Color(0xFFD1D5DB)),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: const BorderSide(color: Color(0xFF3B82F6), width: 2),
-                ),
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 12,
-                ),
-              ),
-              validator: (value) {
-                if (_hasOccupancyPermit == true) {
-                  final trimmed = value?.trim() ?? '';
-                  if (trimmed.isEmpty) {
-                    return 'Please enter the issued year.';
-                  }
-                  final year = int.tryParse(trimmed);
-                  final currentYear = DateTime.now().year;
-                  if (year == null || year < 1900 || year > currentYear) {
-                    return 'Enter a valid year between 1900 and $currentYear.';
-                  }
+          
+          SizedBox(height: isTablet ? 24 : isMobile ? 12 : 22),
+          
+          // Occupancy Permit Section
+          _buildPermitSection(
+            title: 'Occupancy Permit',
+            icon: Icons.home_work_rounded,
+            iconColor: const Color(0xFF3B82F6),
+            hasPermit: hasOccupancyPermit,
+            onYes: () => _handleOccupancyPermitSelection(true),
+            onNo: () => _handleOccupancyPermitSelection(false),
+            recommendation: occupancyRecommendation,
+            recommendationIcon: _occupancyRecommendationIcon(occupancyRecommendation),
+            recommendationColor: _occupancyRecommendationColor(occupancyRecommendation),
+            isTablet: isTablet,
+            isMobile: isMobile,
+            showYearField: hasOccupancyPermit == true,
+            yearController: _occupancyPermitYearController,
+            onYearChanged: _handleOccupancyYearChanged,
+            validator: (value) {
+              if (_hasOccupancyPermit == true) {
+                final trimmed = value?.trim() ?? '';
+                if (trimmed.isEmpty) {
+                  return 'Please enter the issued year.';
                 }
-                return null;
-              },
-              onChanged: _handleOccupancyYearChanged,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'If the occupancy permit is older than 15 years, the system will recommend issuing a Certificate of Structural Permit.',
-              style: TextStyle(
-                fontSize: isTablet ? 12 : 10,
-                color: const Color(0xFF6B7280),
+                final year = int.tryParse(trimmed);
+                final currentYear = DateTime.now().year;
+                if (year == null || year < 1900 || year > currentYear) {
+                  return 'Enter a valid year between 1900 and $currentYear.';
+                }
+              }
+              return null;
+            },
+          ),
+        ],
+      ),
+    );
+  }
+  
+  Widget _buildPermitSection({
+    required String title,
+    required IconData icon,
+    required Color iconColor,
+    required bool? hasPermit,
+    required VoidCallback onYes,
+    required VoidCallback onNo,
+    required String? recommendation,
+    required IconData recommendationIcon,
+    required Color recommendationColor,
+    required bool isTablet,
+    required bool isMobile,
+    bool showYearField = false,
+    TextEditingController? yearController,
+    ValueChanged<String>? onYearChanged,
+    String? Function(String?)? validator,
+  }) {
+    return Container(
+      padding: EdgeInsets.all(isTablet ? 16 : isMobile ? 10 : 14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF9FAFB),
+        borderRadius: BorderRadius.circular(isMobile ? 8 : 12),
+        border: Border.all(
+          color: const Color(0xFFE2E8F0),
+          width: 1,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Section Title
+          Row(
+            children: [
+              Container(
+                padding: EdgeInsets.all(isMobile ? 5 : 8),
+                decoration: BoxDecoration(
+                  color: iconColor.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(isMobile ? 6 : 8),
+                ),
+                child: Icon(
+                  icon,
+                  color: iconColor,
+                  size: isTablet ? 20 : isMobile ? 14 : 18,
+                ),
+              ),
+              SizedBox(width: isTablet ? 10 : isMobile ? 8 : 10),
+              Expanded(
+                child: Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: isTablet ? 16 : isMobile ? 13 : 15,
+                    fontWeight: FontWeight.w700,
+                    color: const Color(0xFF1F2937),
+                    letterSpacing: 0.2,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: isTablet ? 14 : isMobile ? 10 : 13),
+          
+          // Yes/No Options
+          Row(
+            children: [
+              Expanded(
+                child: _buildPermitOption(
+                  label: 'Yes',
+                  icon: Icons.check_rounded,
+                  isSelected: hasPermit == true,
+                  onTap: onYes,
+                  color: iconColor,
+                  isTablet: isTablet,
+                  isMobile: isMobile,
+                ),
+              ),
+              SizedBox(width: isTablet ? 12 : isMobile ? 10 : 12),
+              Expanded(
+                child: _buildPermitOption(
+                  label: 'No',
+                  icon: Icons.close_rounded,
+                  isSelected: hasPermit == false,
+                  onTap: onNo,
+                  color: hasPermit == true ? const Color(0xFFEF4444) : const Color(0xFF6B7280),
+                  isTablet: isTablet,
+                  isMobile: isMobile,
+                ),
+              ),
+            ],
+          ),
+          
+          // Year Field (for Occupancy Permit)
+          if (showYearField && yearController != null) ...[
+            SizedBox(height: isTablet ? 16 : isMobile ? 10 : 15),
+            Container(
+              padding: EdgeInsets.all(isTablet ? 12 : isMobile ? 8 : 12),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(isMobile ? 6 : 10),
+                border: Border.all(
+                  color: const Color(0xFFE2E8F0),
+                  width: 1,
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.calendar_today_rounded,
+                        size: isTablet ? 18 : isMobile ? 12 : 16,
+                        color: const Color(0xFF3B82F6),
+                      ),
+                      SizedBox(width: isTablet ? 8 : isMobile ? 6 : 8),
+                      Text(
+                        'Issued Year',
+                        style: TextStyle(
+                          fontSize: isTablet ? 14 : isMobile ? 11 : 13,
+                          fontWeight: FontWeight.w600,
+                          color: const Color(0xFF374151),
+                        ),
+                      ),
+                    ],
+                  ),
+                  SizedBox(height: isTablet ? 10 : isMobile ? 6 : 9),
+                  TextFormField(
+                    controller: yearController,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    style: TextStyle(
+                      fontSize: isTablet ? 15 : isMobile ? 13 : 14,
+                    ),
+                    decoration: InputDecoration(
+                      hintText: isMobile ? 'Year (e.g. 2015)' : 'Enter year (e.g. 2015)',
+                      hintStyle: TextStyle(
+                        fontSize: isTablet ? 14 : isMobile ? 11 : 13,
+                        color: const Color(0xFF9CA3AF),
+                      ),
+                      filled: true,
+                      fillColor: Colors.white,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(isMobile ? 6 : 10),
+                        borderSide: BorderSide(
+                          color: const Color(0xFFD1D5DB),
+                          width: isMobile ? 1 : 1.5,
+                        ),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(isMobile ? 6 : 10),
+                        borderSide: BorderSide(
+                          color: const Color(0xFFD1D5DB),
+                          width: isMobile ? 1 : 1.5,
+                        ),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(isMobile ? 6 : 10),
+                        borderSide: const BorderSide(color: Color(0xFF3B82F6), width: 2),
+                      ),
+                      errorBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(isMobile ? 6 : 10),
+                        borderSide: const BorderSide(color: Color(0xFFEF4444), width: 1.5),
+                      ),
+                      focusedErrorBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(isMobile ? 6 : 10),
+                        borderSide: const BorderSide(color: Color(0xFFEF4444), width: 2),
+                      ),
+                      contentPadding: EdgeInsets.symmetric(
+                        horizontal: isTablet ? 14 : isMobile ? 10 : 14,
+                        vertical: isTablet ? 14 : isMobile ? 10 : 14,
+                      ),
+                      isDense: true,
+                    ),
+                    validator: validator,
+                    onChanged: onYearChanged,
+                  ),
+                  if (!isMobile) ...[
+                    SizedBox(height: isTablet ? 8 : isMobile ? 6 : 7),
+                    Container(
+                      padding: EdgeInsets.all(isTablet ? 10 : isMobile ? 8 : 9),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFEF3C7),
+                        borderRadius: BorderRadius.circular(isMobile ? 6 : 8),
+                        border: Border.all(
+                          color: const Color(0xFFFCD34D),
+                          width: 1,
+                        ),
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(
+                            Icons.info_outline_rounded,
+                            size: isTablet ? 16 : isMobile ? 14 : 15,
+                            color: const Color(0xFFD97706),
+                          ),
+                          SizedBox(width: isTablet ? 8 : isMobile ? 6 : 8),
+                          Expanded(
+                            child: Text(
+                              'If the occupancy permit is older than 15 years, the system will recommend issuing a Certificate of Structural Permit.',
+                              style: TextStyle(
+                                fontSize: isTablet ? 12 : isMobile ? 10 : 11,
+                                color: const Color(0xFF92400E),
+                                height: 1.4,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ],
               ),
             ),
           ],
-          if (occupancyRecommendation != null) ...[
-            const SizedBox(height: 12),
+          
+          // Recommendation Banner
+          if (recommendation != null) ...[
+            SizedBox(height: isTablet ? 14 : isMobile ? 10 : 13),
             _buildRecommendationBanner(
-              occupancyRecommendation,
-              _occupancyRecommendationIcon(occupancyRecommendation),
-              _occupancyRecommendationColor(occupancyRecommendation),
+              recommendation,
+              recommendationIcon,
+              recommendationColor,
               isTablet,
+              isMobile,
             ),
           ],
         ],
@@ -1257,37 +1630,48 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
     required VoidCallback onTap,
     required Color color,
     required bool isTablet,
+    required bool isMobile,
   }) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
         padding: EdgeInsets.symmetric(
-          horizontal: isTablet ? 16 : 12,
-          vertical: isTablet ? 10 : 8,
+          horizontal: isTablet ? 16 : isMobile ? 12 : 14,
+          vertical: isTablet ? 14 : isMobile ? 12 : 13,
         ),
         decoration: BoxDecoration(
           color: isSelected ? color : Colors.white,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(isMobile ? 10 : 12),
           border: Border.all(
             color: isSelected ? color : const Color(0xFFE2E8F0),
-            width: 2,
+            width: isMobile ? 2 : 2.5,
           ),
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                    color: color.withOpacity(0.3),
+                    blurRadius: isMobile ? 4 : 6,
+                    offset: Offset(0, isMobile ? 2 : 3),
+                  ),
+                ]
+              : null,
         ),
         child: Row(
-          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(
               icon,
               color: isSelected ? Colors.white : color,
-              size: isTablet ? 18 : 16,
+              size: isTablet ? 20 : isMobile ? 16 : 18,
             ),
-            const SizedBox(width: 6),
+            SizedBox(width: isTablet ? 8 : isMobile ? 6 : 7),
             Text(
               label,
               style: TextStyle(
-                fontSize: isTablet ? 14 : 12,
-                fontWeight: FontWeight.w600,
+                fontSize: isTablet ? 15 : isMobile ? 13 : 14,
+                fontWeight: FontWeight.w700,
                 color: isSelected ? Colors.white : const Color(0xFF374151),
+                letterSpacing: 0.3,
               ),
             ),
           ],
@@ -1301,30 +1685,51 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
     IconData icon,
     Color color,
     bool isTablet,
+    bool isMobile,
   ) {
     return Container(
       width: double.infinity,
-      padding: EdgeInsets.all(isTablet ? 14 : 12),
+      padding: EdgeInsets.all(isTablet ? 14 : isMobile ? 12 : 13),
       decoration: BoxDecoration(
         color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color, width: 1),
+        borderRadius: BorderRadius.circular(isMobile ? 10 : 12),
+        border: Border.all(
+          color: color,
+          width: isMobile ? 1.5 : 2,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: color.withOpacity(0.1),
+            blurRadius: isMobile ? 4 : 6,
+            offset: Offset(0, isMobile ? 1 : 2),
+          ),
+        ],
       ),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(
-            icon,
-            color: color,
-            size: isTablet ? 18 : 16,
+          Container(
+            padding: EdgeInsets.all(isMobile ? 4 : 5),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.2),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              icon,
+              color: color,
+              size: isTablet ? 20 : isMobile ? 16 : 18,
+            ),
           ),
-          const SizedBox(width: 8),
+          SizedBox(width: isTablet ? 12 : isMobile ? 10 : 11),
           Expanded(
             child: Text(
               message,
               style: TextStyle(
-                fontSize: isTablet ? 13 : 11,
+                fontSize: isTablet ? 14 : isMobile ? 12 : 13,
                 color: color,
                 fontWeight: FontWeight.w600,
+                height: 1.4,
+                letterSpacing: 0.1,
               ),
             ),
           ),
@@ -1333,59 +1738,70 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
     );
   }
 
-  Widget _buildScannedDataCard(BuildContext context, bool isTablet) {
+  Widget _buildScannedDataCard(BuildContext context, bool isTablet, bool isMobile) {
     return Container(
       width: double.infinity,
-      padding: EdgeInsets.all(isTablet ? 24 : 20),
+      padding: EdgeInsets.all(isTablet ? 24 : isMobile ? 12 : 20),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE2E8F0), width: 1),
+        borderRadius: BorderRadius.circular(isMobile ? 10 : 16),
+        border: Border.all(
+          color: const Color(0xFFE2E8F0),
+          width: isMobile ? 1 : 1.5,
+        ),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF10B981),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Icon(
-                  Icons.qr_code_rounded,
-                  color: Colors.white,
-                  size: 20,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Text(
-                'Business ID (scanned QR)',
-                style: TextStyle(
-                  fontSize: isTablet ? 18 : 16,
-                  fontWeight: FontWeight.bold,
-                  color: const Color(0xFF2D3748),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
           Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(12),
+            padding: EdgeInsets.all(isMobile ? 6 : 8),
             decoration: BoxDecoration(
-              color: const Color(0xFFF9FAFB),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: const Color(0xFFE5E7EB), width: 1),
+              color: const Color(0xFF10B981),
+              borderRadius: BorderRadius.circular(isMobile ? 6 : 8),
             ),
-            child: Text(
-              widget.scannedData ?? 'No business ID available',
-              style: TextStyle(
-                fontSize: isTablet ? 14 : 12,
-                color: const Color(0xFF374151),
-                fontFamily: 'monospace',
-              ),
+            child: Icon(
+              Icons.qr_code_rounded,
+              color: Colors.white,
+              size: isTablet ? 20 : isMobile ? 16 : 18,
+            ),
+          ),
+          SizedBox(width: isMobile ? 10 : 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  isMobile ? 'Business ID' : 'Business ID (scanned QR)',
+                  style: TextStyle(
+                    fontSize: isTablet ? 18 : isMobile ? 13 : 16,
+                    fontWeight: FontWeight.bold,
+                    color: const Color(0xFF2D3748),
+                  ),
+                ),
+                SizedBox(height: isMobile ? 4 : 6),
+                Container(
+                  width: double.infinity,
+                  padding: EdgeInsets.all(isMobile ? 8 : 12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF9FAFB),
+                    borderRadius: BorderRadius.circular(isMobile ? 6 : 8),
+                    border: Border.all(
+                      color: const Color(0xFFE5E7EB),
+                      width: 1,
+                    ),
+                  ),
+                  child: Text(
+                    widget.scannedData ?? 'No business ID',
+                    style: TextStyle(
+                      fontSize: isTablet ? 14 : isMobile ? 11 : 12,
+                      color: const Color(0xFF374151),
+                      fontFamily: 'monospace',
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -1393,96 +1809,127 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
     );
   }
 
-  Widget _buildInspectionTimingCard(BuildContext context, bool isTablet) {
+  Widget _buildInspectionTimingCard(BuildContext context, bool isTablet, bool isMobile) {
     return Container(
       width: double.infinity,
-      padding: EdgeInsets.all(isTablet ? 24 : 20),
+      padding: EdgeInsets.all(isTablet ? 24 : isMobile ? 12 : 20),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE2E8F0), width: 1),
+        borderRadius: BorderRadius.circular(isMobile ? 10 : 16),
+        border: Border.all(
+          color: const Color(0xFFE2E8F0),
+          width: isMobile ? 1 : 1.5,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
           Row(
             children: [
               Container(
-                padding: const EdgeInsets.all(8),
+                padding: EdgeInsets.all(isMobile ? 6 : 8),
                 decoration: BoxDecoration(
                   color: const Color(0xFF3B82F6),
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(isMobile ? 6 : 8),
                 ),
-                child: const Icon(
+                child: Icon(
                   Icons.access_time_rounded,
                   color: Colors.white,
-                  size: 20,
+                  size: isTablet ? 20 : isMobile ? 16 : 18,
                 ),
               ),
-              const SizedBox(width: 12),
+              SizedBox(width: isMobile ? 10 : 12),
               Text(
                 'Inspection Timing',
                 style: TextStyle(
-                  fontSize: isTablet ? 18 : 16,
+                  fontSize: isTablet ? 18 : isMobile ? 14 : 16,
                   fontWeight: FontWeight.bold,
                   color: const Color(0xFF2D3748),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 16),
+          SizedBox(height: isMobile ? 10 : 14),
           
-          // Start Time
-          Row(
-            children: [
-              Expanded(
-                child: _buildTimeField(
-                  'Start Time',
-                  _inspectionStartTime,
-                  Icons.play_arrow_rounded,
-                  const Color(0xFF10B981),
-                  isTablet,
+          // Start Time and End Time - Stack on mobile
+          if (isMobile) ...[
+            _buildTimeField(
+              'Start Time',
+              _inspectionStartTime,
+              Icons.play_arrow_rounded,
+              const Color(0xFF10B981),
+              isTablet,
+              isMobile,
+            ),
+            SizedBox(height: isMobile ? 8 : 12),
+            _buildTimeField(
+              'End Time',
+              _inspectionEndTime,
+              Icons.stop_rounded,
+              const Color(0xFFEF4444),
+              isTablet,
+              isMobile,
+            ),
+          ] else ...[
+            Row(
+              children: [
+                Expanded(
+                  child: _buildTimeField(
+                    'Start Time',
+                    _inspectionStartTime,
+                    Icons.play_arrow_rounded,
+                    const Color(0xFF10B981),
+                    isTablet,
+                    isMobile,
+                  ),
                 ),
-              ),
-              SizedBox(width: isTablet ? 16 : 12),
-              Expanded(
-                child: _buildTimeField(
-                  'End Time',
-                  _inspectionEndTime,
-                  Icons.stop_rounded,
-                  const Color(0xFFEF4444),
-                  isTablet,
+                SizedBox(width: isTablet ? 16 : 12),
+                Expanded(
+                  child: _buildTimeField(
+                    'End Time',
+                    _inspectionEndTime,
+                    Icons.stop_rounded,
+                    const Color(0xFFEF4444),
+                    isTablet,
+                    isMobile,
+                  ),
                 ),
-              ),
-            ],
-          ),
-          
-          const SizedBox(height: 16),
+              ],
+            ),
+          ],
           
           // Duration calculation
           if (_inspectionStartTime != null && _inspectionEndTime != null) ...[
+            SizedBox(height: isMobile ? 10 : 14),
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.all(12),
+              padding: EdgeInsets.all(isMobile ? 10 : 12),
               decoration: BoxDecoration(
                 color: const Color(0xFFF0F9FF),
-                borderRadius: BorderRadius.circular(0),
-                border: Border.all(color: const Color(0xFF0EA5E9), width: 1),
+                borderRadius: BorderRadius.circular(isMobile ? 6 : 8),
+                border: Border.all(
+                  color: const Color(0xFF0EA5E9),
+                  width: 1,
+                ),
               ),
               child: Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(
+                  Icon(
                     Icons.timer_rounded,
-                    color: Color(0xFF0EA5E9),
-                    size: 16,
+                    color: const Color(0xFF0EA5E9),
+                    size: isTablet ? 18 : isMobile ? 14 : 16,
                   ),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Duration: ${_calculateDuration()}',
-                    style: TextStyle(
-                      fontSize: isTablet ? 14 : 12,
-                      color: const Color(0xFF0EA5E9),
-                      fontWeight: FontWeight.w600,
+                  SizedBox(width: isMobile ? 6 : 8),
+                  Flexible(
+                    child: Text(
+                      'Duration: ${_calculateDuration()}',
+                      style: TextStyle(
+                        fontSize: isTablet ? 14 : isMobile ? 12 : 13,
+                        color: const Color(0xFF0EA5E9),
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
                 ],
@@ -1494,47 +1941,57 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
     );
   }
 
-  Widget _buildTimeField(String label, DateTime? time, IconData icon, Color color, bool isTablet) {
+  Widget _buildTimeField(String label, DateTime? time, IconData icon, Color color, bool isTablet, bool isMobile) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
       children: [
         Text(
           label,
           style: TextStyle(
-            fontSize: isTablet ? 14 : 12,
+            fontSize: isTablet ? 14 : isMobile ? 11 : 12,
             fontWeight: FontWeight.w600,
             color: const Color(0xFF374151),
           ),
         ),
-        const SizedBox(height: 6),
+        SizedBox(height: isMobile ? 4 : 6),
         GestureDetector(
           onTap: () => _selectTime(label),
           child: Container(
             width: double.infinity,
-            padding: EdgeInsets.all(isTablet ? 16 : 12),
+            padding: EdgeInsets.all(isTablet ? 16 : isMobile ? 10 : 12),
             decoration: BoxDecoration(
               color: const Color(0xFFF9FAFB),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: const Color(0xFFE5E7EB), width: 1),
+              borderRadius: BorderRadius.circular(isMobile ? 6 : 8),
+              border: Border.all(
+                color: const Color(0xFFE5E7EB),
+                width: 1,
+              ),
             ),
             child: Row(
               children: [
                 Icon(
                   icon,
                   color: color,
-                  size: isTablet ? 20 : 18,
+                  size: isTablet ? 20 : isMobile ? 16 : 18,
                 ),
-                const SizedBox(width: 12),
+                SizedBox(width: isMobile ? 8 : 12),
                 Expanded(
                   child: Text(
                     time != null 
-                        ? '${time.day}/${time.month}/${time.year} ${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}'
-                        : 'Tap to set $label',
+                        ? isMobile 
+                          ? '${time.day}/${time.month}/${time.year}\n${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}'
+                          : '${time.day}/${time.month}/${time.year} ${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}'
+                        : isMobile 
+                          ? 'Tap to set'
+                          : 'Tap to set $label',
                     style: TextStyle(
-                      fontSize: isTablet ? 14 : 12,
+                      fontSize: isTablet ? 14 : isMobile ? 11 : 12,
                       color: time != null ? const Color(0xFF374151) : const Color(0xFF9CA3AF),
                       fontWeight: time != null ? FontWeight.w500 : FontWeight.normal,
+                      height: isMobile && time != null ? 1.3 : 1.4,
                     ),
+                    maxLines: isMobile && time != null ? 2 : 1,
                   ),
                 ),
               ],
@@ -1677,6 +2134,36 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
     });
   }
 
+  void _toggleArchitecturalManual(bool enabled) {
+    setState(() {
+      _architecturalManualEnabled = enabled;
+      if (!enabled) {
+        _architecturalAdditionalFeeController.clear();
+      }
+      _computeArchitecturalFees();
+    });
+  }
+
+  void _toggleLineGradeManual(bool enabled) {
+    setState(() {
+      _lineGradeManualEnabled = enabled;
+      if (!enabled) {
+        _lineGradeAdditionalFeeController.clear();
+      }
+      _computeLineGradeFees();
+    });
+  }
+
+  void _toggleCivilStructuralManual(bool enabled) {
+    setState(() {
+      _civilStructuralManualEnabled = enabled;
+      if (!enabled) {
+        _civilStructuralAdditionalFeeController.clear();
+      }
+      _computeCivilStructuralFees();
+    });
+  }
+
   void _toggleSanitaryUnits(bool enabled) {
     setState(() {
       _sanitaryUnitsEnabled = enabled;
@@ -1763,64 +2250,179 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
     required String title,
     required bool isTablet,
     required List<Widget> children,
+    IconData? icon,
+    Color? iconColor,
   }) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 600;
+    
     return Container(
       width: double.infinity,
-      margin: EdgeInsets.only(top: isTablet ? 12 : 10),
+      margin: EdgeInsets.only(top: isTablet ? 12 : isMobile ? 8 : 10),
       decoration: BoxDecoration(
-        color: const Color(0xFFF8FAFC),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(isMobile ? 10 : 12),
+        border: Border.all(
+          color: const Color(0xFFE2E8F0),
+          width: isMobile ? 1 : 1.5,
+        ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.02),
-            blurRadius: 6,
-            offset: const Offset(0, 2),
+            color: Colors.black.withOpacity(isMobile ? 0.03 : 0.05),
+            blurRadius: isMobile ? 4 : 6,
+            offset: Offset(0, isMobile ? 1 : 2),
           ),
         ],
       ),
       child: Theme(
-        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        data: Theme.of(context).copyWith(
+          dividerColor: Colors.transparent,
+          expansionTileTheme: ExpansionTileThemeData(
+            iconColor: const Color(0xFF0F172A),
+            collapsedIconColor: const Color(0xFF64748B),
+            backgroundColor: Colors.transparent,
+            collapsedBackgroundColor: Colors.transparent,
+          ),
+        ),
         child: ExpansionTile(
           maintainState: true,
+          initiallyExpanded: false,
           tilePadding: EdgeInsets.symmetric(
-            horizontal: isTablet ? 18 : 14,
-            vertical: isTablet ? 8 : 6,
+            horizontal: isTablet ? 20 : isMobile ? 12 : 16,
+            vertical: isTablet ? 12 : isMobile ? 8 : 10,
           ),
           childrenPadding: EdgeInsets.symmetric(
-            horizontal: isTablet ? 18 : 14,
-            vertical: isTablet ? 14 : 12,
+            horizontal: isTablet ? 20 : isMobile ? 12 : 16,
+            vertical: isTablet ? 16 : isMobile ? 10 : 12,
           ),
+          leading: icon != null
+              ? Container(
+                  padding: EdgeInsets.all(isMobile ? 6 : 8),
+                  decoration: BoxDecoration(
+                    color: (iconColor ?? const Color(0xFF3B82F6)).withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(
+                    icon,
+                    color: iconColor ?? const Color(0xFF3B82F6),
+                    size: isMobile ? 18 : 20,
+                  ),
+                )
+              : null,
           title: Text(
             title,
             style: TextStyle(
-              fontSize: isTablet ? 16 : 14,
+              fontSize: isTablet ? 16 : isMobile ? 13 : 14,
               fontWeight: FontWeight.w700,
               color: const Color(0xFF1F2937),
-              letterSpacing: 0.2,
+              letterSpacing: 0.1,
             ),
           ),
-          iconColor: const Color(0xFF0F172A),
-          collapsedIconColor: const Color(0xFF0F172A),
-          children: children,
+          children: [
+            Divider(
+              height: 1,
+              thickness: 1,
+              color: const Color(0xFFE2E8F0),
+              indent: isMobile ? 0 : 8,
+              endIndent: isMobile ? 0 : 8,
+            ),
+            ...children,
+          ],
         ),
       ),
     );
   }
 
   Widget _buildFeeGroupHeader(String title, bool isTablet) {
-    return Padding(
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 600;
+    
+    return Container(
+      margin: EdgeInsets.only(
+        top: isTablet ? 16 : isMobile ? 12 : 14,
+        bottom: isTablet ? 10 : isMobile ? 6 : 8,
+      ),
       padding: EdgeInsets.only(
-        top: isTablet ? 16 : 12,
-        bottom: isTablet ? 8 : 6,
+        left: isMobile ? 4 : 8,
+        bottom: isMobile ? 6 : 8,
+      ),
+      decoration: BoxDecoration(
+        border: Border(
+          left: BorderSide(
+            color: const Color(0xFF3B82F6),
+            width: isMobile ? 3 : 4,
+          ),
+        ),
       ),
       child: Text(
         title,
         style: TextStyle(
-          fontSize: isTablet ? 14 : 12,
+          fontSize: isTablet ? 14 : isMobile ? 12 : 13,
           fontWeight: FontWeight.w700,
-          color: const Color(0xFF0F172A),
+          color: const Color(0xFF1F2937),
+          letterSpacing: 0.2,
         ),
+      ),
+    );
+  }
+
+  Widget _buildCompactSwitchTile({
+    required String title,
+    required String? subtitle,
+    required bool value,
+    required ValueChanged<bool> onChanged,
+    required bool isTablet,
+  }) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 600;
+    
+    return Container(
+      margin: EdgeInsets.only(bottom: isTablet ? 8 : isMobile ? 6 : 7),
+      padding: EdgeInsets.symmetric(
+        horizontal: isTablet ? 12 : isMobile ? 8 : 10,
+        vertical: isTablet ? 10 : isMobile ? 8 : 9,
+      ),
+      decoration: BoxDecoration(
+        color: value ? const Color(0xFFEFF6FF) : const Color(0xFFF9FAFB),
+        borderRadius: BorderRadius.circular(isMobile ? 8 : 10),
+        border: Border.all(
+          color: value ? const Color(0xFF93C5FD) : const Color(0xFFE2E8F0),
+          width: isMobile ? 1 : 1.5,
+        ),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: isTablet ? 14 : isMobile ? 12 : 13,
+                    fontWeight: FontWeight.w600,
+                    color: const Color(0xFF1F2937),
+                  ),
+                ),
+                if (subtitle != null) ...[
+                  SizedBox(height: isMobile ? 2 : 3),
+                  Text(
+                    subtitle,
+                    style: TextStyle(
+                      fontSize: isTablet ? 12 : isMobile ? 10 : 11,
+                      color: const Color(0xFF64748B),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          Switch.adaptive(
+            value: value,
+            onChanged: onChanged,
+            activeColor: const Color(0xFF3B82F6),
+          ),
+        ],
       ),
     );
   }
@@ -1833,27 +2435,66 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
     bool enabled = true,
     String? helperText,
   }) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 600;
+    
     return Padding(
-      padding: EdgeInsets.only(bottom: isTablet ? 12 : 10),
+      padding: EdgeInsets.only(bottom: isTablet ? 12 : isMobile ? 8 : 10),
       child: TextFormField(
         controller: controller,
         keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: false),
         enabled: enabled,
+        style: TextStyle(
+          fontSize: isTablet ? 15 : isMobile ? 13 : 14,
+        ),
         decoration: InputDecoration(
           labelText: label,
+          labelStyle: TextStyle(
+            fontSize: isTablet ? 14 : isMobile ? 12 : 13,
+          ),
           helperText: helperText,
+          helperStyle: TextStyle(
+            fontSize: isTablet ? 12 : isMobile ? 10 : 11,
+            color: const Color(0xFF64748B),
+          ),
+          helperMaxLines: 2,
           suffixText: suffix,
+          suffixStyle: TextStyle(
+            fontSize: isTablet ? 13 : isMobile ? 11 : 12,
+            color: enabled ? const Color(0xFF64748B) : const Color(0xFF9CA3AF),
+            fontWeight: FontWeight.w600,
+          ),
+          filled: true,
+          fillColor: enabled ? Colors.white : const Color(0xFFF9FAFB),
           border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(isMobile ? 8 : 10),
+            borderSide: BorderSide(
+              color: const Color(0xFFD1D5DB),
+              width: isMobile ? 1 : 1.5,
+            ),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(isMobile ? 8 : 10),
+            borderSide: BorderSide(
+              color: const Color(0xFFD1D5DB),
+              width: isMobile ? 1 : 1.5,
+            ),
+          ),
+          disabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(isMobile ? 8 : 10),
+            borderSide: BorderSide(
+              color: const Color(0xFFE5E7EB),
+              width: isMobile ? 1 : 1.5,
+            ),
           ),
           focusedBorder: OutlineInputBorder(
             borderSide: const BorderSide(color: Color(0xFF3B82F6), width: 2),
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(isMobile ? 8 : 10),
           ),
           isDense: true,
           contentPadding: EdgeInsets.symmetric(
-            horizontal: isTablet ? 14 : 12,
-            vertical: isTablet ? 14 : 12,
+            horizontal: isTablet ? 16 : isMobile ? 12 : 14,
+            vertical: isTablet ? 16 : isMobile ? 12 : 14,
           ),
         ),
       ),
@@ -1865,268 +2506,476 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
     required List<String> breakdown,
     required bool isTablet,
     String emptyMessage = 'No fee inputs provided yet.',
+    String? title,
   }) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 600;
     final bool hasData = breakdown.isNotEmpty && total > 0;
+    
     return Container(
       width: double.infinity,
-      margin: EdgeInsets.only(top: isTablet ? 8 : 6),
-      padding: EdgeInsets.all(isTablet ? 14 : 12),
+      margin: EdgeInsets.only(top: isTablet ? 12 : isMobile ? 8 : 10),
+      padding: EdgeInsets.all(isTablet ? 16 : isMobile ? 12 : 14),
       decoration: BoxDecoration(
         color: hasData ? const Color(0xFFEFF6FF) : const Color(0xFFF9FAFB),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(isMobile ? 10 : 12),
         border: Border.all(
           color: hasData ? const Color(0xFF93C5FD) : const Color(0xFFE2E8F0),
+          width: isMobile ? 1 : 1.5,
         ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Section total: ${_formatCurrency(total)}',
-            style: TextStyle(
-              fontSize: isTablet ? 14 : 12,
-              fontWeight: FontWeight.w700,
-              color: hasData ? const Color(0xFF1D4ED8) : const Color(0xFF475569),
-            ),
-          ),
-          const SizedBox(height: 8),
-          if (!hasData)
-            Text(
-              emptyMessage,
-              style: TextStyle(
-                fontSize: isTablet ? 12 : 11,
-                color: const Color(0xFF64748B),
+          Row(
+            children: [
+              Icon(
+                hasData ? Icons.calculate_rounded : Icons.info_outline_rounded,
+                size: isTablet ? 20 : isMobile ? 16 : 18,
+                color: hasData ? const Color(0xFF1D4ED8) : const Color(0xFF64748B),
               ),
-            )
-          else
-            ...breakdown.map(
-              (line) => Padding(
-                padding: const EdgeInsets.only(bottom: 4),
+              SizedBox(width: isTablet ? 8 : isMobile ? 6 : 8),
+              Expanded(
                 child: Text(
-                  '• $line',
+                  title ?? 'Section Total',
                   style: TextStyle(
-                    fontSize: isTablet ? 12 : 11,
-                    color: const Color(0xFF1F2937),
+                    fontSize: isTablet ? 13 : isMobile ? 11 : 12,
+                    fontWeight: FontWeight.w600,
+                    color: hasData ? const Color(0xFF1D4ED8) : const Color(0xFF64748B),
+                    letterSpacing: 0.3,
                   ),
                 ),
               ),
+            ],
+          ),
+          SizedBox(height: isTablet ? 8 : isMobile ? 6 : 8),
+          Text(
+            _formatCurrency(total),
+            style: TextStyle(
+              fontSize: isTablet ? 20 : isMobile ? 16 : 18,
+              fontWeight: FontWeight.bold,
+              color: hasData ? const Color(0xFF1D4ED8) : const Color(0xFF475569),
+              letterSpacing: 0.5,
             ),
+          ),
+          if (hasData && breakdown.isNotEmpty) ...[
+            SizedBox(height: isTablet ? 12 : isMobile ? 8 : 10),
+            Divider(
+              height: 1,
+              thickness: 1,
+              color: const Color(0xFF93C5FD).withOpacity(0.3),
+            ),
+            SizedBox(height: isTablet ? 8 : isMobile ? 6 : 8),
+            ...breakdown.map(
+              (line) => Padding(
+                padding: EdgeInsets.only(bottom: isTablet ? 6 : isMobile ? 4 : 5),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      margin: EdgeInsets.only(
+                        top: isMobile ? 4 : 5,
+                        right: isTablet ? 8 : isMobile ? 6 : 8,
+                      ),
+                      width: isMobile ? 4 : 5,
+                      height: isMobile ? 4 : 5,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF3B82F6),
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    Expanded(
+                      child: Text(
+                        line,
+                        style: TextStyle(
+                          fontSize: isTablet ? 12 : isMobile ? 10 : 11,
+                          color: const Color(0xFF1F2937),
+                          height: 1.4,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ] else if (!hasData) ...[
+            SizedBox(height: isTablet ? 8 : isMobile ? 6 : 8),
+            Text(
+              emptyMessage,
+              style: TextStyle(
+                fontSize: isTablet ? 12 : isMobile ? 10 : 11,
+                color: const Color(0xFF64748B),
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+          ],
         ],
       ),
     );
   }
 
   Widget _buildArchitecturalFeeCalculator(bool isTablet) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 600;
+    
     return _buildFeeCard(
-      title: 'Annual Inspection Fees Calculator',
+      title: 'Annual Inspection Fees',
       isTablet: isTablet,
+      icon: Icons.architecture_rounded,
+      iconColor: const Color(0xFF8B5CF6),
       children: [
-        SwitchListTile.adaptive(
+        _buildCompactSwitchTile(
+          title: 'Floor Area Computation',
+          subtitle: 'Base fee based on total floor area',
           value: _architecturalFloorAreaEnabled,
           onChanged: _toggleArchitecturalFloorArea,
-          contentPadding: EdgeInsets.zero,
-          title: const Text('Include floor area computation'),
-          subtitle: const Text('Calculates the base fee based on total floor area.'),
-        ),
-        _buildNumericFeeField(
-          controller: _floorAreaController,
-          label: 'Floor area covered',
-          suffix: 'sq.m',
           isTablet: isTablet,
-          enabled: _architecturalFloorAreaEnabled,
-          helperText: 'Enter the total floor area in square meters.',
         ),
-        SwitchListTile.adaptive(
+        if (_architecturalFloorAreaEnabled)
+          _buildNumericFeeField(
+            controller: _floorAreaController,
+            label: 'Floor area covered',
+            suffix: 'sq.m',
+            isTablet: isTablet,
+            enabled: _architecturalFloorAreaEnabled,
+            helperText: 'Enter total floor area in square meters',
+          ),
+        SizedBox(height: isTablet ? 8 : isMobile ? 4 : 6),
+        _buildCompactSwitchTile(
+          title: 'Appendages / Projections',
+          subtitle: 'Balconies, marquees, canopies, etc.',
           value: _architecturalAppendageEnabled,
           onChanged: _toggleArchitecturalAppendage,
-          contentPadding: EdgeInsets.zero,
-          title: const Text('Include appendages / projections'),
-          subtitle: const Text('Enable if the building has balconies, marquees, canopies, etc.'),
-        ),
-        _buildNumericFeeField(
-          controller: _appendageCountController,
-          label: 'Appendages / projections',
-          suffix: 'units',
           isTablet: isTablet,
-          enabled: _architecturalAppendageEnabled,
-          helperText: 'For canopies, marquees, awnings, balconies, etc.',
         ),
+        if (_architecturalAppendageEnabled)
+          _buildNumericFeeField(
+            controller: _appendageCountController,
+            label: 'Number of appendages',
+            suffix: 'units',
+            isTablet: isTablet,
+            enabled: _architecturalAppendageEnabled,
+            helperText: 'For canopies, marquees, awnings, balconies',
+          ),
+        SizedBox(height: isTablet ? 8 : isMobile ? 4 : 6),
+        _buildCompactSwitchTile(
+          title: 'Manual Adjustments',
+          subtitle: 'Additional fees not captured automatically',
+          value: _architecturalManualEnabled,
+          onChanged: _toggleArchitecturalManual,
+          isTablet: isTablet,
+        ),
+        if (_architecturalManualEnabled)
+          _buildNumericFeeField(
+            controller: _architecturalAdditionalFeeController,
+            label: 'Additional fees',
+            suffix: '₱',
+            isTablet: isTablet,
+            enabled: _architecturalManualEnabled,
+            helperText: 'Enter any additional architectural fees',
+          ),
         _buildFeeSummaryWidget(
           total: _architecturalFeeTotal,
           breakdown: _architecturalFeeBreakdown,
           isTablet: isTablet,
+          title: 'Architectural Total',
+        ),
+      ],
+    );
+  }
+
+  Widget _buildLineGradeFeeCalculator(bool isTablet) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 600;
+    
+    return _buildFeeCard(
+      title: 'Line and Grade Inspection Fees',
+      isTablet: isTablet,
+      icon: Icons.straighten_rounded,
+      iconColor: const Color(0xFF3B82F6),
+      children: [
+        _buildCompactSwitchTile(
+          title: 'Manual Adjustments',
+          subtitle: 'Additional fees not captured automatically',
+          value: _lineGradeManualEnabled,
+          onChanged: _toggleLineGradeManual,
+          isTablet: isTablet,
+        ),
+        if (_lineGradeManualEnabled)
+          _buildNumericFeeField(
+            controller: _lineGradeAdditionalFeeController,
+            label: 'Additional fees',
+            suffix: '₱',
+            isTablet: isTablet,
+            enabled: _lineGradeManualEnabled,
+            helperText: 'Enter any additional line and grade fees',
+          ),
+        _buildFeeSummaryWidget(
+          total: _lineGradeFeeTotal,
+          breakdown: _lineGradeFeeBreakdown,
+          isTablet: isTablet,
+          title: 'Line and Grade Total',
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCivilStructuralFeeCalculator(bool isTablet) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 600;
+    
+    return _buildFeeCard(
+      title: 'Civil/Structural Inspection Fees',
+      isTablet: isTablet,
+      icon: Icons.construction_rounded,
+      iconColor: const Color(0xFFF59E0B),
+      children: [
+        _buildCompactSwitchTile(
+          title: 'Manual Adjustments',
+          subtitle: 'Additional fees not captured automatically',
+          value: _civilStructuralManualEnabled,
+          onChanged: _toggleCivilStructuralManual,
+          isTablet: isTablet,
+        ),
+        if (_civilStructuralManualEnabled)
+          _buildNumericFeeField(
+            controller: _civilStructuralAdditionalFeeController,
+            label: 'Additional fees',
+            suffix: '₱',
+            isTablet: isTablet,
+            enabled: _civilStructuralManualEnabled,
+            helperText: 'Enter any additional civil/structural fees',
+          ),
+        _buildFeeSummaryWidget(
+          total: _civilStructuralFeeTotal,
+          breakdown: _civilStructuralFeeBreakdown,
+          isTablet: isTablet,
+          title: 'Civil/Structural Total',
         ),
       ],
     );
   }
 
   Widget _buildSanitaryFeeCalculator(bool isTablet) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 600;
+    
     return _buildFeeCard(
-      title: 'Annual Plumbing Inspection Fee',
+      title: 'Plumbing Inspection Fee',
       isTablet: isTablet,
+      icon: Icons.plumbing_rounded,
+      iconColor: const Color(0xFF06B6D4),
       children: [
-        SwitchListTile.adaptive(
+        _buildCompactSwitchTile(
+          title: 'Plumbing Fixtures',
+          subtitle: 'Enable if fixtures were inspected',
           value: _sanitaryUnitsEnabled,
           onChanged: _toggleSanitaryUnits,
-          contentPadding: EdgeInsets.zero,
-          title: const Text('Include plumbing fixtures'),
-          subtitle: const Text('Enable if fixtures were inspected during the visit.'),
-        ),
-        _buildNumericFeeField(
-          controller: _sanitaryPlumbingUnitsController,
-          label: 'Plumbing fixtures inspected',
-          suffix: 'units',
           isTablet: isTablet,
-          enabled: _sanitaryUnitsEnabled,
-          helperText: 'Fee of ₱60.00 is applied per plumbing unit.',
         ),
+        if (_sanitaryUnitsEnabled)
+          _buildNumericFeeField(
+            controller: _sanitaryPlumbingUnitsController,
+            label: 'Number of fixtures',
+            suffix: 'units',
+            isTablet: isTablet,
+            enabled: _sanitaryUnitsEnabled,
+            helperText: 'Fee: ₱60.00 per plumbing unit',
+          ),
         _buildFeeSummaryWidget(
           total: _sanitaryFeeTotal,
           breakdown: _sanitaryFeeBreakdown,
           isTablet: isTablet,
+          title: 'Plumbing Total',
         ),
       ],
     );
   }
 
   Widget _buildElectricalFeeCalculator(bool isTablet) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 600;
+    
     return _buildFeeCard(
       title: 'Electrical Inspection Fees',
       isTablet: isTablet,
+      icon: Icons.electrical_services_rounded,
+      iconColor: const Color(0xFFEF4444),
       children: [
-        SwitchListTile.adaptive(
+        _buildCompactSwitchTile(
+          title: 'Connected Load',
+          subtitle: 'Progressive schedule based on kVA',
           value: _electricalConnectedLoadEnabled,
           onChanged: (value) => _toggleElectricalFlag('connected', value),
-          contentPadding: EdgeInsets.zero,
-          title: const Text('Total connected load'),
-          subtitle: const Text('Progressive schedule based on kVA.'),
-        ),
-        _buildNumericFeeField(
-          controller: _connectedLoadController,
-          label: 'Total connected load',
-          suffix: 'kVA',
           isTablet: isTablet,
-          enabled: _electricalConnectedLoadEnabled,
-          helperText: 'Automatic computation follows the progressive schedule.',
         ),
-        SwitchListTile.adaptive(
+        if (_electricalConnectedLoadEnabled)
+          _buildNumericFeeField(
+            controller: _connectedLoadController,
+            label: 'Total connected load',
+            suffix: 'kVA',
+            isTablet: isTablet,
+            enabled: _electricalConnectedLoadEnabled,
+            helperText: 'Automatic progressive schedule computation',
+          ),
+        SizedBox(height: isTablet ? 8 : isMobile ? 4 : 6),
+        _buildCompactSwitchTile(
+          title: 'Transformer / UPS / Generator',
+          subtitle: 'Auxiliary power equipment capacity',
           value: _electricalCapacityEnabled,
           onChanged: (value) => _toggleElectricalFlag('capacity', value),
-          contentPadding: EdgeInsets.zero,
-          title: const Text('Transformer / UPS / generator capacity'),
-          subtitle: const Text('Enable if auxiliary power equipment is present.'),
-        ),
-        _buildNumericFeeField(
-          controller: _transformerCapacityController,
-          label: 'Total transformer / UPS / generator capacity',
-          suffix: 'kVA',
           isTablet: isTablet,
-          enabled: _electricalCapacityEnabled,
         ),
-        SwitchListTile.adaptive(
+        if (_electricalCapacityEnabled)
+          _buildNumericFeeField(
+            controller: _transformerCapacityController,
+            label: 'Total capacity',
+            suffix: 'kVA',
+            isTablet: isTablet,
+            enabled: _electricalCapacityEnabled,
+            helperText: 'Transformer, UPS, or generator capacity',
+          ),
+        SizedBox(height: isTablet ? 8 : isMobile ? 4 : 6),
+        _buildCompactSwitchTile(
+          title: 'Power Supply Poles',
+          subtitle: 'Owner-installed power poles',
           value: _electricalPolesEnabled,
           onChanged: (value) => _toggleElectricalFlag('poles', value),
-          contentPadding: EdgeInsets.zero,
-          title: const Text('Power supply poles'),
-        ),
-        _buildNumericFeeField(
-          controller: _powerPoleCountController,
-          label: 'Power supply poles installed',
-          suffix: 'poles',
           isTablet: isTablet,
-          enabled: _electricalPolesEnabled,
         ),
-        SwitchListTile.adaptive(
+        if (_electricalPolesEnabled)
+          _buildNumericFeeField(
+            controller: _powerPoleCountController,
+            label: 'Number of poles',
+            suffix: 'poles',
+            isTablet: isTablet,
+            enabled: _electricalPolesEnabled,
+          ),
+        SizedBox(height: isTablet ? 8 : isMobile ? 4 : 6),
+        _buildCompactSwitchTile(
+          title: 'Guying Attachments',
+          subtitle: 'Attachments and supports',
           value: _electricalAttachmentsEnabled,
           onChanged: (value) => _toggleElectricalFlag('attachments', value),
-          contentPadding: EdgeInsets.zero,
-          title: const Text('Guying attachments / supports'),
-        ),
-        _buildNumericFeeField(
-          controller: _guyingAttachmentCountController,
-          label: 'Guying attachments / supports',
-          suffix: 'attachments',
           isTablet: isTablet,
-          enabled: _electricalAttachmentsEnabled,
         ),
-        SwitchListTile.adaptive(
+        if (_electricalAttachmentsEnabled)
+          _buildNumericFeeField(
+            controller: _guyingAttachmentCountController,
+            label: 'Number of attachments',
+            suffix: 'attachments',
+            isTablet: isTablet,
+            enabled: _electricalAttachmentsEnabled,
+          ),
+        SizedBox(height: isTablet ? 8 : isMobile ? 4 : 6),
+        _buildCompactSwitchTile(
+          title: 'Manual Adjustments',
+          subtitle: 'Additional fees not captured automatically',
           value: _electricalManualEnabled,
           onChanged: (value) => _toggleElectricalFlag('manual', value),
-          contentPadding: EdgeInsets.zero,
-          title: const Text('Manual adjustments / others'),
-        ),
-        _buildNumericFeeField(
-          controller: _electricalAdditionalFeeController,
-          label: 'Manual adjustments / others',
-          suffix: '₱',
           isTablet: isTablet,
-          enabled: _electricalManualEnabled,
-          helperText: 'Use for any electrical fees not captured automatically.',
         ),
+        if (_electricalManualEnabled)
+          _buildNumericFeeField(
+            controller: _electricalAdditionalFeeController,
+            label: 'Additional fees',
+            suffix: '₱',
+            isTablet: isTablet,
+            enabled: _electricalManualEnabled,
+            helperText: 'Enter any additional electrical fees',
+          ),
         _buildFeeSummaryWidget(
           total: _electricalFeeTotal,
           breakdown: _electricalFeeBreakdown,
           isTablet: isTablet,
+          title: 'Electrical Total',
         ),
       ],
     );
   }
 
   Widget _buildElectronicsFeeCalculator(bool isTablet) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 600;
     final List<Widget> children = [];
+    
     for (final entry in _electronicsGroupTitles.entries) {
       final groupFields = _electronicsFeeFieldConfigs.where((config) => config.group == entry.key).toList();
       if (groupFields.isEmpty) continue;
+      
       children.add(
-        SwitchListTile.adaptive(
+        _buildCompactSwitchTile(
+          title: entry.value,
+          subtitle: 'Enable to enter devices under this category',
           value: _electronicsGroupEnabled[entry.key]!,
           onChanged: (value) => _toggleElectronicsGroup(entry.key, value),
-          contentPadding: EdgeInsets.zero,
-          title: Text(entry.value),
-          subtitle: const Text('Enable to enter devices under this category.'),
+          isTablet: isTablet,
         ),
       );
+      
       if (_electronicsGroupEnabled[entry.key]!) {
-        children.addAll(
-          groupFields.map(
-            (config) => _buildNumericFeeField(
-              controller: _electronicsFeeControllers[config.key]!,
-              label: config.label,
-              suffix: config.unitLabel,
-              isTablet: isTablet,
-              enabled: true,
-              helperText: config.helperText,
+        children.add(
+          Container(
+            margin: EdgeInsets.only(
+              left: isMobile ? 8 : 12,
+              bottom: isTablet ? 8 : isMobile ? 6 : 7,
+            ),
+            padding: EdgeInsets.all(isTablet ? 12 : isMobile ? 8 : 10),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF9FAFB),
+              borderRadius: BorderRadius.circular(isMobile ? 8 : 10),
+              border: Border.all(
+                color: const Color(0xFFE2E8F0),
+                width: 1,
+              ),
+            ),
+            child: Column(
+              children: groupFields.map(
+                (config) => _buildNumericFeeField(
+                  controller: _electronicsFeeControllers[config.key]!,
+                  label: config.label,
+                  suffix: config.unitLabel,
+                  isTablet: isTablet,
+                  enabled: true,
+                  helperText: config.helperText,
+                ),
+              ).toList(),
             ),
           ),
         );
       }
+      
+      children.add(SizedBox(height: isTablet ? 8 : isMobile ? 4 : 6));
     }
 
     children.add(
-      SwitchListTile.adaptive(
+      _buildCompactSwitchTile(
+        title: 'Manual Adjustments',
+        subtitle: 'Additional electronics-related fees',
         value: _electronicsManualEnabled,
         onChanged: _toggleElectronicsManual,
-        contentPadding: EdgeInsets.zero,
-        title: const Text('Manual electronics adjustments'),
+        isTablet: isTablet,
       ),
     );
 
-    children.add(
-      _buildNumericFeeField(
-        controller: _electronicsAdditionalFeeController,
-        label: 'Manual electronics adjustments',
-        suffix: '₱',
-        isTablet: isTablet,
-        enabled: _electronicsManualEnabled,
-        helperText: 'Enter any additional electronics-related fees.',
-      ),
-    );
+    if (_electronicsManualEnabled)
+      children.add(
+        _buildNumericFeeField(
+          controller: _electronicsAdditionalFeeController,
+          label: 'Additional fees',
+          suffix: '₱',
+          isTablet: isTablet,
+          enabled: _electronicsManualEnabled,
+          helperText: 'Enter any additional electronics fees',
+        ),
+      );
 
     children.add(
       _buildFeeSummaryWidget(
         total: _electronicsFeeTotal,
         breakdown: _electronicsFeeBreakdown,
         isTablet: isTablet,
+        title: 'Electronics Total',
       ),
     );
 
@@ -2137,85 +2986,118 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
             ? []
             : _electricalCombinedBreakdown,
         isTablet: isTablet,
+        title: 'Combined Electrical & Electronics Total',
         emptyMessage: 'No electrical / electronics fees computed yet.',
       ),
     );
 
     return _buildFeeCard(
-      title: 'Electronics & Low Voltage Systems',
+      title: 'Electronics & Low Voltage',
       isTablet: isTablet,
+      icon: Icons.devices_rounded,
+      iconColor: const Color(0xFF8B5CF6),
       children: children,
     );
   }
 
   Widget _buildMechanicalFeeCalculator(bool isTablet) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 600;
     final List<Widget> children = [];
 
     for (final entry in _mechanicalGroupTitles.entries) {
       final groupFields = _mechanicalFeeFieldConfigs.where((config) => config.group == entry.key).toList();
       if (groupFields.isEmpty) continue;
+      
       children.add(
-        SwitchListTile.adaptive(
+        _buildCompactSwitchTile(
+          title: entry.value,
+          subtitle: 'Enable to capture equipment under this category',
           value: _mechanicalGroupEnabled[entry.key]!,
           onChanged: (value) => _toggleMechanicalGroup(entry.key, value),
-          contentPadding: EdgeInsets.zero,
-          title: Text(entry.value),
-          subtitle: const Text('Enable to capture equipment under this category.'),
+          isTablet: isTablet,
         ),
       );
+      
       if (_mechanicalGroupEnabled[entry.key]!) {
-        children.addAll(
-          groupFields.map(
-            (config) => _buildNumericFeeField(
-              controller: _mechanicalFeeControllers[config.key]!,
-              label: config.label,
-              suffix: config.unitLabel,
-              isTablet: isTablet,
-              enabled: true,
-              helperText: config.helperText,
+        children.add(
+          Container(
+            margin: EdgeInsets.only(
+              left: isMobile ? 8 : 12,
+              bottom: isTablet ? 8 : isMobile ? 6 : 7,
+            ),
+            padding: EdgeInsets.all(isTablet ? 12 : isMobile ? 8 : 10),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF9FAFB),
+              borderRadius: BorderRadius.circular(isMobile ? 8 : 10),
+              border: Border.all(
+                color: const Color(0xFFE2E8F0),
+                width: 1,
+              ),
+            ),
+            child: Column(
+              children: groupFields.map(
+                (config) => _buildNumericFeeField(
+                  controller: _mechanicalFeeControllers[config.key]!,
+                  label: config.label,
+                  suffix: config.unitLabel,
+                  isTablet: isTablet,
+                  enabled: true,
+                  helperText: config.helperText,
+                ),
+              ).toList(),
             ),
           ),
         );
       }
+      
+      children.add(SizedBox(height: isTablet ? 8 : isMobile ? 4 : 6));
     }
 
     children.add(
-      SwitchListTile.adaptive(
+      _buildCompactSwitchTile(
+        title: 'Manual Adjustments',
+        subtitle: 'Additional or miscellaneous mechanical charges',
         value: _mechanicalManualEnabled,
         onChanged: _toggleMechanicalManual,
-        contentPadding: EdgeInsets.zero,
-        title: const Text('Manual mechanical adjustments'),
+        isTablet: isTablet,
       ),
     );
 
-    children.add(
-      _buildNumericFeeField(
-        controller: _mechanicalAdditionalFeeController,
-        label: 'Manual mechanical adjustments',
-        suffix: '₱',
-        isTablet: isTablet,
-        enabled: _mechanicalManualEnabled,
-        helperText: 'Enter any additional or miscellaneous mechanical charges.',
-      ),
-    );
+    if (_mechanicalManualEnabled)
+      children.add(
+        _buildNumericFeeField(
+          controller: _mechanicalAdditionalFeeController,
+          label: 'Additional fees',
+          suffix: '₱',
+          isTablet: isTablet,
+          enabled: _mechanicalManualEnabled,
+          helperText: 'Enter any additional mechanical charges',
+        ),
+      );
 
     children.add(
       _buildFeeSummaryWidget(
         total: _mechanicalFeeTotal,
         breakdown: _mechanicalFeeBreakdown,
         isTablet: isTablet,
+        title: 'Mechanical Total',
       ),
     );
 
     return _buildFeeCard(
       title: 'Mechanical Inspection Fees',
       isTablet: isTablet,
+      icon: Icons.build_rounded,
+      iconColor: const Color(0xFF10B981),
       children: children,
     );
   }
 
   void _recomputeAllFees() {
     _computeArchitecturalFees();
+    _computeLineGradeFees();
+    _computeCivilStructuralFees();
     _computeSanitaryFees();
     _computeElectricalFees();
     _computeElectronicsFees();
@@ -2234,9 +3116,19 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
     return value.toStringAsFixed(2).replaceAll(RegExp(r'0+$'), '').replaceAll(RegExp(r'\.$'), '');
   }
 
-  bool _isAutoGeneratedAssessment(String text) => text.trim().startsWith('Total Fees:');
+  bool _isAutoGeneratedAssessment(String text) {
+    // Check if text is just a currency amount (starts with ₱)
+    return text.trim().startsWith('₱') || text.trim().startsWith('Total Fees:');
+  }
 
-  void _updateSectionAssessment(String section, double total, String summary) {
+  bool _isAutoGeneratedRemarks(String text) {
+    // Check if remarks contain fee breakdown details
+    return text.contains('sq.m') || text.contains('units') || text.contains('kVA') || 
+           text.contains('tons') || text.contains('kW') || text.contains('poles') ||
+           text.contains('attachments') || text.contains('ports') || text.contains('outlets');
+  }
+
+  void _updateSectionAssessment(String section, double total) {
     final controller = _assessmentControllers[section];
     if (controller == null) return;
 
@@ -2247,13 +3139,27 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
       return;
     }
 
-    final buffer = StringBuffer('Total Fees: ${_formatCurrency(total)}');
-    if (summary.trim().isNotEmpty) {
-      buffer.writeln();
-      buffer.write(summary.trim());
+    // Only set the total fee amount in assessment
+    final newText = _formatCurrency(total);
+    if (controller.text != newText) {
+      controller.text = newText;
+    }
+  }
+
+  void _updateSectionRemarks(String section, String breakdown) {
+    final controller = _remarksControllers[section];
+    if (controller == null) return;
+
+    if (breakdown.trim().isEmpty) {
+      // Only clear if it was auto-generated
+      if (_isAutoGeneratedRemarks(controller.text)) {
+        controller.clear();
+      }
+      return;
     }
 
-    final newText = buffer.toString();
+    // Set the breakdown details in remarks
+    final newText = breakdown.trim();
     if (controller.text != newText) {
       controller.text = newText;
     }
@@ -2280,10 +3186,14 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
         ? int.tryParse(_appendageCountController.text) ?? 0
         : 0;
 
+    final double additionalFee = _architecturalManualEnabled
+        ? double.tryParse(_architecturalAdditionalFeeController.text) ?? 0
+        : 0;
+
     final double floorFee = _calculateFloorAreaFee(floorArea);
     final double appendageFee = appendages > 0 ? appendages * 150.0 : 0.0;
 
-    final double total = floorFee + appendageFee;
+    final double total = floorFee + appendageFee + additionalFee;
     final List<String> breakdown = [];
     if (floorFee > 0) {
       breakdown.add(
@@ -2295,13 +3205,61 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
         'Appendages ($appendages units): ${_formatCurrency(appendageFee)}',
       );
     }
+    if (additionalFee > 0) {
+      breakdown.add('Additional fees: ${_formatCurrency(additionalFee)}');
+    }
 
     setState(() {
       _architecturalFeeTotal = total;
       _architecturalFeeBreakdown = breakdown;
     });
 
-    _updateSectionAssessment('Architectural', total, breakdown.join('\n'));
+    _updateSectionAssessment('Architectural', total);
+    _updateSectionRemarks('Architectural', breakdown.join('\n'));
+  }
+
+  void _computeLineGradeFees() {
+    final double additionalFee = _lineGradeManualEnabled
+        ? double.tryParse(_lineGradeAdditionalFeeController.text) ?? 0
+        : 0;
+
+    final double total = additionalFee;
+    final List<String> breakdown = [];
+    if (additionalFee > 0) {
+      breakdown.add('Additional fees: ${_formatCurrency(additionalFee)}');
+    }
+
+    setState(() {
+      _lineGradeFeeTotal = total;
+      _lineGradeFeeBreakdown = breakdown;
+    });
+
+    _updateSectionAssessment('Line and Grade', total);
+    if (breakdown.isNotEmpty) {
+      _updateSectionRemarks('Line and Grade', breakdown.join('\n'));
+    }
+  }
+
+  void _computeCivilStructuralFees() {
+    final double additionalFee = _civilStructuralManualEnabled
+        ? double.tryParse(_civilStructuralAdditionalFeeController.text) ?? 0
+        : 0;
+
+    final double total = additionalFee;
+    final List<String> breakdown = [];
+    if (additionalFee > 0) {
+      breakdown.add('Additional fees: ${_formatCurrency(additionalFee)}');
+    }
+
+    setState(() {
+      _civilStructuralFeeTotal = total;
+      _civilStructuralFeeBreakdown = breakdown;
+    });
+
+    _updateSectionAssessment('Civil/Structural', total);
+    if (breakdown.isNotEmpty) {
+      _updateSectionRemarks('Civil/Structural', breakdown.join('\n'));
+    }
   }
 
   void _computeSanitaryFees() {
@@ -2319,7 +3277,8 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
       _sanitaryFeeBreakdown = breakdown;
     });
 
-    _updateSectionAssessment('Sanitary/Plumbing', total, breakdown.join('\n'));
+    _updateSectionAssessment('Sanitary/Plumbing', total);
+    _updateSectionRemarks('Sanitary/Plumbing', breakdown.join('\n'));
   }
 
   double _calculateConnectedLoadFee(double load) {
@@ -2478,7 +3437,8 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
       _mechanicalFeeBreakdown = breakdown;
     });
 
-    _updateSectionAssessment('Mechanical', total, breakdown.join('\n'));
+    _updateSectionAssessment('Mechanical', total);
+    _updateSectionRemarks('Mechanical', breakdown.join('\n'));
   }
 
   void _updateElectricalSectionAssessment() {
@@ -2503,61 +3463,101 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
       _electricalCombinedBreakdown = combined;
     });
 
-    _updateSectionAssessment('Electrical/Electronics', total, combined.join('\n'));
+    // Update assessment with separated totals instead of combined total
+    final controller = _assessmentControllers['Electrical/Electronics'];
+    if (controller != null) {
+      final List<String> assessmentParts = [];
+      
+      // Use consistent label width for alignment (12 characters for "Electronics:")
+      const labelWidth = 12;
+      
+      if (_electricalFeeTotal > 0) {
+        final label = '';
+        final paddedLabel = label.padRight(labelWidth);
+        assessmentParts.add('$paddedLabel${_formatCurrency(_electricalFeeTotal)}');
+      }
+      
+      if (_electronicsFeeTotal > 0) {
+        final label = '\n';
+        final paddedLabel = label.padRight(labelWidth);
+        assessmentParts.add('$paddedLabel${_formatCurrency(_electronicsFeeTotal)}');
+      }
+      
+      if (assessmentParts.isEmpty) {
+        if (_isAutoGeneratedAssessment(controller.text)) {
+          controller.clear();
+        }
+      } else {
+        final newText = assessmentParts.join('\n');
+        if (controller.text != newText) {
+          controller.text = newText;
+        }
+      }
+    }
+    
+    _updateSectionRemarks('Electrical/Electronics', combined.join('\n'));
   }
 
-  Widget _buildSectionSelection(BuildContext context, bool isTablet) {
+  Widget _buildSectionSelection(BuildContext context, bool isTablet, bool isMobile) {
     return Container(
       width: double.infinity,
-      padding: EdgeInsets.all(isTablet ? 24 : 20),
+      padding: EdgeInsets.all(isTablet ? 24 : isMobile ? 12 : 20),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE2E8F0), width: 1),
+        borderRadius: BorderRadius.circular(isMobile ? 10 : 16),
+        border: Border.all(
+          color: const Color(0xFFE2E8F0),
+          width: isMobile ? 1 : 1.5,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
           Row(
             children: [
               Container(
-                padding: const EdgeInsets.all(8),
+                padding: EdgeInsets.all(isMobile ? 6 : 8),
                 decoration: BoxDecoration(
                   color: const Color(0xFF3B82F6),
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(isMobile ? 6 : 8),
                 ),
-                child: const Icon(
+                child: Icon(
                   Icons.checklist_rounded,
                   color: Colors.white,
-                  size: 20,
+                  size: isTablet ? 20 : isMobile ? 16 : 18,
                 ),
               ),
-              const SizedBox(width: 12),
-              Text(
-                'Select Inspection Sections',
-                style: TextStyle(
-                  fontSize: isTablet ? 18 : 16,
-                  fontWeight: FontWeight.bold,
-                  color: const Color(0xFF2D3748),
+              SizedBox(width: isMobile ? 10 : 12),
+              Expanded(
+                child: Text(
+                  isMobile ? 'Select Sections' : 'Select Inspection Sections',
+                  style: TextStyle(
+                    fontSize: isTablet ? 18 : isMobile ? 14 : 16,
+                    fontWeight: FontWeight.bold,
+                    color: const Color(0xFF2D3748),
+                  ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 16),
-          Text(
-            'Choose which sections you want to inspect:',
-            style: TextStyle(
-              fontSize: isTablet ? 14 : 12,
-              color: const Color(0xFF6B7280),
+          if (!isMobile) ...[
+            SizedBox(height: isMobile ? 8 : 12),
+            Text(
+              'Choose which sections you want to inspect:',
+              style: TextStyle(
+                fontSize: isTablet ? 14 : 12,
+                color: const Color(0xFF6B7280),
+              ),
             ),
-          ),
-          const SizedBox(height: 16),
+          ],
+          SizedBox(height: isMobile ? 8 : 14),
           Wrap(
-            spacing: 12,
-            runSpacing: 12,
+            spacing: isMobile ? 6 : 12,
+            runSpacing: isMobile ? 6 : 12,
             children: _selectedSections.isNotEmpty 
                 ? _selectedSections.keys.map((section) {
-                    return _buildSectionChip(section, isTablet);
+                    return _buildSectionChip(section, isTablet, isMobile);
                   }).toList()
                 : [],
           ),
@@ -2566,7 +3566,7 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
     );
   }
 
-  Widget _buildSectionChip(String section, bool isTablet) {
+  Widget _buildSectionChip(String section, bool isTablet, bool isMobile) {
     final isSelected = _selectedSections[section] ?? false;
     final sectionData = _getSectionData(section);
     
@@ -2583,15 +3583,15 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
       },
       child: Container(
         padding: EdgeInsets.symmetric(
-          horizontal: isTablet ? 16 : 12,
-          vertical: isTablet ? 12 : 8,
+          horizontal: isTablet ? 16 : isMobile ? 10 : 12,
+          vertical: isTablet ? 12 : isMobile ? 8 : 10,
         ),
         decoration: BoxDecoration(
           color: isSelected ? sectionData['color'] : Colors.white,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(isMobile ? 8 : 12),
           border: Border.all(
             color: isSelected ? sectionData['color'] : const Color(0xFFE2E8F0),
-            width: 2,
+            width: isMobile ? 1.5 : 2,
           ),
         ),
         child: Row(
@@ -2600,15 +3600,19 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
             Icon(
               sectionData['icon'],
               color: isSelected ? Colors.white : sectionData['color'],
-              size: isTablet ? 20 : 18,
+              size: isTablet ? 20 : isMobile ? 16 : 18,
             ),
-            const SizedBox(width: 8),
-            Text(
-              section,
-              style: TextStyle(
-                fontSize: isTablet ? 14 : 12,
-                fontWeight: FontWeight.w600,
-                color: isSelected ? Colors.white : const Color(0xFF374151),
+            SizedBox(width: isMobile ? 6 : 8),
+            Flexible(
+              child: Text(
+                section,
+                style: TextStyle(
+                  fontSize: isTablet ? 14 : isMobile ? 11 : 12,
+                  fontWeight: FontWeight.w600,
+                  color: isSelected ? Colors.white : const Color(0xFF374151),
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
             ),
           ],
@@ -2617,7 +3621,7 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
     );
   }
 
-  List<Widget> _buildSelectedSections(BuildContext context, bool isTablet) {
+  List<Widget> _buildSelectedSections(BuildContext context, bool isTablet, bool isMobile) {
     if (_selectedSections.isEmpty) {
       return [];
     }
@@ -2631,33 +3635,37 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
       return [
         Container(
           width: double.infinity,
-          padding: EdgeInsets.all(isTablet ? 24 : 20),
+          padding: EdgeInsets.all(isTablet ? 24 : isMobile ? 16 : 20),
           decoration: BoxDecoration(
             color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: const Color(0xFFE2E8F0), width: 1),
+            borderRadius: BorderRadius.circular(isMobile ? 10 : 16),
+            border: Border.all(
+              color: const Color(0xFFE2E8F0),
+              width: isMobile ? 1 : 1.5,
+            ),
           ),
           child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
               Icon(
                 Icons.info_outline_rounded,
                 color: const Color(0xFF6B7280),
-                size: isTablet ? 48 : 40,
+                size: isTablet ? 48 : isMobile ? 36 : 40,
               ),
-              const SizedBox(height: 16),
+              SizedBox(height: isMobile ? 12 : 16),
               Text(
                 'No sections selected',
                 style: TextStyle(
-                  fontSize: isTablet ? 18 : 16,
+                  fontSize: isTablet ? 18 : isMobile ? 14 : 16,
                   fontWeight: FontWeight.w600,
                   color: const Color(0xFF374151),
                 ),
               ),
-              const SizedBox(height: 6),
+              SizedBox(height: isMobile ? 4 : 6),
               Text(
                 'Please select at least one inspection section above.',
                 style: TextStyle(
-                  fontSize: isTablet ? 14 : 12,
+                  fontSize: isTablet ? 14 : isMobile ? 11 : 12,
                   color: const Color(0xFF6B7280),
                 ),
                 textAlign: TextAlign.center,
@@ -2680,15 +3688,17 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
         
         final sectionData = _getSectionData(section);
         return Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
             _buildDynamicSectionCard(
               context,
               isTablet,
+              isMobile,
               section,
               sectionData['icon'],
               sectionData['color'],
             ),
-            const SizedBox(height: 16),
+            SizedBox(height: isMobile ? 12 : 16),
           ],
         );
       } catch (e) {
@@ -2741,41 +3751,46 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
   Widget _buildDynamicSectionCard(
     BuildContext context,
     bool isTablet,
+    bool isMobile,
     String title,
     IconData icon,
     Color color,
   ) {
     return Container(
       width: double.infinity,
-      padding: EdgeInsets.all(isTablet ? 24 : 20),
+      padding: EdgeInsets.all(isTablet ? 24 : isMobile ? 12 : 20),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE2E8F0), width: 1),
+        borderRadius: BorderRadius.circular(isMobile ? 10 : 16),
+        border: Border.all(
+          color: const Color(0xFFE2E8F0),
+          width: isMobile ? 1 : 1.5,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
           Row(
             children: [
               Container(
-                padding: const EdgeInsets.all(8),
+                padding: EdgeInsets.all(isMobile ? 6 : 8),
                 decoration: BoxDecoration(
                   color: color,
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(isMobile ? 6 : 8),
                 ),
                 child: Icon(
                   icon,
                   color: Colors.white,
-                  size: 20,
+                  size: isTablet ? 20 : isMobile ? 16 : 18,
                 ),
               ),
-              const SizedBox(width: 12),
+              SizedBox(width: isMobile ? 10 : 12),
               Expanded(
                 child: Text(
                   title,
                   style: TextStyle(
-                    fontSize: isTablet ? 18 : 16,
+                    fontSize: isTablet ? 18 : isMobile ? 14 : 16,
                     fontWeight: FontWeight.bold,
                     color: const Color(0xFF2D3748),
                   ),
@@ -2783,136 +3798,164 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
               ),
             ],
           ),
-          const SizedBox(height: 20),
+          SizedBox(height: isMobile ? 12 : 16),
           
           // Status Selection
-          _buildStatusSelection(title, isTablet, color),
-          const SizedBox(height: 20),
+          _buildStatusSelection(title, isTablet, isMobile, color),
+          SizedBox(height: isMobile ? 12 : 16),
           
           if (title == 'Architectural') ...[
             _buildArchitecturalFeeCalculator(isTablet),
-            const SizedBox(height: 20),
+            SizedBox(height: isMobile ? 12 : 16),
+          ],
+          if (title == 'Line and Grade') ...[
+            _buildLineGradeFeeCalculator(isTablet),
+            SizedBox(height: isMobile ? 12 : 16),
+          ],
+          if (title == 'Civil/Structural') ...[
+            _buildCivilStructuralFeeCalculator(isTablet),
+            SizedBox(height: isMobile ? 12 : 16),
+            // Map for Civil/Structural section
+            _buildMapSection(title, isTablet, isMobile, color),
+            SizedBox(height: isMobile ? 12 : 16),
           ],
           if (title == 'Sanitary/Plumbing') ...[
             _buildSanitaryFeeCalculator(isTablet),
-            const SizedBox(height: 20),
+            SizedBox(height: isMobile ? 12 : 16),
           ],
           if (title == 'Electrical/Electronics') ...[
             _buildElectricalFeeCalculator(isTablet),
             _buildElectronicsFeeCalculator(isTablet),
-            const SizedBox(height: 20),
+            SizedBox(height: isMobile ? 12 : 16),
           ],
           if (title == 'Mechanical') ...[
             _buildMechanicalFeeCalculator(isTablet),
-            const SizedBox(height: 20),
-          ],
-
-          // Map for Civil/Structural section
-          if (title == 'Civil/Structural') ...[
-            _buildMapSection(title, isTablet, color),
-            const SizedBox(height: 20),
+            SizedBox(height: isMobile ? 12 : 16),
           ],
           
           // Remarks Field
           Text(
             'Remarks',
             style: TextStyle(
-              fontSize: isTablet ? 14 : 12,
+              fontSize: isTablet ? 14 : isMobile ? 12 : 13,
               fontWeight: FontWeight.w600,
               color: const Color(0xFF374151),
             ),
           ),
-          const SizedBox(height: 6),
+          SizedBox(height: isMobile ? 4 : 6),
           TextFormField(
             controller: _remarksControllers[title],
-            maxLines: 3,
+            maxLines: isMobile ? 2 : 3,
+            style: TextStyle(
+              fontSize: isTablet ? 15 : isMobile ? 13 : 14,
+            ),
             decoration: InputDecoration(
-              hintText: 'Enter remarks for $title...',
+              hintText: isMobile ? 'Enter remarks...' : 'Enter remarks for $title...',
+              hintStyle: TextStyle(
+                fontSize: isTablet ? 14 : isMobile ? 12 : 13,
+              ),
               border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: Color(0xFFD1D5DB)),
+                borderRadius: BorderRadius.circular(isMobile ? 6 : 8),
+                borderSide: BorderSide(
+                  color: const Color(0xFFD1D5DB),
+                  width: isMobile ? 1 : 1.5,
+                ),
               ),
               focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(isMobile ? 6 : 8),
                 borderSide: BorderSide(color: color, width: 2),
               ),
-              contentPadding: const EdgeInsets.all(12),
+              contentPadding: EdgeInsets.all(isTablet ? 12 : isMobile ? 10 : 12),
+              isDense: true,
             ),
           ),
-          const SizedBox(height: 16),
+          SizedBox(height: isMobile ? 10 : 14),
           
           // Assessment Field
           Text(
             'Assessment',
             style: TextStyle(
-              fontSize: isTablet ? 14 : 12,
+              fontSize: isTablet ? 14 : isMobile ? 12 : 13,
               fontWeight: FontWeight.w600,
               color: const Color(0xFF374151),
             ),
           ),
-          const SizedBox(height: 6),
+          SizedBox(height: isMobile ? 4 : 6),
           TextFormField(
             controller: _assessmentControllers[title],
-            maxLines: 3,
+            maxLines: isMobile ? 2 : 3,
+            style: TextStyle(
+              fontSize: isTablet ? 15 : isMobile ? 13 : 14,
+            ),
             decoration: InputDecoration(
-              hintText: 'Enter assessment for $title...',
+              hintText: isMobile ? 'Enter assessment...' : 'Enter assessment for $title...',
+              hintStyle: TextStyle(
+                fontSize: isTablet ? 14 : isMobile ? 12 : 13,
+              ),
               border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: Color(0xFFD1D5DB)),
+                borderRadius: BorderRadius.circular(isMobile ? 6 : 8),
+                borderSide: BorderSide(
+                  color: const Color(0xFFD1D5DB),
+                  width: isMobile ? 1 : 1.5,
+                ),
               ),
               focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(isMobile ? 6 : 8),
                 borderSide: BorderSide(color: color, width: 2),
               ),
-              contentPadding: const EdgeInsets.all(12),
+              contentPadding: EdgeInsets.all(isTablet ? 12 : isMobile ? 10 : 12),
+              isDense: true,
             ),
           ),
-          const SizedBox(height: 20),
+          SizedBox(height: isMobile ? 12 : 16),
           
           // Media Capture Section
-          _buildMediaCaptureSection(title, isTablet, color),
+          _buildMediaCaptureSection(title, isTablet, isMobile, color),
         ],
       ),
     );
   }
 
-  Widget _buildStatusSelection(String section, bool isTablet, Color color) {
+  Widget _buildStatusSelection(String section, bool isTablet, bool isMobile, Color color) {
     final currentStatus = _sectionStatus[section] ?? 'not_passed';
     
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
       children: [
         Text(
           'Status',
           style: TextStyle(
-            fontSize: isTablet ? 14 : 12,
+            fontSize: isTablet ? 14 : isMobile ? 12 : 13,
             fontWeight: FontWeight.w600,
             color: const Color(0xFF374151),
           ),
         ),
-        const SizedBox(height: 6),
-        Row(
+        SizedBox(height: isMobile ? 4 : 6),
+        Wrap(
+          spacing: isMobile ? 6 : 8,
+          runSpacing: isMobile ? 6 : 8,
           children: [
             _buildStatusChip(
-              'Not Passed',
+              isMobile ? 'Not Passed' : 'Not Passed',
               'not_passed',
               currentStatus,
               const Color(0xFFEF4444),
               Icons.close_rounded,
               isTablet,
+              isMobile,
               () => _updateStatus(section, 'not_passed'),
             ),
-            const SizedBox(width: 8),
             _buildStatusChip(
-              'In Progress',
+              isMobile ? 'In Progress' : 'In Progress',
               'in_progress',
               currentStatus,
               const Color(0xFFF59E0B),
               Icons.hourglass_empty_rounded,
               isTablet,
+              isMobile,
               () => _updateStatus(section, 'in_progress'),
             ),
-            const SizedBox(width: 8),
             _buildStatusChip(
               'Passed',
               'passed',
@@ -2920,6 +3963,7 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
               const Color(0xFF10B981),
               Icons.check_circle_rounded,
               isTablet,
+              isMobile,
               () => _updateStatus(section, 'passed'),
             ),
           ],
@@ -2935,6 +3979,7 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
     Color color,
     IconData icon,
     bool isTablet,
+    bool isMobile,
     VoidCallback onTap,
   ) {
     final isSelected = currentStatus == value;
@@ -2943,15 +3988,15 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
       onTap: onTap,
       child: Container(
         padding: EdgeInsets.symmetric(
-          horizontal: isTablet ? 12 : 8,
-          vertical: isTablet ? 8 : 6,
+          horizontal: isTablet ? 12 : isMobile ? 8 : 10,
+          vertical: isTablet ? 8 : isMobile ? 6 : 7,
         ),
         decoration: BoxDecoration(
           color: isSelected ? color : Colors.white,
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(isMobile ? 6 : 8),
           border: Border.all(
             color: isSelected ? color : const Color(0xFFE2E8F0),
-            width: 1,
+            width: isMobile ? 1 : 1.5,
           ),
         ),
         child: Row(
@@ -2960,15 +4005,19 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
             Icon(
               icon,
               color: isSelected ? Colors.white : color,
-              size: isTablet ? 16 : 14,
+              size: isTablet ? 16 : isMobile ? 14 : 15,
             ),
-            const SizedBox(width: 4),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: isTablet ? 12 : 10,
-                fontWeight: FontWeight.w600,
-                color: isSelected ? Colors.white : color,
+            SizedBox(width: isMobile ? 4 : 5),
+            Flexible(
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontSize: isTablet ? 12 : isMobile ? 10 : 11,
+                  fontWeight: FontWeight.w600,
+                  color: isSelected ? Colors.white : color,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
             ),
           ],
@@ -2983,44 +4032,47 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
     });
   }
 
-  Widget _buildMediaCaptureSection(String title, bool isTablet, Color color) {
+  Widget _buildMediaCaptureSection(String title, bool isTablet, bool isMobile, Color color) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
       children: [
         Row(
           children: [
             Container(
-              padding: const EdgeInsets.all(6),
+              padding: EdgeInsets.all(isMobile ? 5 : 6),
               decoration: BoxDecoration(
                 color: color,
-                borderRadius: BorderRadius.circular(6),
+                borderRadius: BorderRadius.circular(isMobile ? 5 : 6),
               ),
-              child: const Icon(
+              child: Icon(
                 Icons.photo_camera_rounded,
                 color: Colors.white,
-                size: 16,
+                size: isTablet ? 16 : isMobile ? 14 : 15,
               ),
             ),
-            const SizedBox(width: 8),
+            SizedBox(width: isMobile ? 6 : 8),
             Text(
-              'Media Capture (Optional)',
+              isMobile ? 'Media (Optional)' : 'Media Capture (Optional)',
               style: TextStyle(
-                fontSize: isTablet ? 14 : 12,
+                fontSize: isTablet ? 14 : isMobile ? 12 : 13,
                 fontWeight: FontWeight.w600,
                 color: const Color(0xFF374151),
               ),
             ),
           ],
         ),
-        const SizedBox(height: 6),
-        Text(
-          'Add photos or videos to document your inspection:',
-          style: TextStyle(
-            fontSize: isTablet ? 12 : 10,
-            color: const Color(0xFF6B7280),
+        if (!isMobile) ...[
+          SizedBox(height: isMobile ? 4 : 6),
+          Text(
+            'Add photos or videos to document your inspection:',
+            style: TextStyle(
+              fontSize: isTablet ? 12 : isMobile ? 10 : 11,
+              color: const Color(0xFF6B7280),
+            ),
           ),
-        ),
-        const SizedBox(height: 12),
+        ],
+        SizedBox(height: isMobile ? 8 : 12),
         MediaCaptureWidget(
           imagePaths: _sectionImagePaths[title] ?? [],
           videoPaths: _sectionVideoPaths[title] ?? [],
@@ -3041,51 +4093,54 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
     );
   }
 
-  Widget _buildMapSection(String title, bool isTablet, Color color) {
+  Widget _buildMapSection(String title, bool isTablet, bool isMobile, Color color) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
       children: [
         Row(
           children: [
             Container(
-              padding: const EdgeInsets.all(6),
+              padding: EdgeInsets.all(isMobile ? 5 : 6),
               decoration: BoxDecoration(
                 color: color,
-                borderRadius: BorderRadius.circular(6),
+                borderRadius: BorderRadius.circular(isMobile ? 5 : 6),
               ),
-              child: const Icon(
+              child: Icon(
                 Icons.map_rounded,
                 color: Colors.white,
-                size: 16,
+                size: isTablet ? 16 : isMobile ? 14 : 15,
               ),
             ),
-            const SizedBox(width: 8),
+            SizedBox(width: isMobile ? 6 : 8),
             Text(
               'Location Mapping',
               style: TextStyle(
-                fontSize: isTablet ? 14 : 12,
+                fontSize: isTablet ? 14 : isMobile ? 12 : 13,
                 fontWeight: FontWeight.w600,
                 color: const Color(0xFF374151),
               ),
             ),
           ],
         ),
-        const SizedBox(height: 6),
-        Text(
-          'Tap on the map to mark the inspection location:',
-          style: TextStyle(
-            fontSize: isTablet ? 12 : 10,
-            color: const Color(0xFF6B7280),
+        if (!isMobile) ...[
+          SizedBox(height: isMobile ? 4 : 6),
+          Text(
+            'Tap on the map to mark the inspection location:',
+            style: TextStyle(
+              fontSize: isTablet ? 12 : isMobile ? 10 : 11,
+              color: const Color(0xFF6B7280),
+            ),
           ),
-        ),
-        const SizedBox(height: 12),
+        ],
+        SizedBox(height: isMobile ? 8 : 12),
         MapWidget(
           title: 'Civil/Structural Inspection Location',
           initialLocation: _civilStructuralLocation,
           enableLocationPicker: true,
-          showSearchBar: true,
+          showSearchBar: !isMobile,
           showAddressInfo: true,
-          height: 450,
+          height: isMobile ? 300 : 450,
           customMarkerColor: const Color(0xFF3B82F6), // Blue color for pin pointer
           onLocationSelected: (location) {
             setState(() {
@@ -3094,28 +4149,33 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
           },
         ),
         if (_civilStructuralLocation != null) ...[
-          const SizedBox(height: 12),
+          SizedBox(height: isMobile ? 8 : 12),
           Container(
-            padding: const EdgeInsets.all(12),
+            padding: EdgeInsets.all(isMobile ? 10 : 12),
             decoration: BoxDecoration(
               color: const Color(0xFFF0F9FF),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: const Color(0xFF0EA5E9), width: 1),
+              borderRadius: BorderRadius.circular(isMobile ? 6 : 8),
+              border: Border.all(
+                color: const Color(0xFF0EA5E9),
+                width: 1,
+              ),
             ),
             child: Row(
               children: [
-                const Icon(
+                Icon(
                   Icons.check_circle,
-                  color: Color(0xFF0EA5E9),
-                  size: 16,
+                  color: const Color(0xFF0EA5E9),
+                  size: isTablet ? 16 : isMobile ? 14 : 15,
                 ),
-                const SizedBox(width: 8),
+                SizedBox(width: isMobile ? 6 : 8),
                 Expanded(
                   child: Text(
-                    'Location marked: ${_civilStructuralLocation!.latitude.toStringAsFixed(8)}, ${_civilStructuralLocation!.longitude.toStringAsFixed(8)}',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: Color(0xFF0EA5E9),
+                    isMobile
+                        ? 'Location: ${_civilStructuralLocation!.latitude.toStringAsFixed(6)}, ${_civilStructuralLocation!.longitude.toStringAsFixed(6)}'
+                        : 'Location marked: ${_civilStructuralLocation!.latitude.toStringAsFixed(8)}, ${_civilStructuralLocation!.longitude.toStringAsFixed(8)}',
+                    style: TextStyle(
+                      fontSize: isTablet ? 12 : isMobile ? 10 : 11,
+                      color: const Color(0xFF0EA5E9),
                       fontWeight: FontWeight.w500,
                     ),
                   ),
@@ -3128,7 +4188,7 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
     );
   }
 
-  Widget _buildSubmitButton(BuildContext context, bool isTablet) {
+  Widget _buildSubmitButton(BuildContext context, bool isTablet, bool isMobile) {
     return SizedBox(
       width: double.infinity,
       child: ElevatedButton(
@@ -3136,23 +4196,28 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
         style: ElevatedButton.styleFrom(
           backgroundColor: const Color.fromRGBO(8, 111, 222, 0.977),
           padding: EdgeInsets.symmetric(
-            vertical: isTablet ? 16 : 14,
-            horizontal: 24,
+            vertical: isTablet ? 16 : isMobile ? 12 : 14,
+            horizontal: isTablet ? 24 : isMobile ? 16 : 20,
           ),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(isMobile ? 10 : 12),
           ),
           elevation: 0,
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.save_rounded, color: Colors.white, size: 20),
-            SizedBox(width: isTablet ? 12 : 8),
+            Icon(
+              Icons.save_rounded,
+              color: Colors.white,
+              size: isTablet ? 20 : isMobile ? 18 : 20,
+            ),
+            SizedBox(width: isTablet ? 12 : isMobile ? 8 : 10),
             Text(
               'Submit Inspection',
               style: TextStyle(
-                fontSize: isTablet ? 16 : 14,
+                fontSize: isTablet ? 16 : isMobile ? 13 : 14,
                 fontWeight: FontWeight.w600,
                 color: Colors.white,
               ),
@@ -4070,3 +5135,4 @@ class _CalculatorDialogState extends State<CalculatorDialog> with TickerProvider
     return result;
   }
 }
+
