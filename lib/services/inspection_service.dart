@@ -319,9 +319,11 @@ class InspectionService {
         'electrical_electronics_assessment': inspection.electricalElectronicsAssessment,
         'has_building_permit': inspection.hasBuildingPermit,
         'building_permit_recommendation': inspection.buildingPermitRecommendation,
+        'building_permit_id': inspection.buildingPermitId,
         'has_occupancy_permit': inspection.hasOccupancyPermit,
         'occupancy_permit_issued_year': inspection.occupancyPermitIssuedYear,
         'occupancy_permit_recommendation': inspection.occupancyPermitRecommendation,
+        'occupancy_permit_id': inspection.occupancyPermitId,
       };
 
       print('Creating inspection with data:');
@@ -435,9 +437,11 @@ class InspectionService {
         'electrical_electronics_assessment': inspection.electricalElectronicsAssessment,
         'has_building_permit': inspection.hasBuildingPermit,
         'building_permit_recommendation': inspection.buildingPermitRecommendation,
+        'building_permit_id': inspection.buildingPermitId,
         'has_occupancy_permit': inspection.hasOccupancyPermit,
         'occupancy_permit_issued_year': inspection.occupancyPermitIssuedYear,
         'occupancy_permit_recommendation': inspection.occupancyPermitRecommendation,
+        'occupancy_permit_id': inspection.occupancyPermitId,
       };
 
       final response = await ApiService.post(endpoint, body);
@@ -536,6 +540,41 @@ class InspectionService {
     } catch (e) {
       print('Error syncing inspection: $e');
       print('Stack trace: ${StackTrace.current}');
+      return false;
+    }
+  }
+
+  // Refresh database cache on server side to ensure newly exported data is visible
+  static Future<bool> refreshDatabase() async {
+    try {
+      final connectivityService = ConnectivityService();
+      if (!connectivityService.isConnected) {
+        print('No internet connection. Cannot refresh database.');
+        return false;
+      }
+
+      final baseUrl = await AppConfig.baseUrl;
+      final endpoint = '/mobile/refresh_database.php';
+
+      print('Refreshing database cache...');
+      final response = await ApiService.post(endpoint, {});
+
+      if (response.statusCode == 200) {
+        final data = ApiService.handleResponse(response);
+        if (data['success'] == true) {
+          print('Database refreshed successfully: ${data['message']}');
+          return true;
+        } else {
+          print('Database refresh returned success: false - ${data['message']}');
+          return false;
+        }
+      } else {
+        print('Database refresh failed with status ${response.statusCode}');
+        return false;
+      }
+    } catch (e) {
+      // Don't throw error - refresh is optional and shouldn't block export
+      print('Error refreshing database (non-critical): $e');
       return false;
     }
   }

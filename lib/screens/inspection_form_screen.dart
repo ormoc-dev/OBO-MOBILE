@@ -232,8 +232,10 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
   final Map<String, String> _sectionStatus = {};
 
   // Permit information
-  bool? _hasBuildingPermit;
-  bool? _hasOccupancyPermit;
+  bool? _hasBuildingPermit; // true = YES, false = NO, null = N/A
+  bool? _hasOccupancyPermit; // true = YES, false = NO, null = N/A
+  final TextEditingController _buildingPermitIdController = TextEditingController();
+  final TextEditingController _occupancyPermitIdController = TextEditingController();
   final TextEditingController _occupancyPermitYearController = TextEditingController();
   String? _buildingPermitRecommendation;
   String? _occupancyPermitRecommendation;
@@ -1260,25 +1262,41 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
     final bool? hasOccupancyPermit = _hasOccupancyPermit;
 
     Color _occupancyRecommendationColor(String? recommendation) {
-      if (recommendation == null) return const Color(0xFF94A3B8);
-      if (hasOccupancyPermit == true && recommendation == 'Approved') {
-        return const Color(0xFF10B981);
+      if (recommendation == null) return const Color(0xFF6B7280); // N/A - gray
+      if (recommendation == 'N/A') return const Color(0xFF6B7280); // N/A - gray
+      if (recommendation == 'No Occupancy Permit.') return const Color(0xFFEF4444); // No - red
+      
+      // Check for expired status (case insensitive)
+      if (recommendation.toLowerCase().contains('expired')) {
+        return const Color(0xFFEF4444); // Expired - red
       }
-      if (hasOccupancyPermit == true) {
-        return const Color(0xFFF59E0B);
+      
+      // Check for approved status (case insensitive)
+      if (recommendation.toUpperCase().contains('APPROVED')) {
+        return const Color(0xFF10B981); // Approved - green
       }
-      return const Color(0xFFEF4444);
+      
+      // Default for other cases
+      return const Color(0xFF6B7280);
     }
 
     IconData _occupancyRecommendationIcon(String? recommendation) {
-      if (recommendation == null) return Icons.info_outline_rounded;
-      if (hasOccupancyPermit == true && recommendation == 'Approved') {
-        return Icons.check_circle_rounded;
+      if (recommendation == null) return Icons.remove_circle_outline_rounded; // N/A
+      if (recommendation == 'N/A') return Icons.remove_circle_outline_rounded; // N/A
+      if (recommendation == 'No Occupancy Permit.') return Icons.close_rounded; // No
+      
+      // Check for expired status (case insensitive)
+      if (recommendation.toLowerCase().contains('expired')) {
+        return Icons.error_rounded; // Expired - error icon
       }
-      if (hasOccupancyPermit == true) {
-        return Icons.warning_amber_rounded;
+      
+      // Check for approved status (case insensitive)
+      if (recommendation.toUpperCase().contains('APPROVED')) {
+        return Icons.check_circle_rounded; // Approved - green check
       }
-      return Icons.error_outline_rounded;
+      
+      // Default for other cases
+      return Icons.info_outline_rounded;
     }
 
     return Container(
@@ -1338,18 +1356,18 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
             title: 'Building Permit',
             icon: Icons.business_rounded,
             iconColor: const Color(0xFF10B981),
-            hasPermit: hasBuildingPermit,
+            permitValue: hasBuildingPermit, // true = YES, false = NO, null = N/A
             onYes: () => _handleBuildingPermitSelection(true),
             onNo: () => _handleBuildingPermitSelection(false),
+            onNA: () => _handleBuildingPermitSelection(null),
             recommendation: buildingRecommendation,
-            recommendationIcon: hasBuildingPermit == true
-                ? Icons.check_circle_rounded
-                : Icons.info_outline_rounded,
-            recommendationColor: hasBuildingPermit == true
-                ? const Color(0xFF10B981)
-                : const Color(0xFFF97316),
+            recommendationIcon: _getBuildingPermitIcon(buildingRecommendation),
+            recommendationColor: _getBuildingPermitColor(buildingRecommendation),
             isTablet: isTablet,
             isMobile: isMobile,
+            showPermitIdField: hasBuildingPermit == true,
+            permitIdController: _buildingPermitIdController,
+            permitIdLabel: 'Building Permit ID',
           ),
           
           SizedBox(height: isTablet ? 24 : isMobile ? 12 : 22),
@@ -1359,14 +1377,18 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
             title: 'Occupancy Permit',
             icon: Icons.home_work_rounded,
             iconColor: const Color(0xFF3B82F6),
-            hasPermit: hasOccupancyPermit,
+            permitValue: hasOccupancyPermit, // true = YES, false = NO, null = N/A
             onYes: () => _handleOccupancyPermitSelection(true),
             onNo: () => _handleOccupancyPermitSelection(false),
+            onNA: () => _handleOccupancyPermitSelection(null),
             recommendation: occupancyRecommendation,
             recommendationIcon: _occupancyRecommendationIcon(occupancyRecommendation),
             recommendationColor: _occupancyRecommendationColor(occupancyRecommendation),
             isTablet: isTablet,
             isMobile: isMobile,
+            showPermitIdField: hasOccupancyPermit == true,
+            permitIdController: _occupancyPermitIdController,
+            permitIdLabel: 'Occupancy Permit ID',
             showYearField: hasOccupancyPermit == true,
             yearController: _occupancyPermitYearController,
             onYearChanged: _handleOccupancyYearChanged,
@@ -1394,14 +1416,18 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
     required String title,
     required IconData icon,
     required Color iconColor,
-    required bool? hasPermit,
+    required bool? permitValue, // true = YES, false = NO, null = N/A
     required VoidCallback onYes,
     required VoidCallback onNo,
+    required VoidCallback onNA,
     required String? recommendation,
     required IconData recommendationIcon,
     required Color recommendationColor,
     required bool isTablet,
     required bool isMobile,
+    bool showPermitIdField = false,
+    TextEditingController? permitIdController,
+    String? permitIdLabel,
     bool showYearField = false,
     TextEditingController? yearController,
     ValueChanged<String>? onYearChanged,
@@ -1452,34 +1478,144 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
           ),
           SizedBox(height: isTablet ? 14 : isMobile ? 10 : 13),
           
-          // Yes/No Options
+          // Yes/No/N/A Options
           Row(
             children: [
               Expanded(
                 child: _buildPermitOption(
                   label: 'Yes',
                   icon: Icons.check_rounded,
-                  isSelected: hasPermit == true,
+                  isSelected: permitValue == true,
                   onTap: onYes,
                   color: iconColor,
                   isTablet: isTablet,
                   isMobile: isMobile,
                 ),
               ),
-              SizedBox(width: isTablet ? 12 : isMobile ? 10 : 12),
+              SizedBox(width: isTablet ? 8 : isMobile ? 6 : 8),
               Expanded(
                 child: _buildPermitOption(
                   label: 'No',
                   icon: Icons.close_rounded,
-                  isSelected: hasPermit == false,
+                  isSelected: permitValue == false,
                   onTap: onNo,
-                  color: hasPermit == true ? const Color(0xFFEF4444) : const Color(0xFF6B7280),
+                  color: const Color(0xFFEF4444),
+                  isTablet: isTablet,
+                  isMobile: isMobile,
+                ),
+              ),
+              SizedBox(width: isTablet ? 8 : isMobile ? 6 : 8),
+              Expanded(
+                child: _buildPermitOption(
+                  label: 'N/A',
+                  icon: Icons.remove_rounded,
+                  isSelected: permitValue == null,
+                  onTap: onNA,
+                  color: const Color(0xFF6B7280),
                   isTablet: isTablet,
                   isMobile: isMobile,
                 ),
               ),
             ],
           ),
+          
+          // Permit ID Field (for Building Permit and Occupancy Permit when YES is selected)
+          if (showPermitIdField && permitIdController != null) ...[
+            SizedBox(height: isTablet ? 16 : isMobile ? 10 : 15),
+            Container(
+              padding: EdgeInsets.all(isTablet ? 12 : isMobile ? 8 : 12),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(isMobile ? 6 : 10),
+                border: Border.all(
+                  color: const Color(0xFFE2E8F0),
+                  width: 1,
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.badge_rounded,
+                        size: isTablet ? 18 : isMobile ? 12 : 16,
+                        color: iconColor,
+                      ),
+                      SizedBox(width: isTablet ? 8 : isMobile ? 6 : 8),
+                      Text(
+                        permitIdLabel ?? 'Permit ID',
+                        style: TextStyle(
+                          fontSize: isTablet ? 14 : isMobile ? 11 : 13,
+                          fontWeight: FontWeight.w600,
+                          color: const Color(0xFF374151),
+                        ),
+                      ),
+                    ],
+                  ),
+                  SizedBox(height: isTablet ? 10 : isMobile ? 6 : 9),
+                  TextFormField(
+                    controller: permitIdController,
+                    keyboardType: TextInputType.text,
+                    style: TextStyle(
+                      fontSize: isTablet ? 15 : isMobile ? 13 : 14,
+                    ),
+                    decoration: InputDecoration(
+                      hintText: 'Enter ${permitIdLabel?.toLowerCase() ?? 'permit ID'}...',
+                      hintStyle: TextStyle(
+                        fontSize: isTablet ? 14 : isMobile ? 11 : 13,
+                        color: const Color(0xFF9CA3AF),
+                      ),
+                      filled: true,
+                      fillColor: Colors.white,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(isMobile ? 6 : 10),
+                        borderSide: BorderSide(
+                          color: const Color(0xFFD1D5DB),
+                          width: isMobile ? 1 : 1.5,
+                        ),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(isMobile ? 6 : 10),
+                        borderSide: BorderSide(
+                          color: const Color(0xFFD1D5DB),
+                          width: isMobile ? 1 : 1.5,
+                        ),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(isMobile ? 6 : 10),
+                        borderSide: BorderSide(color: iconColor, width: 2),
+                      ),
+                      errorBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(isMobile ? 6 : 10),
+                        borderSide: const BorderSide(color: Color(0xFFEF4444), width: 1.5),
+                      ),
+                      focusedErrorBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(isMobile ? 6 : 10),
+                        borderSide: const BorderSide(color: Color(0xFFEF4444), width: 2),
+                      ),
+                      contentPadding: EdgeInsets.symmetric(
+                        horizontal: isTablet ? 14 : isMobile ? 10 : 14,
+                        vertical: isTablet ? 14 : isMobile ? 10 : 14,
+                      ),
+                      isDense: true,
+                    ),
+                    onChanged: (value) {
+                      setState(() {
+                        if (title == 'Building Permit') {
+                          _buildingPermitRecommendation = _computeBuildingPermitRecommendation();
+                        } else if (title == 'Occupancy Permit') {
+                          // Update recommendation when permit ID changes
+                          _occupancyPermitRecommendation = _computeOccupancyPermitRecommendation();
+                        }
+                      });
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ],
           
           // Year Field (for Occupancy Permit)
           if (showYearField && yearController != null) ...[
@@ -2056,52 +2192,93 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
     }
   }
 
+  IconData _getBuildingPermitIcon(String? recommendation) {
+    if (recommendation == null) return Icons.info_outline_rounded;
+    // Check for verified/approved status (case insensitive)
+    if (recommendation.toUpperCase().contains('VERIFIED') || recommendation.toUpperCase().contains('APPROVED')) {
+      return Icons.check_circle_rounded;
+    }
+    if (recommendation == 'N/A') return Icons.remove_circle_outline_rounded;
+    // "No Building Permit." should show close icon
+    if (recommendation.contains('No Building Permit')) return Icons.close_rounded;
+    return Icons.info_outline_rounded;
+  }
+
+  Color _getBuildingPermitColor(String? recommendation) {
+    if (recommendation == null) return const Color(0xFF6B7280);
+    // Check for verified/approved status (case insensitive) - show green
+    if (recommendation.toUpperCase().contains('VERIFIED') || recommendation.toUpperCase().contains('APPROVED')) {
+      return const Color(0xFF10B981);
+    }
+    if (recommendation == 'N/A') return const Color(0xFF6B7280);
+    // "No Building Permit." should be red
+    if (recommendation.contains('No Building Permit')) return const Color(0xFFEF4444);
+    // Default for other cases
+    return const Color(0xFF6B7280);
+  }
+
   String? _computeBuildingPermitRecommendation() {
     if (_hasBuildingPermit == null) {
-      return null;
+      return 'N/A';
     }
-    return _hasBuildingPermit!
-        ? 'Approved'
-        : 'Secure building permit before proceeding to the next step.';
+    if (_hasBuildingPermit == false) {
+      return 'No Building Permit.';
+    }
+    // If YES is selected, check if permit ID is entered
+    final permitId = _buildingPermitIdController.text.trim();
+    if (permitId.isNotEmpty) {
+      return 'Building Permit Verified!';
+    }
+    return null; // Still waiting for permit ID input
   }
 
   String? _computeOccupancyPermitRecommendation() {
     if (_hasOccupancyPermit == null) {
-      return null;
+      return 'N/A';
     }
     if (_hasOccupancyPermit == false) {
-      return 'Secure occupancy permit before proceeding to the next step.';
+      return 'No Occupancy Permit.';
     }
-
+    // If YES is selected, check if permit ID and year are entered
+    final permitId = _occupancyPermitIdController.text.trim();
     final rawYear = _occupancyPermitYearController.text.trim();
-    if (rawYear.isEmpty) {
-      return null;
+    
+    if (permitId.isNotEmpty && rawYear.isNotEmpty) {
+      final year = int.tryParse(rawYear);
+      final currentYear = DateTime.now().year;
+      if (year != null && year >= 1900 && year <= currentYear) {
+        // Calculate permit age dynamically based on current year
+        final permitAge = currentYear - year;
+        
+        // If permit is 15 years or less: APPROVED
+        // If permit is more than 15 years: EXPIRED
+        if (permitAge <= 15) {
+          return 'Occupancy Permit Certificate Verified!';
+        } else {
+          return 'Occupancy permit expired';
+        }
+      }
     }
-
-    final year = int.tryParse(rawYear);
-    final currentYear = DateTime.now().year;
-    if (year == null || year < 1900 || year > currentYear) {
-      return null;
-    }
-
-    final age = currentYear - year;
-    if (age <= 15) {
-      return 'Approved';
-    }
-    return 'Issue a Certificate of Structural Permit.';
+    return null; // Still waiting for permit ID and year input
   }
 
-  void _handleBuildingPermitSelection(bool hasPermit) {
+  void _handleBuildingPermitSelection(bool? hasPermit) {
     setState(() {
       _hasBuildingPermit = hasPermit;
+      if (hasPermit != true) {
+        // Clear permit ID if not YES
+        _buildingPermitIdController.clear();
+      }
       _buildingPermitRecommendation = _computeBuildingPermitRecommendation();
     });
   }
 
-  void _handleOccupancyPermitSelection(bool hasPermit) {
+  void _handleOccupancyPermitSelection(bool? hasPermit) {
     setState(() {
       _hasOccupancyPermit = hasPermit;
-      if (!hasPermit) {
+      if (hasPermit != true) {
+        // Clear permit ID and year if not YES
+        _occupancyPermitIdController.clear();
         _occupancyPermitYearController.clear();
       }
       _occupancyPermitRecommendation = _computeOccupancyPermitRecommendation();
@@ -2110,7 +2287,30 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
 
   void _handleOccupancyYearChanged(String value) {
     setState(() {
-      _occupancyPermitRecommendation = _computeOccupancyPermitRecommendation();
+      // Update recommendation when year changes - dynamically check 15-year threshold
+      final permitId = _occupancyPermitIdController.text.trim();
+      final rawYear = value.trim();
+      
+      if (permitId.isNotEmpty && rawYear.isNotEmpty) {
+        final year = int.tryParse(rawYear);
+        final currentYear = DateTime.now().year;
+        if (year != null && year >= 1900 && year <= currentYear) {
+          // Calculate permit age dynamically based on current year
+          final permitAge = currentYear - year;
+          
+          // If permit is 15 years or less: APPROVED
+          // If permit is more than 15 years: EXPIRED
+          if (permitAge <= 15) {
+            _occupancyPermitRecommendation = 'APPROVED: Occupancy Permit Certificate Verified!';
+          } else {
+            _occupancyPermitRecommendation = 'Occupancy permit expired';
+          }
+        } else {
+          _occupancyPermitRecommendation = null;
+        }
+      } else {
+        _occupancyPermitRecommendation = _computeOccupancyPermitRecommendation();
+      }
     });
   }
 
@@ -4346,9 +4546,11 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
                 longitude: _civilStructuralLocation?.longitude,
                 hasBuildingPermit: _hasBuildingPermit,
                 buildingPermitRecommendation: buildingRecommendation,
+                buildingPermitId: _hasBuildingPermit == true ? _buildingPermitIdController.text.trim() : null,
                 hasOccupancyPermit: _hasOccupancyPermit,
                 occupancyPermitIssuedYear: occupancyIssuedYear,
                 occupancyPermitRecommendation: occupancyRecommendation,
+                occupancyPermitId: _hasOccupancyPermit == true ? _occupancyPermitIdController.text.trim() : null,
               )
             : Inspection.fromFormData(
                 scannedData: widget.scannedData ?? 'No QR data',
@@ -4376,9 +4578,11 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
                 sectionStatus: Map<String, String>.from(savedSectionStatus),
                 hasBuildingPermit: _hasBuildingPermit,
                 buildingPermitRecommendation: buildingRecommendation,
+                buildingPermitId: _hasBuildingPermit == true ? _buildingPermitIdController.text.trim() : null,
                 hasOccupancyPermit: _hasOccupancyPermit,
                 occupancyPermitIssuedYear: occupancyIssuedYear,
                 occupancyPermitRecommendation: occupancyRecommendation,
+                occupancyPermitId: _hasOccupancyPermit == true ? _occupancyPermitIdController.text.trim() : null,
               );
 
         // Save to Hive database first (offline-first approach)

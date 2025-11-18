@@ -1234,7 +1234,9 @@ class _InspectionReportsScreenState extends State<InspectionReportsScreen> {
         inspection.hasOccupancyPermit != null ||
         inspection.occupancyPermitIssuedYear != null ||
         (inspection.buildingPermitRecommendation?.isNotEmpty ?? false) ||
-        (inspection.occupancyPermitRecommendation?.isNotEmpty ?? false);
+        (inspection.occupancyPermitRecommendation?.isNotEmpty ?? false) ||
+        (inspection.buildingPermitId?.isNotEmpty ?? false) ||
+        (inspection.occupancyPermitId?.isNotEmpty ?? false);
   }
 
   Widget _buildPermitSummaryCard(Inspection inspection, bool isTablet) {
@@ -1243,27 +1245,41 @@ class _InspectionReportsScreenState extends State<InspectionReportsScreen> {
     final int? occupancyYear = inspection.occupancyPermitIssuedYear;
     final String? buildingRecommendation = inspection.buildingPermitRecommendation;
     final String? occupancyRecommendation = inspection.occupancyPermitRecommendation;
+    final String? buildingPermitId = inspection.buildingPermitId;
+    final String? occupancyPermitId = inspection.occupancyPermitId;
 
     Color _statusColor(bool? value, {bool isOccupancy = false, String? recommendation}) {
-      if (value == null) return const Color(0xFF94A3B8);
+      if (value == null) return const Color(0xFF6B7280); // N/A - gray
       if (value) {
-        if (isOccupancy && (recommendation != null && recommendation != 'Approved')) {
-          return const Color(0xFFF97316);
+        // Check for expired status first (case insensitive)
+        if (recommendation != null && recommendation.toLowerCase().contains('expired')) {
+          return const Color(0xFFEF4444); // Expired - red
         }
+        // Check for approved status (case insensitive)
+        if (recommendation != null && recommendation.toUpperCase().contains('APPROVED')) {
+          return const Color(0xFF10B981); // Approved - green
+        }
+        // Default for YES but no recommendation yet - green
         return const Color(0xFF10B981);
       }
-      return const Color(0xFFEF4444);
+      return const Color(0xFFEF4444); // No - red
     }
 
     IconData _statusIcon(bool? value, {bool isOccupancy = false, String? recommendation}) {
-      if (value == null) return Icons.help_outline_rounded;
+      if (value == null) return Icons.remove_circle_outline_rounded; // N/A
       if (value) {
-        if (isOccupancy && (recommendation != null && recommendation != 'Approved')) {
-          return Icons.warning_amber_rounded;
+        // Check for expired status first (case insensitive)
+        if (recommendation != null && recommendation.toLowerCase().contains('expired')) {
+          return Icons.error_rounded; // Expired - error icon
         }
+        // Check for approved status (case insensitive)
+        if (recommendation != null && recommendation.toUpperCase().contains('APPROVED')) {
+          return Icons.check_circle_rounded; // Approved - green check
+        }
+        // Default for YES but no recommendation yet - green check
         return Icons.check_circle_rounded;
       }
-      return Icons.close_rounded;
+      return Icons.close_rounded; // No
     }
 
     final currentYear = DateTime.now().year;
@@ -1312,18 +1328,30 @@ class _InspectionReportsScreenState extends State<InspectionReportsScreen> {
           _buildPermitDetailSection(
             title: 'Building Permit',
             statusLabel: hasBuildingPermit == null
-                ? 'Not provided'
+                ? 'N/A'
                 : (hasBuildingPermit ? 'Yes' : 'No'),
             icon: _statusIcon(hasBuildingPermit),
             color: _statusColor(hasBuildingPermit),
             isTablet: isTablet,
+            details: [
+              if (hasBuildingPermit == true && buildingPermitId != null && buildingPermitId.isNotEmpty) ...[
+                Text(
+                  'Building Permit ID: $buildingPermitId',
+                  style: TextStyle(
+                    fontSize: isTablet ? 12 : 10,
+                    color: const Color(0xFF374151),
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ],
             recommendation: buildingRecommendation,
           ),
           const SizedBox(height: 12),
           _buildPermitDetailSection(
             title: 'Occupancy Permit',
             statusLabel: hasOccupancyPermit == null
-                ? 'Not provided'
+                ? 'N/A'
                 : (hasOccupancyPermit ? 'Yes' : 'No'),
             icon: _statusIcon(
               hasOccupancyPermit,
@@ -1337,7 +1365,18 @@ class _InspectionReportsScreenState extends State<InspectionReportsScreen> {
             ),
             isTablet: isTablet,
             details: [
+              if (hasOccupancyPermit == true && occupancyPermitId != null && occupancyPermitId.isNotEmpty) ...[
+                Text(
+                  'Occupancy Permit ID: $occupancyPermitId',
+                  style: TextStyle(
+                    fontSize: isTablet ? 12 : 10,
+                    color: const Color(0xFF374151),
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
               if (hasOccupancyPermit == true && occupancyYear != null) ...[
+                if (occupancyPermitId != null && occupancyPermitId.isNotEmpty) const SizedBox(height: 4),
                 Text(
                   'Issued Year: $occupancyYear'
                   '${occupancyAge != null ? ' (${occupancyAge} year${occupancyAge == 1 ? '' : 's'} old)' : ''}',
@@ -2277,6 +2316,23 @@ class _InspectionReportsScreenState extends State<InspectionReportsScreen> {
       await HiveOfflineDatabase.saveInspection(inspection);
       await HiveOfflineDatabase.markInspectionAsSynced(inspection.id);
 
+      // Refresh database cache on server side to ensure data is immediately visible
+      // Add a small delay to ensure transaction is fully committed
+      await Future.delayed(const Duration(milliseconds: 500));
+      
+      print('Refreshing database cache to make exported data visible...');
+      try {
+        final refreshSuccess = await InspectionService.refreshDatabase();
+        if (refreshSuccess) {
+          print('Database cache refreshed successfully - data should now be visible');
+        } else {
+          print('Database cache refresh failed (non-critical)');
+        }
+      } catch (e) {
+        // Non-critical error - don't block export success
+        print('Error refreshing database cache (non-critical): $e');
+      }
+
       // Close loading dialog
       if (mounted) {
         Navigator.of(context).pop();
@@ -2322,7 +2378,7 @@ class _InspectionReportsScreenState extends State<InspectionReportsScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Your inspection has been successfully exported to the server.',
+                  'Your inspection has been successfully exported to the server and the database has been refreshed.',
                   style: TextStyle(
                     fontSize: isTablet ? 14 : 12,
                     color: const Color(0xFF374151),

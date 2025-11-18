@@ -100,6 +100,12 @@ class Inspection extends HiveObject {
   @HiveField(31)
   String? buildingPermitRecommendation;
 
+  @HiveField(32)
+  String? buildingPermitId;
+
+  @HiveField(33)
+  String? occupancyPermitId;
+
   Inspection({
     required this.id,
     required this.scannedData,
@@ -133,6 +139,8 @@ class Inspection extends HiveObject {
     this.occupancyPermitIssuedYear,
     this.occupancyPermitRecommendation,
     this.buildingPermitRecommendation,
+    this.buildingPermitId,
+    this.occupancyPermitId,
   });
 
   // Factory constructor for creating from form data
@@ -165,6 +173,8 @@ class Inspection extends HiveObject {
     int? occupancyPermitIssuedYear,
     String? occupancyPermitRecommendation,
     String? buildingPermitRecommendation,
+    String? buildingPermitId,
+    String? occupancyPermitId,
   }) {
     final now = DateTime.now();
     return Inspection(
@@ -200,6 +210,8 @@ class Inspection extends HiveObject {
       occupancyPermitIssuedYear: occupancyPermitIssuedYear,
       occupancyPermitRecommendation: occupancyPermitRecommendation,
       buildingPermitRecommendation: buildingPermitRecommendation,
+      buildingPermitId: buildingPermitId,
+      occupancyPermitId: occupancyPermitId,
     );
   }
 
@@ -238,6 +250,8 @@ class Inspection extends HiveObject {
       'occupancy_permit_issued_year': occupancyPermitIssuedYear,
       'occupancy_permit_recommendation': occupancyPermitRecommendation,
       'building_permit_recommendation': buildingPermitRecommendation,
+      'building_permit_id': buildingPermitId,
+      'occupancy_permit_id': occupancyPermitId,
     };
   }
 
@@ -284,6 +298,8 @@ class Inspection extends HiveObject {
     if (occupancyPermitIssuedYear != null) this.occupancyPermitIssuedYear = occupancyPermitIssuedYear;
     if (occupancyPermitRecommendation != null) this.occupancyPermitRecommendation = occupancyPermitRecommendation;
     if (buildingPermitRecommendation != null) this.buildingPermitRecommendation = buildingPermitRecommendation;
+    if (buildingPermitId != null) this.buildingPermitId = buildingPermitId;
+    if (occupancyPermitId != null) this.occupancyPermitId = occupancyPermitId;
     
     updatedAt = DateTime.now();
     save(); // Save to Hive
