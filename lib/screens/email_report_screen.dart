@@ -80,58 +80,86 @@ class _EmailReportScreenState extends State<EmailReportScreen> {
     }
   }
 
-  String _generateQuickReport() {
-    final inspectorName = _currentUser?.name ?? 'Unknown Inspector';
-    final createdDate = _formatDateTime(widget.inspection.createdAt);
-    
-    // Quick status check
-    final sectionStatuses = widget.inspection.sectionStatus.values.toList();
-    final hasInProgress = sectionStatuses.contains('in_progress');
-    final hasPassed = sectionStatuses.contains('passed');
-    final hasNotPassed = sectionStatuses.contains('not_passed');
-    
-    String status = 'No sections';
-    if (sectionStatuses.isNotEmpty) {
-      if (hasInProgress) status = 'In Progress';
-      else if (hasPassed || hasNotPassed) status = 'Completed';
+  String _getSectionStatusText(String sectionName) {
+    final status = widget.inspection.sectionStatus[sectionName];
+    if (status == null || status.isEmpty) {
+      return '(section status here)';
     }
-    
-    // Count completed sections
-    int completedSections = 0;
-    if (widget.inspection.mechanicalRemarks.isNotEmpty || widget.inspection.mechanicalAssessment.isNotEmpty) completedSections++;
-    if (widget.inspection.lineGradeRemarks.isNotEmpty || widget.inspection.lineGradeAssessment.isNotEmpty) completedSections++;
-    if (widget.inspection.architecturalRemarks.isNotEmpty || widget.inspection.architecturalAssessment.isNotEmpty) completedSections++;
-    if (widget.inspection.civilStructuralRemarks.isNotEmpty || widget.inspection.civilStructuralAssessment.isNotEmpty) completedSections++;
-    if (widget.inspection.sanitaryPlumbingRemarks.isNotEmpty || widget.inspection.sanitaryPlumbingAssessment.isNotEmpty) completedSections++;
-    if (widget.inspection.electricalElectronicsRemarks.isNotEmpty || widget.inspection.electricalElectronicsAssessment.isNotEmpty) completedSections++;
-    
-    final permitSummary = _buildPermitSummaryText();
-    
-    return '''INSPECTION REPORT SUMMARY
+    switch (status) {
+      case 'in_progress':
+        return 'In Progress';
+      case 'passed':
+        return 'Passed';
+      case 'not_passed':
+        return 'Not Passed';
+      default:
+        return status;
+    }
+  }
 
-Inspection ID: ${widget.inspection.id.substring(widget.inspection.id.length - 8)}
+  String _generateQuickReport() {
+    final currentDate = DateTime.now();
+    final inspectorName = _currentUser?.name ?? 'Unknown Inspector';
+    final formattedDate = '${currentDate.year}-${currentDate.month.toString().padLeft(2, '0')}-${currentDate.day.toString().padLeft(2, '0')} ${currentDate.hour.toString().padLeft(2, '0')}:${currentDate.minute.toString().padLeft(2, '0')}:${currentDate.second.toString().padLeft(2, '0')}.${currentDate.millisecond.toString().padLeft(3, '0')}';
+    
+    // Build permit information
+    final buildingPermitStatus = widget.inspection.hasBuildingPermit == true ? 'Yes' : 'No';
+    final buildingPermitRecommendation = _permitRecommendationText(widget.inspection.buildingPermitRecommendation);
+    
+    final occupancyPermitStatus = widget.inspection.hasOccupancyPermit == true ? 'Yes' : 'No';
+    String occupancyPermitIssued = '';
+    String occupancyPermitIssuedLine = '';
+    if (widget.inspection.hasOccupancyPermit == true && widget.inspection.occupancyPermitIssuedYear != null) {
+      final issuedYear = widget.inspection.occupancyPermitIssuedYear!;
+      final currentYear = DateTime.now().year;
+      final age = currentYear - issuedYear;
+      occupancyPermitIssued = '$issuedYear (${age} year${age == 1 ? '' : 's'} old)';
+      occupancyPermitIssuedLine = '  Issued: $occupancyPermitIssued\n';
+    }
+    final occupancyPermitRecommendation = _permitRecommendationText(widget.inspection.occupancyPermitRecommendation);
+    
+    // Get section statuses
+    final mechanicalStatus = _getSectionStatusText('Mechanical');
+    final lineGradeStatus = _getSectionStatusText('Line and Grade');
+    final architecturalStatus = _getSectionStatusText('Architectural');
+    final civilStructuralStatus = _getSectionStatusText('Civil/Structural');
+    final sanitaryPlumbingStatus = _getSectionStatusText('Sanitary/Plumbing');
+    final electricalElectronicsStatus = _getSectionStatusText('Electrical/Electronics');
+    
+    return '''INSPECTION REPORT
+=================
+Report Generated: $formattedDate
 Inspector: $inspectorName
-Date: $createdDate
-Status: $status
-Sections Completed: $completedSections/6
-Photos: ${widget.inspection.imagePaths.length}
-Videos: ${widget.inspection.videoPaths.length}
-Sync Status: ${widget.inspection.isSynced ? 'Synced' : 'Pending'}
 
-$permitSummary
+INSPECTION DETAILS
+------------------
+Business ID: ${widget.inspection.scannedData}
 
-Business ID:
-${widget.inspection.scannedData}
+PERMIT INFORMATION
+------------------
+Building Permit:
+  Status: $buildingPermitStatus
+  Recommendation: $buildingPermitRecommendation
+Occupancy Permit:
+  Status: $occupancyPermitStatus
+$occupancyPermitIssuedLine  Recommendation: $occupancyPermitRecommendation
 
-Location: ${widget.inspection.latitude != null && widget.inspection.longitude != null 
-  ? 'Lat: ${widget.inspection.latitude!.toStringAsFixed(6)}, Lng: ${widget.inspection.longitude!.toStringAsFixed(6)}' 
-  : 'Not available'}
-
+INSPECTION SECTIONS
+-------------------
+• Mechanical ($mechanicalStatus)
+• Line and Grade ($lineGradeStatus)
+• Architectural ($architecturalStatus)
+• Civil/Structural ($civilStructuralStatus)
+• Sanitary/Plumbing ($sanitaryPlumbingStatus)
+• Electrical/Electronics ($electricalElectronicsStatus)
+ 
 ---
-Office of Building Official - Ormoc City
-Generated by OBO Mobile Inspector App
+This report was generated by the OBO Mobile Inspector App.
+For detailed information, please refer to the full inspection data in the mobile application.
 
-For detailed inspection data, please refer to the mobile application.''';
+Office of Building Official
+Ormoc City
+''';
   }
 
   String _buildEmailSubject() {
@@ -140,118 +168,92 @@ For detailed inspection data, please refer to the mobile application.''';
   }
 
   Future<String> _generateHtmlReport({required bool detailed}) async {
+    final currentDate = DateTime.now();
     final inspectorName = _currentUser?.name ?? 'Unknown Inspector';
-    final createdDate = _formatDateTime(widget.inspection.createdAt);
-    final hasLocation = widget.inspection.latitude != null && widget.inspection.longitude != null;
-    final locationInfo = hasLocation
-        ? 'Lat: ${widget.inspection.latitude!.toStringAsFixed(6)}, Lng: ${widget.inspection.longitude!.toStringAsFixed(6)}'
-        : 'Not available';
-    final mapsUrl = hasLocation
-        ? 'https://www.google.com/maps/search/?api=1&query=${widget.inspection.latitude!.toStringAsFixed(6)},${widget.inspection.longitude!.toStringAsFixed(6)}'
-        : '';
-    final idShort = widget.inspection.id.substring(widget.inspection.id.length - 8);
+    final formattedDate = '${currentDate.year}-${currentDate.month.toString().padLeft(2, '0')}-${currentDate.day.toString().padLeft(2, '0')} ${currentDate.hour.toString().padLeft(2, '0')}:${currentDate.minute.toString().padLeft(2, '0')}:${currentDate.second.toString().padLeft(2, '0')}.${currentDate.millisecond.toString().padLeft(3, '0')}';
 
-    // Build sections in HTML
-    String sectionsHtml = '';
-    void addSection(String title, String remarks, String assessment) {
-      if (remarks.isEmpty && assessment.isEmpty) return;
-      sectionsHtml += '<tr><td style="padding:8px 12px; border:1px solid #e5e7eb;"><strong>$title</strong><div style="color:#374151; font-size:13px;">';
-      if (remarks.isNotEmpty) sectionsHtml += '<div>Remarks: ${_escapeHtml(remarks)}</div>';
-      if (assessment.isNotEmpty) sectionsHtml += '<div>Assessment: ${_escapeHtml(assessment)}</div>';
-      sectionsHtml += '</div></td></tr>';
+    // Build permit information
+    final buildingPermitStatus = widget.inspection.hasBuildingPermit == true ? 'Yes' : 'No';
+    final buildingPermitRecommendation = _permitRecommendationText(widget.inspection.buildingPermitRecommendation);
+    
+    final occupancyPermitStatus = widget.inspection.hasOccupancyPermit == true ? 'Yes' : 'No';
+    String occupancyPermitIssued = '';
+    String occupancyPermitIssuedHtml = '';
+    if (widget.inspection.hasOccupancyPermit == true && widget.inspection.occupancyPermitIssuedYear != null) {
+      final issuedYear = widget.inspection.occupancyPermitIssuedYear!;
+      final currentYear = DateTime.now().year;
+      final age = currentYear - issuedYear;
+      occupancyPermitIssued = '$issuedYear (${age} year${age == 1 ? '' : 's'} old)';
+      occupancyPermitIssuedHtml = '<div>Issued: ${_escapeHtml(occupancyPermitIssued)}</div>';
     }
-    addSection('Mechanical', widget.inspection.mechanicalRemarks, widget.inspection.mechanicalAssessment);
-    addSection('Line and Grade', widget.inspection.lineGradeRemarks, widget.inspection.lineGradeAssessment);
-    addSection('Architectural', widget.inspection.architecturalRemarks, widget.inspection.architecturalAssessment);
-    addSection('Civil/Structural', widget.inspection.civilStructuralRemarks, widget.inspection.civilStructuralAssessment);
-    addSection('Sanitary/Plumbing', widget.inspection.sanitaryPlumbingRemarks, widget.inspection.sanitaryPlumbingAssessment);
-    addSection('Electrical/Electronics', widget.inspection.electricalElectronicsRemarks, widget.inspection.electricalElectronicsAssessment);
-    if (sectionsHtml.isEmpty) {
-      sectionsHtml = '<tr><td style="padding:12px; border:1px solid #e5e7eb;">No inspection sections were completed.</td></tr>';
-    }
+    final occupancyPermitRecommendation = _permitRecommendationText(widget.inspection.occupancyPermitRecommendation);
+    
+    // Get section statuses
+    final mechanicalStatus = _getSectionStatusText('Mechanical');
+    final lineGradeStatus = _getSectionStatusText('Line and Grade');
+    final architecturalStatus = _getSectionStatusText('Architectural');
+    final civilStructuralStatus = _getSectionStatusText('Civil/Structural');
+    final sanitaryPlumbingStatus = _getSectionStatusText('Sanitary/Plumbing');
+    final electricalElectronicsStatus = _getSectionStatusText('Electrical/Electronics');
 
-    // Media lists (note: attached to email on mobile; web cannot auto-attach)
-    final imageHtmls = await _inlineImageHtmlList();
-    final videoHtmls = await _inlineVideoList();
-
-    final mediaHtml = '''
-      <div style="margin-top:8px; font-size:14px; color:#222;">
-        <div><b>Photos (${widget.inspection.imagePaths.length}):</b>
-        ${imageHtmls.isNotEmpty ? imageHtmls.join('') : '<span style="color:#aaa">None</span>'}
-        </div>
-        <div style="margin-top:7px;"><b>Videos (${widget.inspection.videoPaths.length}):</b><br/>
-        ${videoHtmls.isNotEmpty ? videoHtmls.join('') : '<span style=\"color:#aaa\">None</span>'}
-        </div>
-        <div style="margin-top:8px; background:#fffbe8; padding:8px 12px; border-radius:6px; border:1px solid #fde68a; color:#b45309; font-size:12px;">
-          <span style="font-weight:bold;">Attachment Info:</span><br/>
-          • <b>Mobile app</b>: images/videos are also attached.<br/>
-          • <b>Web</b>: Inline previews shown; use 'Download All Media' to speed up attachment.
-        </div>
-        <!-- ZIP BUTTON PLACEHOLDER, IMPLEMENT in UI for web -->
-      </div>
-    ''';
-    final permitHtml = _buildPermitHtmlBlock();
-
-    // Build final HTML
-    final cityLogo = 'https://upload.wikimedia.org/wikipedia/commons/e/e2/Ormoc_City_Seal.png'; // Placeholder logo
-    final headerColor = '#2467b2';
-    final sectionHeaderColor = '#f4f8fb';
-    final borderColor = '#e2e8f0';
-    final accentColor = '#10B981';
     final fontFamily = "'Segoe UI', Helvetica, Arial, sans-serif";
     return '''
-<div style="font-family:$fontFamily; color:#111827; background:$sectionHeaderColor; padding:0; width:100%">
-  <div style="max-width:600px; margin:32px auto; background:#fff; border:1px solid $borderColor; border-radius:12px; overflow:hidden; box-shadow:0 4px 32px #0001;">
-    <div style="background:$headerColor; padding:24px 24px 16px 24px; display:flex; align-items:center;">
-      <img src="$cityLogo" alt="Ormoc City Logo" onerror="this.style.display='none'" style="width:56px; height:56px; margin-right:20px; border-radius:50%; box-shadow:0 2px 6px #0002;"> 
-      <div>
-        <h1 style="margin:0; color:#fff; font-size:26px; letter-spacing:0.5px; font-weight:700;">Ormoc City<br>Building Official Inspection</h1>
-        <div style="margin-top:4px; color:#d1fae5; font-size:13px; font-weight:400">OBO Mobile Inspector App</div>
+<div style="font-family:$fontFamily; color:#111827; padding:20px; max-width:700px; margin:0 auto;">
+  <h1 style="margin:0 0 20px 0; color:#1f2937; font-size:24px; font-weight:bold; border-bottom:3px solid #3b82f6; padding-bottom:10px;">INSPECTION REPORT</h1>
+  <div style="margin-bottom:20px; font-size:14px; color:#374151;">
+    <div><strong>Report Generated:</strong> ${_escapeHtml(formattedDate)}</div>
+    <div><strong>Inspector:</strong> ${_escapeHtml(inspectorName)}</div>
+  </div>
+
+  <div style="margin-bottom:20px;">
+    <h2 style="margin:0 0 10px 0; color:#1f2937; font-size:18px; font-weight:bold; border-bottom:2px solid #e5e7eb; padding-bottom:5px;">INSPECTION DETAILS</h2>
+    <div style="font-size:14px; color:#374151;">
+      <div><strong>Business ID:</strong> ${_escapeHtml(widget.inspection.scannedData.toString())}</div>
+    </div>
+  </div>
+
+  <div style="margin-bottom:20px;">
+    <h2 style="margin:0 0 10px 0; color:#1f2937; font-size:18px; font-weight:bold; border-bottom:2px solid #e5e7eb; padding-bottom:5px;">PERMIT INFORMATION</h2>
+    <div style="font-size:14px; color:#374151; line-height:1.8;">
+      <div><strong>Building Permit:</strong></div>
+      <div style="margin-left:20px;">
+        <div>Status: ${_escapeHtml(buildingPermitStatus)}</div>
+        <div>Recommendation: ${_escapeHtml(buildingPermitRecommendation)}</div>
+      </div>
+      <div style="margin-top:10px;"><strong>Occupancy Permit:</strong></div>
+      <div style="margin-left:20px;">
+        <div>Status: ${_escapeHtml(occupancyPermitStatus)}</div>
+        $occupancyPermitIssuedHtml
+        <div>Recommendation: ${_escapeHtml(occupancyPermitRecommendation)}</div>
       </div>
     </div>
-    <div style="padding:28px 24px 12px 24px;">
-      <div style="margin-bottom:18px; color:$headerColor; font-size:18px; font-weight:bold; letter-spacing:1px;">Inspection Report</div>
-      <div style="font-size:13px; color:#374151; margin-bottom:10px;">Report ID: $idShort · Inspector: ${_escapeHtml(inspectorName)}<br>Date: $createdDate</div>
-      <div style="font-size:13px; color:#374151;">Business ID: ${_escapeHtml(widget.inspection.scannedData.toString())}</div>
-      <div style="margin-top:5px; font-size:13px; color:#374151;">Location: ${_escapeHtml(locationInfo)}${hasLocation ? ' · <a href="$mapsUrl" style="color:$accentColor; text-decoration:underline;">Open in Maps</a>' : ''}</div>
-      <div style="height:16px;"></div>
-      ${permitHtml.isNotEmpty ? permitHtml : ''}
-      <table style="border-collapse:collapse; width:100%; background:#fafcff; border:1px solid $borderColor; border-radius:10px; overflow:hidden;">
-    <thead>
-          <tr style="background:$sectionHeaderColor;">
-            <th style="text-align:left; padding:13px 14px; border-bottom:1px solid $borderColor; color:#194b8c; font-size:15px; letter-spacing:1px; font-weight:600;">Inspection Sections</th>
-          </tr>
-    </thead>
-    <tbody>
-      $sectionsHtml
-    </tbody>
-  </table>
-      <div style="height:18px"></div>
-      <div style="background:#fdfcff; border:1px solid $borderColor; border-radius:8px; padding:15px 18px;">$mediaHtml</div>
-      <div style="margin-top:18px; font-size:13px; color:#666;">Generated by <b>OBO Mobile Inspector App</b> - Ormoc City, Office of Building Official</div>
-      <div style="margin-top:8px; font-size:12px; color:#aaa;">Contact: obo-support@ormoc.gov.ph</div>
+  </div>
+
+  <div style="margin-bottom:20px;">
+    <h2 style="margin:0 0 10px 0; color:#1f2937; font-size:18px; font-weight:bold; border-bottom:2px solid #e5e7eb; padding-bottom:5px;">INSPECTION SECTIONS</h2>
+    <div style="font-size:14px; color:#374151; line-height:1.8;">
+      <div>• Mechanical (${_escapeHtml(mechanicalStatus)})</div>
+      <div>• Line and Grade (${_escapeHtml(lineGradeStatus)})</div>
+      <div>• Architectural (${_escapeHtml(architecturalStatus)})</div>
+      <div>• Civil/Structural (${_escapeHtml(civilStructuralStatus)})</div>
+      <div>• Sanitary/Plumbing (${_escapeHtml(sanitaryPlumbingStatus)})</div>
+      <div>• Electrical/Electronics (${_escapeHtml(electricalElectronicsStatus)})</div>
     </div>
+  </div>
+
+  <div style="margin-top:30px; padding-top:20px; border-top:2px solid #e5e7eb; font-size:12px; color:#6b7280; text-align:center;">
+    <div>This report was generated by the OBO Mobile Inspector App.</div>
+    <div>For detailed information, please refer to the full inspection data in the mobile application.</div>
+    <div style="margin-top:10px; font-weight:bold; color:#1f2937;">Office of Building Official</div>
+    <div style="font-weight:bold; color:#1f2937;">Ormoc City</div>
   </div>
 </div>
 ''';
   }
 
   String _generateTextReport({required bool detailed}) {
-    // Use existing builders but ensure plain text
-    final base = detailed ? _generateDetailedReport() : _generateQuickReport();
-    final images = widget.inspection.imagePaths.map((p) => '- ${_basename(p)}').join('\n');
-    final videos = widget.inspection.videoPaths.map((p) => '- ${_basename(p)}').join('\n');
-    // Add Google Maps link if available
-    String maps = '';
-    if (widget.inspection.latitude != null && widget.inspection.longitude != null) {
-      final lat = widget.inspection.latitude!.toStringAsFixed(6);
-      final lng = widget.inspection.longitude!.toStringAsFixed(6);
-      maps = '\nGoogle Maps: https://www.google.com/maps/search/?api=1&query=' + lat + ',' + lng;
-    }
-    return base + '\n\nPHOTOS (${widget.inspection.imagePaths.length})\n${images.isEmpty ? 'None' : images}'
-        + '\n\nVIDEOS (${widget.inspection.videoPaths.length})\n${videos.isEmpty ? 'None' : videos}'
-        + maps
-        + '\n\nNote: On web, please attach media manually.';
+    // Use the same format for both detailed and quick reports
+    return _generateQuickReport();
   }
 
   String _escapeHtml(String input) {
@@ -269,166 +271,8 @@ For detailed inspection data, please refer to the mobile application.''';
   }
 
   String _generateDetailedReport() {
-    final currentDate = DateTime.now();
-    final inspectorName = _currentUser?.name ?? 'Unknown Inspector';
-    
-    // Format dates
-    final createdDate = _formatDateTime(widget.inspection.createdAt);
-    final updatedDate = _formatDateTime(widget.inspection.updatedAt);
-    
-    // Get section status summary
-    final sectionStatuses = widget.inspection.sectionStatus.values.toList();
-    final hasInProgress = sectionStatuses.contains('in_progress');
-    final hasPassed = sectionStatuses.contains('passed');
-    final hasNotPassed = sectionStatuses.contains('not_passed');
-    
-    String completionStatus = 'No sections';
-    if (sectionStatuses.isNotEmpty) {
-      if (hasInProgress) {
-        completionStatus = 'In Progress';
-      } else if (hasPassed || hasNotPassed) {
-        completionStatus = 'Completed';
-      }
-    }
-    
-    // Build sections details
-    String sectionsDetails = '';
-    if (widget.inspection.mechanicalRemarks.isNotEmpty || widget.inspection.mechanicalAssessment.isNotEmpty) {
-      sectionsDetails += '• Mechanical Assessment:\n';
-      if (widget.inspection.mechanicalRemarks.isNotEmpty) {
-        sectionsDetails += '  Remarks: ${widget.inspection.mechanicalRemarks}\n';
-      }
-      if (widget.inspection.mechanicalAssessment.isNotEmpty) {
-        sectionsDetails += '  Assessment: ${widget.inspection.mechanicalAssessment}\n';
-      }
-      sectionsDetails += '\n';
-    }
-    
-    if (widget.inspection.lineGradeRemarks.isNotEmpty || widget.inspection.lineGradeAssessment.isNotEmpty) {
-      sectionsDetails += '• Line and Grade Assessment:\n';
-      if (widget.inspection.lineGradeRemarks.isNotEmpty) {
-        sectionsDetails += '  Remarks: ${widget.inspection.lineGradeRemarks}\n';
-      }
-      if (widget.inspection.lineGradeAssessment.isNotEmpty) {
-        sectionsDetails += '  Assessment: ${widget.inspection.lineGradeAssessment}\n';
-      }
-      sectionsDetails += '\n';
-    }
-    
-    if (widget.inspection.architecturalRemarks.isNotEmpty || widget.inspection.architecturalAssessment.isNotEmpty) {
-      sectionsDetails += '• Architectural Assessment:\n';
-      if (widget.inspection.architecturalRemarks.isNotEmpty) {
-        sectionsDetails += '  Remarks: ${widget.inspection.architecturalRemarks}\n';
-      }
-      if (widget.inspection.architecturalAssessment.isNotEmpty) {
-        sectionsDetails += '  Assessment: ${widget.inspection.architecturalAssessment}\n';
-      }
-      sectionsDetails += '\n';
-    }
-    
-    if (widget.inspection.civilStructuralRemarks.isNotEmpty || widget.inspection.civilStructuralAssessment.isNotEmpty) {
-      sectionsDetails += '• Civil/Structural Assessment:\n';
-      if (widget.inspection.civilStructuralRemarks.isNotEmpty) {
-        sectionsDetails += '  Remarks: ${widget.inspection.civilStructuralRemarks}\n';
-      }
-      if (widget.inspection.civilStructuralAssessment.isNotEmpty) {
-        sectionsDetails += '  Assessment: ${widget.inspection.civilStructuralAssessment}\n';
-      }
-      sectionsDetails += '\n';
-    }
-    
-    if (widget.inspection.sanitaryPlumbingRemarks.isNotEmpty || widget.inspection.sanitaryPlumbingAssessment.isNotEmpty) {
-      sectionsDetails += '• Sanitary/Plumbing Assessment:\n';
-      if (widget.inspection.sanitaryPlumbingRemarks.isNotEmpty) {
-        sectionsDetails += '  Remarks: ${widget.inspection.sanitaryPlumbingRemarks}\n';
-      }
-      if (widget.inspection.sanitaryPlumbingAssessment.isNotEmpty) {
-        sectionsDetails += '  Assessment: ${widget.inspection.sanitaryPlumbingAssessment}\n';
-      }
-      sectionsDetails += '\n';
-    }
-    
-    if (widget.inspection.electricalElectronicsRemarks.isNotEmpty || widget.inspection.electricalElectronicsAssessment.isNotEmpty) {
-      sectionsDetails += '• Electrical/Electronics Assessment:\n';
-      if (widget.inspection.electricalElectronicsRemarks.isNotEmpty) {
-        sectionsDetails += '  Remarks: ${widget.inspection.electricalElectronicsRemarks}\n';
-      }
-      if (widget.inspection.electricalElectronicsAssessment.isNotEmpty) {
-        sectionsDetails += '  Assessment: ${widget.inspection.electricalElectronicsAssessment}\n';
-      }
-      sectionsDetails += '\n';
-    }
-    
-    if (sectionsDetails.isEmpty) {
-      sectionsDetails = 'No inspection sections were completed.\n\n';
-    }
-    
-    // Location information
-    String locationInfo = 'Not available';
-    if (widget.inspection.latitude != null && widget.inspection.longitude != null) {
-      locationInfo = 'Lat: ${widget.inspection.latitude!.toStringAsFixed(8)}, Lng: ${widget.inspection.longitude!.toStringAsFixed(8)}';
-    }
-    
-    // Timing information
-    String timingInfo = '';
-    if (widget.inspection.inspectionStartTime != null) {
-      timingInfo += '• Start Time: ${_formatDateTime(widget.inspection.inspectionStartTime!)}\n';
-    }
-    if (widget.inspection.inspectionEndTime != null) {
-      timingInfo += '• End Time: ${_formatDateTime(widget.inspection.inspectionEndTime!)}\n';
-    }
-    if (widget.inspection.inspectionStartTime != null && widget.inspection.inspectionEndTime != null) {
-      timingInfo += '• Duration: ${_calculateDuration(widget.inspection.inspectionStartTime!, widget.inspection.inspectionEndTime!)}\n';
-    }
-    if (timingInfo.isEmpty) {
-      timingInfo = 'No timing information available.\n';
-    }
-
-    final permitDetails = _buildPermitDetailedText();
-    
-    return '''INSPECTION REPORT
-=================
-
-Report Generated: ${currentDate.toString()}
-Inspector: $inspectorName
-Inspector ID: ${_currentUser?.id ?? 'N/A'}
-
-INSPECTION DETAILS
-------------------
-Inspection ID: ${widget.inspection.id.substring(widget.inspection.id.length - 8)}
-Business ID: ${widget.inspection.scannedData}
-Location: $locationInfo
-Created: $createdDate
-Updated: $updatedDate
-User ID: ${widget.inspection.userId ?? 'N/A'}
-
-PERMIT INFORMATION
-------------------
-$permitDetails
-
-INSPECTION SECTIONS
--------------------
-$sectionsDetails
-MEDIA FILES
------------
-• Photos: ${widget.inspection.imagePaths.length}
-• Videos: ${widget.inspection.videoPaths.length}
-
-TIMING INFORMATION
------------------
-$timingInfo
-STATUS
-------
-• Sync Status: ${widget.inspection.isSynced ? 'Synced' : 'Pending'}
-• Completion Status: $completionStatus
-
----
-This report was generated by the OBO Mobile Inspector App.
-For detailed information, please refer to the full inspection data in the mobile application.
-
-Office of Building Official
-Ormoc City
-''';
+    // Use the same format as quick report
+    return _generateQuickReport();
   }
 
   bool _hasPermitInfo() {

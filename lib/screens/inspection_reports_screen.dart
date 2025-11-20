@@ -4675,17 +4675,9 @@ class _InspectionReportsScreenState extends State<InspectionReportsScreen> {
             
             // Email Options
             _buildEmailOption(
-              'Send Quick Summary',
-              'Fast email with inspection summary',
+              'Send Email Report',
+              'Send inspection report via email',
               Icons.email_outlined,
-              () => _openEmailScreen(inspection, false, isTablet),
-              isTablet,
-            ),
-            const SizedBox(height: 12),
-            _buildEmailOption(
-              'Send Detailed Report',
-              'Complete inspection report with all details',
-              Icons.description_outlined,
               () => _openEmailScreen(inspection, true, isTablet),
               isTablet,
             ),
