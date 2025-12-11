@@ -4,6 +4,8 @@ import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../models/inspection.dart';
+import '../services/developer_settings_service.dart';
+import '../widgets/developer_settings_dialog.dart';
 
 class SmsReportScreen extends StatefulWidget {
   final Inspection inspection;
@@ -30,6 +32,16 @@ class _SmsReportScreenState extends State<SmsReportScreen> {
     _messageController = TextEditingController(
       text: _buildSmsTemplate(),
     );
+    _loadDefaultPhoneNumber();
+  }
+
+  Future<void> _loadDefaultPhoneNumber() async {
+    final defaultNumber = await DeveloperSettingsService.getDefaultSmsNumber();
+    if (mounted) {
+      setState(() {
+        _phoneController.text = defaultNumber;
+      });
+    }
   }
 
   @override
@@ -48,6 +60,13 @@ class _SmsReportScreenState extends State<SmsReportScreen> {
         title: const Text('Send SMS'),
         elevation: 0,
         backgroundColor: const Color.fromRGBO(8, 111, 222, 0.977),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.developer_mode),
+            tooltip: 'Developer Settings',
+            onPressed: _openDeveloperSettings,
+          ),
+        ],
       ),
       body: SafeArea(
         child: Form(
@@ -482,6 +501,41 @@ Ormoc City''';
   String _formatDateTime(DateTime dateTime) {
     return '${dateTime.day}/${dateTime.month}/${dateTime.year} '
         '${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}';
+  }
+
+  Future<void> _openDeveloperSettings() async {
+    final currentSms = await DeveloperSettingsService.getDefaultSmsNumber();
+    final currentEmail = await DeveloperSettingsService.getDefaultEmail();
+    final currentEmailCc = await DeveloperSettingsService.getDefaultEmailCc();
+
+    if (!mounted) return;
+
+    showDialog(
+      context: context,
+      builder: (context) => DeveloperSettingsDialog(
+        currentSmsNumber: currentSms,
+        currentEmail: currentEmail,
+        currentEmailCc: currentEmailCc,
+        onSave: (smsNumber, email, emailCc) async {
+          await DeveloperSettingsService.saveDefaultSmsNumber(smsNumber);
+          await DeveloperSettingsService.saveDefaultEmail(email);
+          await DeveloperSettingsService.saveDefaultEmailCc(emailCc);
+          
+          if (mounted) {
+            setState(() {
+              _phoneController.text = smsNumber;
+            });
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Developer settings saved successfully'),
+                backgroundColor: Color(0xFF10B981),
+                duration: Duration(seconds: 2),
+              ),
+            );
+          }
+        },
+      ),
+    );
   }
 }
 

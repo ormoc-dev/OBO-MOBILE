@@ -2,6 +2,10 @@ import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
 import '../services/offline_sync_service.dart';
 import '../models/user.dart';
+import 'onboarding_screen.dart';
+import '../services/onboarding_service.dart';
+import 'dashboard_screen.dart';
+import 'accessibility_settings_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -519,6 +523,76 @@ class _ProfileScreenState extends State<ProfileScreen> {
             const Color(0xFF10B981),
             () {
               // Navigate to privacy settings
+            },
+            isTablet,
+          ),
+          
+          _buildSettingsItem(
+            'Accessibility',
+            'High contrast mode, font size adjustment',
+            Icons.accessibility_new_rounded,
+            const Color(0xFF6366F1),
+            () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const AccessibilitySettingsScreen(),
+                ),
+              );
+            },
+            isTablet,
+          ),
+          
+          _buildSettingsItem(
+            'Tutorial',
+            'View app tutorial and guide',
+            Icons.school_rounded,
+            const Color(0xFF8B5CF6),
+            () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const OnboardingScreen(),
+                ),
+              );
+            },
+            isTablet,
+          ),
+          
+          _buildSettingsItem(
+            'Reset Tutorial',
+            'Reset tutorial to show on next login (for testing)',
+            Icons.refresh_rounded,
+            const Color(0xFFF59E0B),
+            () async {
+              final confirmed = await showDialog<bool>(
+                context: context,
+                builder: (context) => AlertDialog(
+                  title: const Text('Reset Tutorial'),
+                  content: const Text('This will reset the tutorial so it shows again on next app start. Continue?'),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.of(context).pop(false),
+                      child: const Text('Cancel'),
+                    ),
+                    TextButton(
+                      onPressed: () => Navigator.of(context).pop(true),
+                      child: const Text('Reset'),
+                    ),
+                  ],
+                ),
+              );
+              
+              if (confirmed == true && mounted) {
+                await OnboardingService.resetOnboarding();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Tutorial reset! It will show on next app restart.'),
+                    backgroundColor: Color(0xFF10B981),
+                    duration: Duration(seconds: 2),
+                  ),
+                );
+              }
             },
             isTablet,
           ),

@@ -7,6 +7,7 @@ import '../models/inspection.dart';
 import 'qr_scanner_screen.dart';
 import 'profile_screen.dart';
 import 'inspection_reports_screen.dart';
+import '../utils/chatbot_helper.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -455,7 +456,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final double smallScreenScale = isVerySmallScreen ? 0.8 : 1.0;
     final double finalScale = scale * smallScreenScale;
 
+    final chatbotFab = context.getChatbotFab();
+
     return Scaffold(
+      floatingActionButton: chatbotFab,
+      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
       body: PageView(
         controller: _pageController,
         onPageChanged: (index) {

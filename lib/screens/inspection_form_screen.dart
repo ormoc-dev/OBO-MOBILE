@@ -6,6 +6,7 @@ import '../models/inspection.dart';
 import '../services/hive_offline_database.dart';
 import '../services/auth_service.dart';
 import '../services/connectivity_service.dart';
+import '../services/inspection_history_service.dart';
 import '../utils/location_service.dart';
 import '../widgets/map_widget.dart';
 import '../widgets/media_capture_widget.dart';
@@ -957,7 +958,7 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
     for (String section in _selectedSections.keys) {
       _remarksControllers[section] = TextEditingController();
       _assessmentControllers[section] = TextEditingController();
-      _sectionStatus[section] = 'not_passed'; // Default status
+      _sectionStatus[section] = 'in_progress'; // Default status - In progress
       _sectionImagePaths[section] = []; // Initialize empty image list for each section
       _sectionVideoPaths[section] = []; // Initialize empty video list for each section
     }
@@ -1188,7 +1189,6 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
           ),
         ),
       ),
-      floatingActionButton: _buildCalculatorFAB(context, isTablet),
     );
   }
 
@@ -4117,7 +4117,7 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
   }
 
   Widget _buildStatusSelection(String section, bool isTablet, bool isMobile, Color color) {
-    final currentStatus = _sectionStatus[section] ?? 'not_passed';
+    final currentStatus = _sectionStatus[section] ?? 'in_progress';
     
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -4137,17 +4137,7 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
           runSpacing: isMobile ? 6 : 8,
           children: [
             _buildStatusChip(
-              isMobile ? 'Not Passed' : 'Not Passed',
-              'not_passed',
-              currentStatus,
-              const Color(0xFFEF4444),
-              Icons.close_rounded,
-              isTablet,
-              isMobile,
-              () => _updateStatus(section, 'not_passed'),
-            ),
-            _buildStatusChip(
-              isMobile ? 'In Progress' : 'In Progress',
+              'In progress',
               'in_progress',
               currentStatus,
               const Color(0xFFF59E0B),
@@ -4155,6 +4145,16 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
               isTablet,
               isMobile,
               () => _updateStatus(section, 'in_progress'),
+            ),
+            _buildStatusChip(
+              'Not passed',
+              'not_passed',
+              currentStatus,
+              const Color(0xFFEF4444),
+              Icons.close_rounded,
+              isTablet,
+              isMobile,
+              () => _updateStatus(section, 'not_passed'),
             ),
             _buildStatusChip(
               'Passed',
@@ -4588,6 +4588,78 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
         // Save to Hive database first (offline-first approach)
         await HiveOfflineDatabase.saveInspection(inspection);
         
+        // Log history
+        if (widget.isEditing && widget.existingInspection != null) {
+          // Log update
+          await InspectionHistoryService.logUpdate(
+            inspection,
+            description: 'Inspection updated with ${selectedSections.length} section(s)',
+            changes: {
+              'sections': selectedSections,
+              'images_count': allImagePaths.length,
+              'videos_count': allVideoPaths.length,
+            },
+          );
+          
+          // Log status changes
+          final oldStatus = widget.existingInspection!.sectionStatus;
+          final newStatus = inspection.sectionStatus;
+          for (final entry in newStatus.entries) {
+            final section = entry.key;
+            final newValue = entry.value;
+            final oldValue = oldStatus[section] ?? 'none';
+            if (oldValue != newValue) {
+              await InspectionHistoryService.logStatusChange(
+                inspection,
+                section,
+                oldValue,
+                newValue,
+              );
+            }
+          }
+          
+          // Log media additions
+          final oldImageCount = widget.existingInspection!.imagePaths.length;
+          final oldVideoCount = widget.existingInspection!.videoPaths.length;
+          if (allImagePaths.length > oldImageCount) {
+            await InspectionHistoryService.logMediaAdded(
+              inspection,
+              'photo',
+              'general',
+              allImagePaths.length - oldImageCount,
+            );
+          }
+          if (allVideoPaths.length > oldVideoCount) {
+            await InspectionHistoryService.logMediaAdded(
+              inspection,
+              'video',
+              'general',
+              allVideoPaths.length - oldVideoCount,
+            );
+          }
+        } else {
+          // Log creation
+          await InspectionHistoryService.logCreation(inspection);
+          
+          // Log media additions for new inspection
+          if (allImagePaths.isNotEmpty) {
+            await InspectionHistoryService.logMediaAdded(
+              inspection,
+              'photo',
+              'general',
+              allImagePaths.length,
+            );
+          }
+          if (allVideoPaths.isNotEmpty) {
+            await InspectionHistoryService.logMediaAdded(
+              inspection,
+              'video',
+              'general',
+              allVideoPaths.length,
+            );
+          }
+        }
+        
         print('Inspection saved to Hive: ${inspection.id}');
         print('Scanned data: ${inspection.scannedData}');
         print('Selected sections: $selectedSections');
@@ -4670,673 +4742,4 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
     }
     return '';
   }
-
-  Widget _buildCalculatorFAB(BuildContext context, bool isTablet) {
-    return FloatingActionButton(
-      onPressed: () => _showCalculator(context, isTablet),
-      backgroundColor: const Color.fromRGBO(8, 111, 222, 0.977),
-      foregroundColor: Colors.white,
-      elevation: 8,
-      child: const Icon(Icons.calculate_rounded, size: 28),
-    );
-  }
-
-  void _showCalculator(BuildContext context, bool isTablet) {
-    showDialog(
-      context: context,
-      builder: (context) => CalculatorDialog(isTablet: isTablet),
-    );
-  }
 }
-
-class CalculatorDialog extends StatefulWidget {
-  final bool isTablet;
-  
-  const CalculatorDialog({super.key, required this.isTablet});
-
-  @override
-  State<CalculatorDialog> createState() => _CalculatorDialogState();
-}
-
-class _CalculatorDialogState extends State<CalculatorDialog> with TickerProviderStateMixin {
-  String _display = '0';
-  String _operation = '';
-  double _firstNumber = 0;
-  double _secondNumber = 0;
-  bool _waitingForOperand = false;
-  
-  // Memory functions
-  double _memory = 0;
-  bool _memoryIndicator = false;
-  
-  @override
-  void initState() {
-    super.initState();
-  }
-
-  @override
-  void dispose() {
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final screenSize = MediaQuery.of(context).size;
-    final screenWidth = screenSize.width;
-    final screenHeight = screenSize.height;
-    final isTablet = screenWidth > 600;
-    final isLargeTablet = screenWidth > 900;
-    final isSmallScreen = screenHeight < 600;
-    
-    // Responsive sizing
-    final dialogWidth = isLargeTablet 
-        ? screenWidth * 0.5 
-        : isTablet 
-            ? screenWidth * 0.7 
-            : screenWidth * 0.9;
-    final dialogHeight = isSmallScreen 
-        ? screenHeight * 0.85 
-        : isLargeTablet 
-            ? screenHeight * 0.75 
-            : isTablet 
-                ? screenHeight * 0.8 
-                : screenHeight * 0.85;
-    
-    final headerPadding = isTablet ? 24.0 : 16.0;
-    final buttonSpacing = isTablet ? 8.0 : 6.0;
-    
-    return Dialog(
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Container(
-        width: dialogWidth,
-        height: dialogHeight,
-        constraints: BoxConstraints(
-          maxWidth: isTablet ? 600 : double.infinity,
-          maxHeight: screenHeight * 0.9,
-        ),
-        padding: EdgeInsets.all(headerPadding),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Column(
-          children: [
-            // Header
-            Row(
-              children: [
-                Container(
-                  padding: EdgeInsets.all(isTablet ? 10 : 8),
-                  decoration: BoxDecoration(
-                    color: const Color.fromRGBO(8, 111, 222, 0.977),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Icon(
-                    Icons.calculate_rounded,
-                    color: Colors.white,
-                    size: isTablet ? 24 : 20,
-                  ),
-                ),
-                SizedBox(width: isTablet ? 12 : 10),
-                Expanded(
-                  child: Text(
-                    'Professional Calculator',
-                    style: TextStyle(
-                      fontSize: isTablet ? 20 : 16,
-                      fontWeight: FontWeight.bold,
-                      color: const Color(0xFF2D3748),
-                    ),
-                  ),
-                ),
-                if (_memoryIndicator)
-                  Container(
-                    padding: EdgeInsets.symmetric(
-                      horizontal: isTablet ? 10 : 8,
-                      vertical: isTablet ? 6 : 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF10B981),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      'M',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: isTablet ? 13 : 11,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                SizedBox(width: isTablet ? 10 : 8),
-                IconButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  icon: Icon(
-                    Icons.close_rounded,
-                    size: isTablet ? 24 : 20,
-                  ),
-                  style: IconButton.styleFrom(
-                    backgroundColor: const Color(0xFFF8FAFC),
-                    foregroundColor: const Color(0xFF6B7280),
-                    padding: EdgeInsets.all(isTablet ? 12 : 8),
-                  ),
-                ),
-              ],
-            ),
-            
-            SizedBox(height: isTablet ? 20 : 16),
-            
-            // Realistic Calculator Display (LCD-style)
-            Container(
-              width: double.infinity,
-              padding: EdgeInsets.symmetric(
-                horizontal: isTablet ? 20 : 16,
-                vertical: isTablet ? 24 : 20,
-              ),
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    Color(0xFF1E293B), // Dark slate
-                    Color(0xFF0F172A), // Darker slate
-                  ],
-                ),
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.3),
-                    blurRadius: 8,
-                    offset: const Offset(0, 4),
-                  ),
-                  const BoxShadow(
-                    color: Color(0xFF1E293B),
-                    blurRadius: 2,
-                    offset: Offset(0, -1),
-                  ),
-                ],
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  // Operation display (smaller, secondary)
-                  if (_operation.isNotEmpty)
-                    Padding(
-                      padding: EdgeInsets.only(bottom: isTablet ? 8 : 6),
-                      child: Text(
-                        _formatOperation(_firstNumber, _operation),
-                        style: TextStyle(
-                          fontSize: isTablet ? 18 : 14,
-                          color: const Color(0xFF94A3B8),
-                          fontFamily: 'monospace',
-                          fontWeight: FontWeight.w400,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  // Main display
-                  FittedBox(
-                    fit: BoxFit.scaleDown,
-                    alignment: Alignment.centerRight,
-                    child: Text(
-                      _formatDisplay(_display),
-                      style: TextStyle(
-                        fontSize: isTablet ? 48 : 36,
-                        fontWeight: FontWeight.w300,
-                        color: const Color(0xFFE2E8F0), // Light text on dark background
-                        fontFamily: 'monospace',
-                        letterSpacing: 1,
-                      ),
-                      textAlign: TextAlign.right,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            
-            SizedBox(height: isTablet ? 20 : 16),
-            
-            // Calculator Content
-            Expanded(
-              child: SingleChildScrollView(
-                physics: const BouncingScrollPhysics(),
-                child: _buildUnifiedCalculator(isTablet, buttonSpacing),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-  
-  String _formatDisplay(String display) {
-    // Format large numbers with commas for readability
-    if (display == 'Error' || display == 'Infinity' || display == 'NaN') {
-      return display;
-    }
-    
-    // Handle scientific notation
-    if (display.contains('e') || display.contains('E')) {
-      return display;
-    }
-    
-    try {
-      final num = double.parse(display);
-      if (num.isInfinite || num.isNaN) {
-        return 'Error';
-      }
-      
-      if (num % 1 == 0) {
-        // Integer - format with commas
-        final intValue = num.toInt();
-        if (intValue.abs() > 999) {
-          return intValue.toString().replaceAllMapped(
-            RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
-            (Match m) => '${m[1]},',
-          );
-        }
-        return intValue.toString();
-      } else {
-        // Decimal - format with appropriate precision
-        final parts = display.split('.');
-        if (parts.length == 2) {
-          // Remove trailing zeros
-          final decimalPart = parts[1].replaceAll(RegExp(r'0+$'), '');
-          final integerPart = int.tryParse(parts[0]) ?? 0;
-          
-          if (integerPart.abs() > 999) {
-            final formattedInt = integerPart.toString().replaceAllMapped(
-              RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
-              (Match m) => '${m[1]},',
-            );
-            return decimalPart.isEmpty ? formattedInt : '$formattedInt.$decimalPart';
-          }
-          
-          return decimalPart.isEmpty ? integerPart.toString() : '$integerPart.$decimalPart';
-        }
-      }
-    } catch (e) {
-      // If parsing fails, return as is
-    }
-    return display;
-  }
-  
-  String _formatOperation(double number, String operation) {
-    final formatted = number % 1 == 0 
-        ? number.toInt().toString()
-        : number.toString();
-    return '$formatted ${_getOperationSymbol(operation)}';
-  }
-  
-  String _getOperationSymbol(String operation) {
-    switch (operation) {
-      case '+':
-        return '+';
-      case '-':
-        return '−';
-      case '×':
-        return '×';
-      case '÷':
-        return '÷';
-      case '^':
-        return '^';
-      default:
-        return operation;
-    }
-  }
-
-  // Unified Calculator
-  Widget _buildUnifiedCalculator(bool isTablet, double buttonSpacing) {
-    return Column(
-      children: [
-        // Memory functions row
-        _buildButtonRow(['MC', 'MR', 'M+', 'M-'], isTablet, isLastRow: false),
-        SizedBox(height: buttonSpacing),
-        
-        // Scientific functions row 1
-        _buildButtonRow(['π', 'e', '√', 'x²'], isTablet, isLastRow: false),
-        SizedBox(height: buttonSpacing),
-        
-        // Scientific functions row 2
-        _buildButtonRow(['sin', 'cos', 'tan', 'log'], isTablet, isLastRow: false),
-        SizedBox(height: buttonSpacing),
-        
-        // Scientific functions row 3
-        _buildButtonRow(['ln', '1/x', 'x!', '^'], isTablet, isLastRow: false),
-        SizedBox(height: buttonSpacing),
-        
-        // Basic operations row 1
-        _buildButtonRow(['(', ')', 'C', '÷'], isTablet, isLastRow: false),
-        SizedBox(height: buttonSpacing),
-        
-        // Basic operations row 2
-        _buildButtonRow(['7', '8', '9', '×'], isTablet, isLastRow: false),
-        SizedBox(height: buttonSpacing),
-        
-        // Basic operations row 3
-        _buildButtonRow(['4', '5', '6', '-'], isTablet, isLastRow: false),
-        SizedBox(height: buttonSpacing),
-        
-        // Basic operations row 4
-        _buildButtonRow(['1', '2', '3', '+'], isTablet, isLastRow: false),
-        SizedBox(height: buttonSpacing),
-        
-        // Basic operations row 5
-        _buildButtonRow(['±', '0', '.', '='], isTablet, isLastRow: true),
-      ],
-    );
-  }
-
-
-  Widget _buildButtonRow(List<String> buttons, bool isTablet, {bool isLastRow = false}) {
-    return Row(
-      children: buttons.map((button) {
-        if (isLastRow && button == '0') {
-          // Make 0 button wider
-          return Expanded(
-            flex: 2,
-            child: _buildCalculatorButton(button, isTablet),
-          );
-        } else {
-          return Expanded(
-            child: _buildCalculatorButton(button, isTablet),
-          );
-        }
-      }).toList(),
-    );
-  }
-
-
-  Widget _buildCalculatorButton(String text, bool isTablet) {
-    final bool isNumber = RegExp(r'[0-9]').hasMatch(text);
-    final bool isOperator = ['+', '-', '×', '÷', '='].contains(text);
-    final bool isMemory = ['MC', 'MR', 'M+', 'M-'].contains(text);
-    final bool isSpecial = ['C', '±', '%'].contains(text);
-    final bool isScientific = ['π', 'e', '√', 'x²', 'sin', 'cos', 'tan', 'log', 'ln', '1/x', 'x!', '^', '(', ')'].contains(text);
-    final bool isDecimal = text == '.';
-
-    Color backgroundColor;
-    Color textColor;
-
-    if (isNumber || isDecimal) {
-      backgroundColor = Colors.white;
-      textColor = const Color(0xFF1F2937);
-    } else if (isOperator) {
-      backgroundColor = const Color.fromRGBO(8, 111, 222, 0.977);
-      textColor = Colors.white;
-    } else if (isMemory) {
-      backgroundColor = const Color(0xFF10B981);
-      textColor = Colors.white;
-    } else if (isScientific) {
-      backgroundColor = const Color(0xFF8B5CF6);
-      textColor = Colors.white;
-    } else if (isSpecial) {
-      backgroundColor = const Color(0xFFF3F4F6);
-      textColor = const Color(0xFF6B7280);
-    } else {
-      backgroundColor = Colors.white;
-      textColor = const Color(0xFF1F2937);
-    }
-
-    // Responsive button sizing
-    final buttonHeight = isTablet ? 56.0 : 48.0;
-    final buttonMargin = isTablet ? 6.0 : 4.0;
-    final fontSize = isTablet ? 18.0 : 16.0;
-    final minFontSize = isTablet ? 14.0 : 12.0;
-
-    return Container(
-      margin: EdgeInsets.symmetric(horizontal: buttonMargin),
-      height: buttonHeight,
-      child: ElevatedButton(
-        onPressed: () => _onButtonPressed(text),
-        style: ElevatedButton.styleFrom(
-          backgroundColor: backgroundColor,
-          foregroundColor: textColor,
-          elevation: 2,
-          shadowColor: Colors.black.withOpacity(0.1),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-          padding: EdgeInsets.symmetric(
-            vertical: isTablet ? 14 : 12,
-            horizontal: isTablet ? 8 : 6,
-          ),
-        ),
-        child: FittedBox(
-          fit: BoxFit.scaleDown,
-          child: Text(
-            text,
-            style: TextStyle(
-              fontSize: fontSize,
-              fontWeight: FontWeight.w600,
-            ),
-            maxLines: 1,
-            textScaleFactor: 1.0,
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _onButtonPressed(String buttonText) {
-    setState(() {
-      if (RegExp(r'[0-9]').hasMatch(buttonText)) {
-        _onNumberPressed(buttonText);
-      } else if (buttonText == '.') {
-        _onDecimalPressed();
-      } else if (['+', '-', '×', '÷'].contains(buttonText)) {
-        _onOperatorPressed(buttonText);
-      } else if (buttonText == '=') {
-        _onEqualsPressed();
-      } else if (buttonText == 'C') {
-        _onClearPressed();
-      } else if (buttonText == '±') {
-        _onSignPressed();
-      } else if (buttonText == '%') {
-        _onPercentPressed();
-      } else if (['MC', 'MR', 'M+', 'M-'].contains(buttonText)) {
-        _onMemoryPressed(buttonText);
-      } else if (['π', 'e', '√', 'x²', 'sin', 'cos', 'tan', 'log', 'ln', '1/x', 'x!', '^'].contains(buttonText)) {
-        _onScientificPressed(buttonText);
-      } else if (['(', ')'].contains(buttonText)) {
-        _onParenthesisPressed(buttonText);
-      }
-    });
-  }
-
-  void _onNumberPressed(String number) {
-    if (_waitingForOperand) {
-      _display = number;
-      _waitingForOperand = false;
-    } else {
-      _display = _display == '0' ? number : _display + number;
-    }
-  }
-
-  void _onDecimalPressed() {
-    if (_waitingForOperand) {
-      _display = '0.';
-      _waitingForOperand = false;
-    } else if (!_display.contains('.')) {
-      _display += '.';
-    }
-  }
-
-  void _onOperatorPressed(String operator) {
-    if (_operation.isNotEmpty && !_waitingForOperand) {
-      _onEqualsPressed();
-    }
-
-    _firstNumber = double.parse(_display);
-    _operation = operator;
-    _waitingForOperand = true;
-  }
-
-  void _onEqualsPressed() {
-    if (_operation.isEmpty) return;
-
-    _secondNumber = double.parse(_display);
-    double result = 0;
-
-    switch (_operation) {
-      case '+':
-        result = _firstNumber + _secondNumber;
-        break;
-      case '-':
-        result = _firstNumber - _secondNumber;
-        break;
-      case '×':
-        result = _firstNumber * _secondNumber;
-        break;
-      case '÷':
-        if (_secondNumber != 0) {
-          result = _firstNumber / _secondNumber;
-        } else {
-          _display = 'Error';
-          return;
-        }
-        break;
-      case '^':
-        result = pow(_firstNumber, _secondNumber).toDouble();
-        break;
-    }
-
-    // Format result appropriately
-    if (result.isInfinite || result.isNaN) {
-      _display = 'Error';
-    } else {
-      // Limit decimal places for very large numbers
-      if (result.abs() > 1000000) {
-        _display = result.toStringAsExponential(6);
-      } else if (result.abs() < 0.000001 && result != 0) {
-        _display = result.toStringAsExponential(6);
-      } else {
-        // Format with appropriate decimal places
-        final formatted = result.toStringAsFixed(10).replaceAll(RegExp(r'0*$'), '').replaceAll(RegExp(r'\.$'), '');
-        _display = formatted;
-      }
-    }
-    
-    _operation = '';
-    _waitingForOperand = true;
-  }
-
-  void _onClearPressed() {
-    _display = '0';
-    _operation = '';
-    _firstNumber = 0;
-    _secondNumber = 0;
-    _waitingForOperand = false;
-  }
-
-  void _onSignPressed() {
-    if (_display != '0') {
-      if (_display.startsWith('-')) {
-        _display = _display.substring(1);
-      } else {
-        _display = '-$_display';
-      }
-    }
-  }
-
-  void _onPercentPressed() {
-    double number = double.parse(_display);
-    _display = (number / 100).toString();
-  }
-
-  // Memory functions
-  void _onMemoryPressed(String operation) {
-    double currentValue = double.parse(_display);
-    
-    switch (operation) {
-      case 'MC':
-        _memory = 0;
-        _memoryIndicator = false;
-        break;
-      case 'MR':
-        _display = _memory.toString();
-        _waitingForOperand = true;
-        break;
-      case 'M+':
-        _memory += currentValue;
-        _memoryIndicator = true;
-        break;
-      case 'M-':
-        _memory -= currentValue;
-        _memoryIndicator = true;
-        break;
-    }
-  }
-
-  // Scientific functions
-  void _onScientificPressed(String function) {
-    double value = double.parse(_display);
-    double result = 0;
-    
-    switch (function) {
-      case 'π':
-        result = 3.14159265359;
-        break;
-      case 'e':
-        result = 2.71828182846;
-        break;
-      case '√':
-        result = value >= 0 ? sqrt(value) : 0;
-        break;
-      case 'x²':
-        result = value * value;
-        break;
-      case 'sin':
-        result = sin(value);
-        break;
-      case 'cos':
-        result = cos(value);
-        break;
-      case 'tan':
-        result = tan(value);
-        break;
-      case 'log':
-        result = value > 0 ? log(value) / ln10 : 0;
-        break;
-      case 'ln':
-        result = value > 0 ? log(value) : 0;
-        break;
-      case '1/x':
-        result = value != 0 ? 1 / value : 0;
-        break;
-      case 'x!':
-        result = _factorial(value.toInt());
-        break;
-      case '^':
-        _operation = '^';
-        _firstNumber = value;
-        _waitingForOperand = true;
-        return;
-    }
-    
-    _display = result % 1 == 0 ? result.toInt().toString() : result.toString();
-    _waitingForOperand = true;
-  }
-
-  // Parenthesis handling
-  void _onParenthesisPressed(String parenthesis) {
-    // Simple implementation - could be enhanced for complex expressions
-    if (parenthesis == '(') {
-      _display = '0';
-      _waitingForOperand = true;
-    }
-  }
-
-  // Helper functions
-  double _factorial(int n) {
-    if (n < 0) return 0;
-    if (n == 0 || n == 1) return 1;
-    double result = 1;
-    for (int i = 2; i <= n; i++) {
-      result *= i;
-    }
-    return result;
-  }
-}
-

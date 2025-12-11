@@ -7,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter/foundation.dart';
 import 'dart:ui' as ui;
 import '../utils/location_service.dart';
+import '../services/connectivity_service.dart';
 import 'fullscreen_map_dialog.dart';
 
 class MapWidget extends StatefulWidget {
@@ -46,18 +47,49 @@ class _MapWidgetState extends State<MapWidget> {
   bool _isSatelliteView = false;
   String? _selectedAddress;
   final TextEditingController _searchController = TextEditingController();
+  bool _isOnline = true;
+  final ConnectivityService _connectivityService = ConnectivityService();
+  bool _isDragging = false;
 
   @override
   void initState() {
     super.initState();
     _selectedLocation = widget.initialLocation;
-    // Delay location request to ensure map is ready
-    Future.delayed(const Duration(milliseconds: 100), () {
-      _getCurrentLocation();
-    });
+    
+    // Check connectivity and initialize
+    _checkConnectivity();
     
     // Add listener to search controller
     _searchController.addListener(_onSearchTextChanged);
+  }
+
+  Future<void> _checkConnectivity() async {
+    await _connectivityService.initialize();
+    setState(() {
+      _isOnline = _connectivityService.isConnected;
+    });
+    
+    // Listen to connectivity changes
+    _connectivityService.connectionStream.listen((isConnected) {
+      if (mounted) {
+        setState(() {
+          _isOnline = isConnected;
+        });
+        
+        // If just came online and no location selected, get GPS location
+        if (isConnected && _selectedLocation == null) {
+          _getCurrentLocation();
+        }
+      }
+    });
+    
+    // Delay location request to ensure map is ready
+    Future.delayed(const Duration(milliseconds: 100), () {
+      // Only auto-get location if online
+      if (_isOnline) {
+        _getCurrentLocation();
+      }
+    });
   }
 
   @override
@@ -68,6 +100,11 @@ class _MapWidgetState extends State<MapWidget> {
   }
 
   Future<void> _getCurrentLocation() async {
+    // Only get GPS location if online
+    if (!_isOnline) {
+      return;
+    }
+    
     setState(() {
       _isLoadingLocation = true;
     });
@@ -78,24 +115,28 @@ class _MapWidgetState extends State<MapWidget> {
       if (result.success && result.location != null) {
         setState(() {
           _currentLocation = result.location!;
-        if (_selectedLocation == null) {
-          _selectedLocation = _currentLocation;
-        }
-        _isLoadingLocation = false;
-      });
+          // When online, automatically set selected location to GPS location
+          if (_isOnline) {
+            _selectedLocation = _currentLocation;
+          } else if (_selectedLocation == null) {
+            // If offline and no location selected, use GPS as fallback
+            _selectedLocation = _currentLocation;
+          }
+          _isLoadingLocation = false;
+        });
 
         // Move map to current location with appropriate zoom level
-      try {
+        try {
           _mapController.move(_currentLocation!, 18.0);
-      } catch (e) {
-        // If map controller is not ready, wait a bit and try again
-        Future.delayed(const Duration(milliseconds: 500), () {
-          try {
+        } catch (e) {
+          // If map controller is not ready, wait a bit and try again
+          Future.delayed(const Duration(milliseconds: 500), () {
+            try {
               _mapController.move(_currentLocation!, 18.0);
-          } catch (e) {
-            print('Failed to move map: $e');
-          }
-        });
+            } catch (e) {
+              print('Failed to move map: $e');
+            }
+          });
         }
 
         // Show success message with accuracy info
@@ -387,9 +428,23 @@ class _MapWidgetState extends State<MapWidget> {
       );
     }
 
-    // Try to get address for the selected location
-    if (widget.showAddressInfo) {
+    // Try to get address for the selected location (only if online)
+    if (widget.showAddressInfo && _isOnline) {
       _getAddressForLocation(point);
+    }
+  }
+
+  void _updateLocationFromMapCenter() {
+    if (!_isOnline && mounted) {
+      final newCenter = _mapController.camera.center;
+      setState(() {
+        _selectedLocation = newCenter;
+        _selectedAddress = null;
+      });
+      
+      if (widget.onLocationSelected != null) {
+        widget.onLocationSelected!(newCenter);
+      }
     }
   }
 
@@ -749,6 +804,12 @@ class _MapWidgetState extends State<MapWidget> {
                 initialCenter: _selectedLocation ?? const LatLng(10.3157, 123.8854), // Default to Ormoc City
                 initialZoom: 16.0, // Higher initial zoom for better precision
                 onTap: _onMapTap,
+                onMapEvent: !_isOnline ? (MapEvent event) {
+                  // When offline, update marker position when map is moved/dragged
+                  if (event is MapEventMove) {
+                    _updateLocationFromMapCenter();
+                  }
+                } : null,
                 interactionOptions: const InteractionOptions(
                   flags: InteractiveFlag.all,
                 ),
@@ -775,8 +836,8 @@ class _MapWidgetState extends State<MapWidget> {
                 // Markers Layer
                 MarkerLayer(
                   markers: [
-                    // Current location marker
-                    if (_currentLocation != null)
+                    // Current location marker (only show if online)
+                    if (_currentLocation != null && _isOnline)
                       Marker(
                         point: _currentLocation!,
                         width: 30,
@@ -796,6 +857,8 @@ class _MapWidgetState extends State<MapWidget> {
                       ),
                     
                     // Selected location marker
+                    // When offline, marker follows map center (updated via onMapEvent)
+                    // When online, marker is at selected location
                     if (_selectedLocation != null)
                       Marker(
                         point: _selectedLocation!,
@@ -984,6 +1047,46 @@ class _MapWidgetState extends State<MapWidget> {
                 ],
               ),
             ),
+            
+            // Offline indicator
+            if (!_isOnline)
+              Positioned(
+                top: 16,
+                left: 16,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.orange,
+                    borderRadius: BorderRadius.circular(8),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.1),
+                        blurRadius: 4,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.cloud_off,
+                        color: Colors.white,
+                        size: 16,
+                      ),
+                      const SizedBox(width: 6),
+                      const Text(
+                        'Offline - Drag map to set location',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             
             // Location info
             if (_selectedLocation != null)

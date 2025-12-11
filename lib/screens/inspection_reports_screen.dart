@@ -19,6 +19,9 @@ import '../config/app_config.dart';
 import 'inspection_form_screen.dart';
 import 'email_report_screen.dart';
 import 'sms_report_screen.dart';
+import 'inspection_history_screen.dart';
+import 'trash_screen.dart';
+import '../services/trash_service.dart';
 
 class InspectionReportsScreen extends StatefulWidget {
   const InspectionReportsScreen({super.key});
@@ -33,6 +36,10 @@ class _InspectionReportsScreenState extends State<InspectionReportsScreen> {
   User? _currentUser;
   String _searchQuery = '';
   String _selectedStatus = 'All';
+  
+  // Lazy loading state
+  int _displayedCount = 20; // Show first 20 items
+  static const int _itemsPerPage = 20;
 
   // Helper function to check if a path is a network URL or server path
   bool _isNetworkPath(String path) {
@@ -189,6 +196,8 @@ class _InspectionReportsScreenState extends State<InspectionReportsScreen> {
       setState(() {
         _inspections = userInspections;
         _isLoading = false;
+        // Reset lazy loading count
+        _displayedCount = userInspections.length > _itemsPerPage ? _itemsPerPage : userInspections.length;
       });
     } catch (e) {
       print('Error loading inspections: $e');
@@ -225,6 +234,17 @@ class _InspectionReportsScreenState extends State<InspectionReportsScreen> {
         }
         return true;
       }).toList();
+    }
+
+    // Reset displayed count when filters change
+    if (_displayedCount > filtered.length) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          setState(() {
+            _displayedCount = filtered.length > _itemsPerPage ? _itemsPerPage : filtered.length;
+          });
+        }
+      });
     }
 
     return filtered;
@@ -366,69 +386,68 @@ class _InspectionReportsScreenState extends State<InspectionReportsScreen> {
             ),
           ),
           
-          SizedBox(width: (isLargeTablet ? 16.0 : (isTablet ? 12.0 : (isVerySmallScreen ? 8.0 : (isSmallScreen ? 10.0 : 12.0)))) * finalScale),
+          SizedBox(width: (isLargeTablet ? 12.0 : (isTablet ? 10.0 : 8.0)) * finalScale),
           
-          // Count Badge and Refresh Button
-          Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              // Count Badge
-              Container(
-                padding: EdgeInsets.symmetric(
-                  horizontal: (isLargeTablet ? 14.0 : (isTablet ? 12.0 : (isVerySmallScreen ? 8.0 : (isSmallScreen ? 9.0 : 10.0)))) * finalScale,
-                  vertical: (isLargeTablet ? 8.0 : (isTablet ? 7.0 : (isVerySmallScreen ? 5.0 : (isSmallScreen ? 5.5 : 6.0)))) * finalScale,
-                ),
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      Color.fromRGBO(8, 111, 222, 0.977),
-                      Color.fromRGBO(22, 127, 239, 0.976),
-                    ],
-                  ),
-                  borderRadius: BorderRadius.circular((isLargeTablet ? 12.0 : (isTablet ? 10.0 : (isVerySmallScreen ? 8.0 : (isSmallScreen ? 9.0 : 10.0)))) * finalScale),
-                  boxShadow: [
-                    const BoxShadow(
-                      color: Color.fromRGBO(8, 111, 222, 0.3),
-                      offset: Offset(0, 3),
-                      blurRadius: 8,
-                      spreadRadius: 0,
-                    ),
-                  ],
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.description_rounded,
-                      color: Colors.white,
-                      size: (isLargeTablet ? 18.0 : (isTablet ? 16.0 : (isVerySmallScreen ? 12.0 : (isSmallScreen ? 13.0 : 14.0)))) * finalScale,
-                    ),
-                    SizedBox(width: (isVerySmallScreen ? 4.0 : (isSmallScreen ? 5.0 : 6.0)) * finalScale),
-                    Text(
-                      '${_inspections.length}',
-                      style: TextStyle(
-                        fontSize: (isLargeTablet ? 18.0 : (isTablet ? 16.0 : (isVerySmallScreen ? 12.0 : (isSmallScreen ? 13.0 : 14.0)))) * finalScale,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                        letterSpacing: 0.5,
-                      ),
-                    ),
-                  ],
-                ),
+          // Count Badge
+          Container(
+            padding: EdgeInsets.symmetric(
+              horizontal: (isLargeTablet ? 14.0 : (isTablet ? 12.0 : (isVerySmallScreen ? 8.0 : (isSmallScreen ? 9.0 : 10.0)))) * finalScale,
+              vertical: (isLargeTablet ? 8.0 : (isTablet ? 7.0 : (isVerySmallScreen ? 5.0 : (isSmallScreen ? 5.5 : 6.0)))) * finalScale,
+            ),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Color.fromRGBO(8, 111, 222, 0.977),
+                  Color.fromRGBO(22, 127, 239, 0.976),
+                ],
               ),
-              SizedBox(height: (isLargeTablet ? 10.0 : (isTablet ? 8.0 : (isVerySmallScreen ? 6.0 : (isSmallScreen ? 7.0 : 8.0)))) * finalScale),
-              // Refresh Button
-              Container(
-                height: (isLargeTablet ? 48.0 : (isTablet ? 46.0 : (isVerySmallScreen ? 40.0 : (isSmallScreen ? 42.0 : 44.0)))) * finalScale,
-                padding: EdgeInsets.symmetric(
-                  horizontal: (isLargeTablet ? 18.0 : (isTablet ? 16.0 : (isVerySmallScreen ? 12.0 : (isSmallScreen ? 14.0 : 15.0)))) * finalScale,
+              borderRadius: BorderRadius.circular((isLargeTablet ? 12.0 : (isTablet ? 10.0 : (isVerySmallScreen ? 8.0 : (isSmallScreen ? 9.0 : 10.0)))) * finalScale),
+              boxShadow: const [
+                BoxShadow(
+                  color: Color.fromRGBO(8, 111, 222, 0.3),
+                  offset: Offset(0, 3),
+                  blurRadius: 8,
+                  spreadRadius: 0,
                 ),
+              ],
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.description_rounded,
+                  color: Colors.white,
+                  size: (isLargeTablet ? 18.0 : (isTablet ? 16.0 : (isVerySmallScreen ? 12.0 : (isSmallScreen ? 13.0 : 14.0)))) * finalScale,
+                ),
+                SizedBox(width: (isVerySmallScreen ? 4.0 : (isSmallScreen ? 5.0 : 6.0)) * finalScale),
+                Text(
+                  '${_inspections.length}',
+                  style: TextStyle(
+                    fontSize: (isLargeTablet ? 18.0 : (isTablet ? 16.0 : (isVerySmallScreen ? 12.0 : (isSmallScreen ? 13.0 : 14.0)))) * finalScale,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          
+          SizedBox(width: (isLargeTablet ? 10.0 : (isTablet ? 8.0 : 6.0)) * finalScale),
+          
+          // Action buttons row - Refresh and Trash
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Refresh button (icon only, square)
+              Container(
+                width: (isLargeTablet ? 48.0 : (isTablet ? 44.0 : (isVerySmallScreen ? 40.0 : (isSmallScreen ? 42.0 : 44.0)))) * finalScale,
+                height: (isLargeTablet ? 48.0 : (isTablet ? 44.0 : (isVerySmallScreen ? 40.0 : (isSmallScreen ? 42.0 : 44.0)))) * finalScale,
                 decoration: BoxDecoration(
                   color: const Color(0xFFF8FAFC),
-                  borderRadius: BorderRadius.circular((isLargeTablet ? 14.0 : (isTablet ? 12.0 : (isVerySmallScreen ? 10.0 : (isSmallScreen ? 11.0 : 12.0)))) * finalScale),
+                  borderRadius: BorderRadius.circular((isLargeTablet ? 12.0 : (isTablet ? 10.0 : (isVerySmallScreen ? 8.0 : (isSmallScreen ? 9.0 : 10.0)))) * finalScale),
                   border: Border.all(
                     color: const Color(0xFFE2E8F0),
                     width: 1.5,
@@ -445,26 +464,59 @@ class _InspectionReportsScreenState extends State<InspectionReportsScreen> {
                 child: Material(
                   color: Colors.transparent,
                   child: InkWell(
-                    borderRadius: BorderRadius.circular((isLargeTablet ? 14.0 : (isTablet ? 12.0 : (isVerySmallScreen ? 10.0 : (isSmallScreen ? 11.0 : 12.0)))) * finalScale),
+                    borderRadius: BorderRadius.circular((isLargeTablet ? 12.0 : (isTablet ? 10.0 : (isVerySmallScreen ? 8.0 : (isSmallScreen ? 9.0 : 10.0)))) * finalScale),
                     onTap: _loadInspections,
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.refresh_rounded,
-                          color: const Color.fromRGBO(8, 111, 222, 0.977),
-                          size: (isLargeTablet ? 24.0 : (isTablet ? 22.0 : (isVerySmallScreen ? 18.0 : (isSmallScreen ? 19.0 : 21.0)))) * finalScale,
+                    child: Center(
+                      child: Icon(
+                        Icons.refresh_rounded,
+                        color: const Color.fromRGBO(8, 111, 222, 0.977),
+                        size: (isLargeTablet ? 24.0 : (isTablet ? 22.0 : (isVerySmallScreen ? 18.0 : (isSmallScreen ? 19.0 : 21.0)))) * finalScale,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              
+              SizedBox(width: (isLargeTablet ? 8.0 : (isTablet ? 6.0 : 4.0)) * finalScale),
+              
+              // Trash button (icon only, square)
+              Container(
+                width: (isLargeTablet ? 48.0 : (isTablet ? 44.0 : (isVerySmallScreen ? 40.0 : (isSmallScreen ? 42.0 : 44.0)))) * finalScale,
+                height: (isLargeTablet ? 48.0 : (isTablet ? 44.0 : (isVerySmallScreen ? 40.0 : (isSmallScreen ? 42.0 : 44.0)))) * finalScale,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFEF2F2),
+                  borderRadius: BorderRadius.circular((isLargeTablet ? 12.0 : (isTablet ? 10.0 : (isVerySmallScreen ? 8.0 : (isSmallScreen ? 9.0 : 10.0)))) * finalScale),
+                  border: Border.all(
+                    color: const Color(0xFFFECACA),
+                    width: 1.5,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.03),
+                      offset: const Offset(0, 2),
+                      blurRadius: 4,
+                      spreadRadius: 0,
+                    ),
+                  ],
+                ),
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular((isLargeTablet ? 12.0 : (isTablet ? 10.0 : (isVerySmallScreen ? 8.0 : (isSmallScreen ? 9.0 : 10.0)))) * finalScale),
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const TrashScreen(),
                         ),
-                        SizedBox(width: (isLargeTablet ? 10.0 : (isTablet ? 8.0 : (isVerySmallScreen ? 6.0 : (isSmallScreen ? 7.0 : 8.0)))) * finalScale),
-                        Text(
-                          'Refresh',
-                          style: TextStyle(
-                            color: const Color.fromRGBO(8, 111, 222, 0.977),
-                            fontWeight: FontWeight.w600,
-                            fontSize: (isTablet ? 14.0 : 12.5) * finalScale,
-                          ),
-                        ),
-                      ],
+                      );
+                    },
+                    child: Center(
+                      child: Icon(
+                        Icons.delete_outline,
+                        color: const Color(0xFFDC2626),
+                        size: (isLargeTablet ? 24.0 : (isTablet ? 22.0 : (isVerySmallScreen ? 18.0 : (isSmallScreen ? 19.0 : 21.0)))) * finalScale,
+                      ),
                     ),
                   ),
                 ),
@@ -506,6 +558,8 @@ class _InspectionReportsScreenState extends State<InspectionReportsScreen> {
               onChanged: (value) {
                 setState(() {
                   _searchQuery = value;
+                  // Reset displayed count when search changes
+                  _displayedCount = _itemsPerPage;
                 });
               },
               decoration: InputDecoration(
@@ -543,16 +597,19 @@ class _InspectionReportsScreenState extends State<InspectionReportsScreen> {
                 _buildFilterChip('All', _selectedStatus == 'All', () {
                   setState(() {
                     _selectedStatus = 'All';
+                    _displayedCount = _itemsPerPage;
                   });
                 }, isTablet),
                 _buildFilterChip('Pending', _selectedStatus == 'Pending', () {
                   setState(() {
                     _selectedStatus = 'Pending';
+                    _displayedCount = _itemsPerPage;
                   });
                 }, isTablet),
                 _buildFilterChip('Completed', _selectedStatus == 'Completed', () {
                   setState(() {
                     _selectedStatus = 'Completed';
+                    _displayedCount = _itemsPerPage;
                   });
                 }, isTablet),
               ],
@@ -638,12 +695,43 @@ class _InspectionReportsScreenState extends State<InspectionReportsScreen> {
   }
 
   Widget _buildInspectionsList(BuildContext context, bool isTablet) {
+    // Lazy loading: Show items incrementally
+    final displayedItems = _filteredInspections.take(_displayedCount).toList();
+    final hasMore = _filteredInspections.length > _displayedCount;
+    
     return ListView.builder(
       padding: EdgeInsets.all(isTablet ? 20 : 16),
-      itemCount: _filteredInspections.length,
+      itemCount: displayedItems.length + (hasMore ? 1 : 0), // +1 for "Load More" button
       itemBuilder: (context, index) {
-        final inspection = _filteredInspections[index];
-        return _buildInspectionCard(inspection, isTablet);
+        if (index < displayedItems.length) {
+          final inspection = displayedItems[index];
+          return _buildInspectionCard(inspection, isTablet);
+        } else {
+          // "Load More" button
+          return Container(
+            margin: const EdgeInsets.only(top: 8),
+            child: ElevatedButton.icon(
+              onPressed: () {
+                setState(() {
+                  _displayedCount += _itemsPerPage;
+                  if (_displayedCount > _filteredInspections.length) {
+                    _displayedCount = _filteredInspections.length;
+                  }
+                });
+              },
+              icon: const Icon(Icons.expand_more),
+              label: Text('Load More (${_filteredInspections.length - _displayedCount} remaining)'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color.fromRGBO(8, 111, 222, 0.977),
+                foregroundColor: Colors.white,
+                padding: EdgeInsets.symmetric(
+                  vertical: isTablet ? 14 : 12,
+                  horizontal: isTablet ? 20 : 16,
+                ),
+              ),
+            ),
+          );
+        }
       },
     );
   }
@@ -732,6 +820,27 @@ class _InspectionReportsScreenState extends State<InspectionReportsScreen> {
                               color: Colors.white,
                             ),
                           ),
+                        ),
+                        const SizedBox(width: 8),
+                        IconButton(
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => InspectionHistoryScreen(
+                                  inspectionId: inspection.id,
+                                ),
+                              ),
+                            );
+                          },
+                          icon: const Icon(Icons.history_rounded),
+                          style: IconButton.styleFrom(
+                            backgroundColor: const Color(0xFFEFF6FF),
+                            foregroundColor: const Color(0xFF3B82F6),
+                            side: const BorderSide(color: Color(0xFFDBEAFE), width: 1),
+                            padding: EdgeInsets.all(isTablet ? 8 : 6),
+                          ),
+                          tooltip: 'View History',
                         ),
                         const SizedBox(width: 8),
                         IconButton(
@@ -4476,16 +4585,16 @@ class _InspectionReportsScreenState extends State<InspectionReportsScreen> {
               ),
             ),
             const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                'Delete Inspection',
-                style: TextStyle(
-                  fontSize: isTablet ? 18 : 16,
-                  fontWeight: FontWeight.bold,
-                  color: const Color(0xFF1F2937),
+                Expanded(
+                  child: Text(
+                    'Move to Trash',
+                    style: TextStyle(
+                      fontSize: isTablet ? 18 : 16,
+                      fontWeight: FontWeight.bold,
+                      color: const Color(0xFF1F2937),
+                    ),
+                  ),
                 ),
-              ),
-            ),
           ],
         ),
         content: Column(
@@ -4493,10 +4602,34 @@ class _InspectionReportsScreenState extends State<InspectionReportsScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Are you sure you want to delete this inspection?',
+              'Move this inspection to trash?',
               style: TextStyle(
                 fontSize: isTablet ? 16 : 14,
                 color: const Color(0xFF4B5563),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF0F9FF),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFF0EA5E9), width: 1),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.info_outline, color: Color(0xFF0EA5E9), size: 16),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'You can restore it later from the Trash screen.',
+                      style: TextStyle(
+                        fontSize: isTablet ? 12 : 11,
+                        color: const Color(0xFF0C4A6E),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
             const SizedBox(height: 12),
@@ -4547,34 +4680,6 @@ class _InspectionReportsScreenState extends State<InspectionReportsScreen> {
               ),
             ),
             const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: const Color(0xFFFEF2F2),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: const Color(0xFFFECACA), width: 1),
-              ),
-              child: Row(
-                children: [
-                  const Icon(
-                    Icons.warning_rounded,
-                    color: Color(0xFFDC2626),
-                    size: 16,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'This action cannot be undone.',
-                      style: TextStyle(
-                        fontSize: isTablet ? 12 : 10,
-                        color: const Color(0xFFDC2626),
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
           ],
         ),
         actions: [
@@ -4613,10 +4718,10 @@ class _InspectionReportsScreenState extends State<InspectionReportsScreen> {
               ),
               elevation: 0,
             ),
-            child: Text(
-              'Delete',
+            child: const Text(
+              'Move to Trash',
               style: TextStyle(
-                fontSize: isTablet ? 14 : 12,
+                fontSize: 14,
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -4975,30 +5080,35 @@ For detailed inspection data, please refer to the mobile application.''';
         ),
       );
 
-      // Delete from database
-      await HiveOfflineDatabase.deleteInspection(inspection.id);
+      // Move to trash instead of permanent deletion
+      final success = await TrashService.moveToTrash(inspection);
       
       // Close loading dialog
       if (mounted) {
         Navigator.of(context).pop();
       }
 
-      // Refresh the inspections list
-      await _loadInspections();
+      if (success) {
+        // Refresh the inspections list
+        await _loadInspections();
 
-      // Show success message
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Inspection deleted successfully'),
-            backgroundColor: const Color(0xFF10B981),
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
+        // Show success message
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text('Inspection moved to trash. You can restore it from the Trash screen.'),
+              backgroundColor: const Color(0xFF10B981),
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+              margin: const EdgeInsets.all(16),
+              duration: const Duration(seconds: 3),
             ),
-            margin: const EdgeInsets.all(16),
-          ),
-        );
+          );
+        }
+      } else {
+        throw Exception('Failed to move inspection to trash');
       }
     } catch (e) {
       // Close loading dialog if still open
@@ -5010,7 +5120,7 @@ For detailed inspection data, please refer to the mobile application.''';
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to delete inspection: $e'),
+            content: Text('Failed to move inspection to trash: $e'),
             backgroundColor: const Color(0xFFDC2626),
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(

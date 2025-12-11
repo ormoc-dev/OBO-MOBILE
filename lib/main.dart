@@ -4,9 +4,16 @@ import 'services/auth_service.dart';
 import 'services/connectivity_service.dart';
 import 'services/hive_offline_database.dart';
 import 'services/inspection_service.dart';
+import 'services/inspection_history_service.dart';
+import 'services/onboarding_service.dart';
+import 'services/trash_service.dart';
+import 'services/accessibility_service.dart';
 import 'screens/dashboard_screen.dart';
 import 'screens/debug_screen.dart';
+import 'screens/onboarding_screen.dart';
 import 'utils/asset_helper.dart';
+import 'widgets/debug_chatbot_widget.dart';
+import 'widgets/accessibility_theme_builder.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -17,6 +24,12 @@ void main() async {
   
   // Initialize Hive database and handle migration
   await _initializeDatabase();
+  
+  // Initialize inspection history service
+  await InspectionHistoryService.initialize();
+  
+  // Initialize trash service
+  await TrashService.initialize();
   
   // Set up automatic sync when connection is restored
   _setupAutoSync(connectivityService);
@@ -94,6 +107,18 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'OBO Inspector Mobile',
+      builder: (context, child) {
+        return AccessibilityThemeBuilder(
+          child: Stack(
+            children: [
+              child!,
+              const DebugChatbotWidget(
+                isGlobal: true,
+              ),
+            ],
+          ),
+        );
+      },
       theme: ThemeData(
         primarySwatch: MaterialColor(0xFF086FDE, <int, Color>{
           50: const Color.fromRGBO(8, 111, 222, 0.1),
@@ -194,7 +219,36 @@ class _AuthWrapperState extends State<AuthWrapper> {
       );
     }
 
-    return isLoggedIn ? const DashboardScreen() : const WelcomePage();
+    if (!isLoggedIn) {
+      return const WelcomePage();
+    }
+
+    // Check if onboarding is completed
+    return FutureBuilder<bool>(
+      future: OnboardingService.hasCompletedOnboarding(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Scaffold(
+            body: Center(
+              child: CircularProgressIndicator(),
+            ),
+          );
+        }
+
+        // If onboarding not completed, show onboarding screen
+        final hasCompleted = snapshot.data ?? false;
+        print('Onboarding check: hasCompleted = $hasCompleted');
+        
+        if (!hasCompleted) {
+          print('Showing onboarding screen...');
+          return const OnboardingScreen();
+        }
+
+        // Otherwise show dashboard
+        print('Showing dashboard (onboarding completed)');
+        return const DashboardScreen();
+      },
+    );
   }
 }
 

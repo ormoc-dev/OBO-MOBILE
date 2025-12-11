@@ -6,6 +6,8 @@ import 'package:flutter/foundation.dart';
 import '../models/inspection.dart';
 import '../models/user.dart';
 import '../services/auth_service.dart';
+import '../services/developer_settings_service.dart';
+import '../widgets/developer_settings_dialog.dart';
 import 'dart:io'; // <- TOP (only used for mobile)
 import 'dart:convert'; // for base64
 import 'dart:typed_data';
@@ -64,17 +66,20 @@ class _EmailReportScreenState extends State<EmailReportScreen> {
       // Pre-fill form with inspection data
       _subjectController.text = _buildEmailSubject();
       
+      // Use text format for mobile (better compatibility), HTML for web
       if (kIsWeb) {
         _bodyController.text = widget.isDetailed ? _generateTextReport(detailed: true) : _generateTextReport(detailed: false);
       } else {
-        _bodyController.text = await (widget.isDetailed ? _generateHtmlReport(detailed: true) : _generateHtmlReport(detailed: false));
+        // On mobile, use plain text format for better email client compatibility
+        _bodyController.text = widget.isDetailed ? _generateTextReport(detailed: true) : _generateTextReport(detailed: false);
       }
       
-      // Pre-fill recipient with a default email if needed
-      // Note: User model doesn't have email field, so we leave recipients empty for user to fill
+      // Load default email settings from developer settings
+      final defaultEmail = await DeveloperSettingsService.getDefaultEmail();
+      final defaultEmailCc = await DeveloperSettingsService.getDefaultEmailCc();
       
-      // Pre-fill CC with your email to ensure you get copies
-      _ccController.text = 'anthony.capuyan23@gmail.com';
+      _recipientsController.text = defaultEmail;
+      _ccController.text = defaultEmailCc;
     } catch (e) {
       print('Error initializing email data: $e');
     }
@@ -426,7 +431,8 @@ Ormoc City
       }
 
       // Mobile platform - use flutter_email_sender
-      final emailBody = await (widget.isDetailed ? _generateHtmlReport(detailed: true) : _generateHtmlReport(detailed: false));
+      // Use plain text format on mobile for better compatibility with email clients
+      final emailBody = widget.isDetailed ? _generateTextReport(detailed: true) : _generateTextReport(detailed: false);
       final Email email = Email(
         body: emailBody,
         subject: _buildEmailSubject(),
@@ -437,7 +443,7 @@ Ormoc City
           ...widget.inspection.imagePaths,
           ...widget.inspection.videoPaths,
         ],
-        isHTML: true,
+        isHTML: false, // Use plain text on mobile to avoid HTML code display issues
       );
 
       print('Attempting to send email to: ${email.recipients}');
@@ -619,6 +625,11 @@ Ormoc City
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.white),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.developer_mode),
+            tooltip: 'Developer Settings',
+            onPressed: _openDeveloperSettings,
+          ),
           if (_isLoading)
             const Padding(
               padding: EdgeInsets.all(16.0),
@@ -1115,6 +1126,42 @@ Ormoc City
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Future<void> _openDeveloperSettings() async {
+    final currentSms = await DeveloperSettingsService.getDefaultSmsNumber();
+    final currentEmail = await DeveloperSettingsService.getDefaultEmail();
+    final currentEmailCc = await DeveloperSettingsService.getDefaultEmailCc();
+
+    if (!mounted) return;
+
+    showDialog(
+      context: context,
+      builder: (context) => DeveloperSettingsDialog(
+        currentSmsNumber: currentSms,
+        currentEmail: currentEmail,
+        currentEmailCc: currentEmailCc,
+        onSave: (smsNumber, email, emailCc) async {
+          await DeveloperSettingsService.saveDefaultSmsNumber(smsNumber);
+          await DeveloperSettingsService.saveDefaultEmail(email);
+          await DeveloperSettingsService.saveDefaultEmailCc(emailCc);
+          
+          if (mounted) {
+            setState(() {
+              _recipientsController.text = email;
+              _ccController.text = emailCc;
+            });
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Developer settings saved successfully'),
+                backgroundColor: Color(0xFF10B981),
+                duration: Duration(seconds: 2),
+              ),
+            );
+          }
+        },
       ),
     );
   }

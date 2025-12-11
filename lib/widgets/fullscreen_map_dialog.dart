@@ -7,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter/foundation.dart';
 import 'dart:ui' as ui;
 import '../utils/location_service.dart';
+import '../services/connectivity_service.dart';
 
 class FullscreenMapDialog extends StatefulWidget {
   final LatLng? initialLocation;
@@ -41,18 +42,47 @@ class _FullscreenMapDialogState extends State<FullscreenMapDialog> {
   bool _isSatelliteView = false;
   String? _selectedAddress;
   final TextEditingController _searchController = TextEditingController();
+  bool _isOnline = true;
+  final ConnectivityService _connectivityService = ConnectivityService();
 
   @override
   void initState() {
     super.initState();
     _selectedLocation = widget.initialLocation;
     
+    // Check connectivity and initialize
+    _checkConnectivity();
+    
     // Add listener to search controller
     _searchController.addListener(_onSearchTextChanged);
+  }
+
+  Future<void> _checkConnectivity() async {
+    await _connectivityService.initialize();
+    setState(() {
+      _isOnline = _connectivityService.isConnected;
+    });
+    
+    // Listen to connectivity changes
+    _connectivityService.connectionStream.listen((isConnected) {
+      if (mounted) {
+        setState(() {
+          _isOnline = isConnected;
+        });
+        
+        // If just came online and no location selected, get GPS location
+        if (isConnected && _selectedLocation == null) {
+          _getCurrentLocation();
+        }
+      }
+    });
     
     // Delay location request to ensure map is ready
     Future.delayed(const Duration(milliseconds: 100), () {
-      _getCurrentLocation();
+      // Only auto-get location if online
+      if (_isOnline) {
+        _getCurrentLocation();
+      }
     });
   }
 
@@ -64,6 +94,11 @@ class _FullscreenMapDialogState extends State<FullscreenMapDialog> {
   }
 
   Future<void> _getCurrentLocation() async {
+    // Only get GPS location if online
+    if (!_isOnline) {
+      return;
+    }
+    
     setState(() {
       _isLoadingLocation = true;
     });
@@ -74,7 +109,11 @@ class _FullscreenMapDialogState extends State<FullscreenMapDialog> {
       if (result.success && result.location != null) {
         setState(() {
           _currentLocation = result.location!;
-          if (_selectedLocation == null) {
+          // When online, automatically set selected location to GPS location
+          if (_isOnline) {
+            _selectedLocation = _currentLocation;
+          } else if (_selectedLocation == null) {
+            // If offline and no location selected, use GPS as fallback
             _selectedLocation = _currentLocation;
           }
           _isLoadingLocation = false;
@@ -374,9 +413,19 @@ class _FullscreenMapDialogState extends State<FullscreenMapDialog> {
       );
     }
 
-    // Try to get address for the selected location
-    if (widget.showAddressInfo) {
+    // Try to get address for the selected location (only if online)
+    if (widget.showAddressInfo && _isOnline) {
       _getAddressForLocation(point);
+    }
+  }
+
+  void _updateLocationFromMapCenter() {
+    if (!_isOnline && mounted) {
+      final newCenter = _mapController.camera.center;
+      setState(() {
+        _selectedLocation = newCenter;
+        _selectedAddress = null;
+      });
     }
   }
 
@@ -733,6 +782,12 @@ class _FullscreenMapDialogState extends State<FullscreenMapDialog> {
                       maxZoom: 20.0,
                       minZoom: 5.0,
                       onTap: _onMapTap,
+                      onMapEvent: !_isOnline ? (MapEvent event) {
+                        // When offline, update marker position when map is moved/dragged
+                        if (event is MapEventMove) {
+                          _updateLocationFromMapCenter();
+                        }
+                      } : null,
                     ),
                     children: [
                       // Tile Layer - Dynamic based on view mode
@@ -750,8 +805,8 @@ class _FullscreenMapDialogState extends State<FullscreenMapDialog> {
                       // Markers Layer
                       MarkerLayer(
                         markers: [
-                          // Current location marker
-                          if (_currentLocation != null)
+                          // Current location marker (only show if online)
+                          if (_currentLocation != null && _isOnline)
                             Marker(
                               point: _currentLocation!,
                               width: 30,
@@ -796,6 +851,46 @@ class _FullscreenMapDialogState extends State<FullscreenMapDialog> {
                       child: const Center(
                         child: CircularProgressIndicator(
                           color: Colors.white,
+                        ),
+                      ),
+                    ),
+                  
+                  // Offline indicator
+                  if (!_isOnline)
+                    Positioned(
+                      top: 16,
+                      left: 16,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: Colors.orange,
+                          borderRadius: BorderRadius.circular(8),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.1),
+                              blurRadius: 4,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.cloud_off,
+                              color: Colors.white,
+                              size: 16,
+                            ),
+                            const SizedBox(width: 6),
+                            const Text(
+                              'Offline - Drag map to set location',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ),
